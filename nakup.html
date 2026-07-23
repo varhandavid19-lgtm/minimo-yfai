@@ -34,6 +34,14 @@
   .chip.green{background:#1f9254;border-color:#1f9254}
   .chip.role{background:#6b46c1;border-color:#6b46c1}
   .btn-logout{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:20px;font-size:11px;padding:4px 12px}
+  .mm-wrap{position:relative;flex:none}
+  .mm-btn{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:18px;line-height:1;width:40px;height:40px;border-radius:10px;padding:0;cursor:pointer}
+  .mm-btn:hover{background:rgba(255,255,255,.28)}
+  .mm-panel{position:absolute;top:48px;left:0;z-index:200;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.24);min-width:236px;padding:6px}
+  .mm-panel .mm-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;padding:8px 10px 5px}
+  .mm-panel a{display:flex;gap:9px;align-items:center;padding:9px 10px;border-radius:8px;text-decoration:none;color:var(--text);font-size:13.5px;font-weight:600}
+  .mm-panel a:hover{background:#eef3fb}
+  .mm-panel a.cur{background:#eef3fb;color:var(--navy-1)}
 
   .tabbar{background:#fff;border-bottom:1px solid var(--line);padding:9px 18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .tab{background:#eef1f5;color:#41506b;border:1px solid var(--line);font-weight:600}
@@ -490,6 +498,16 @@ function loginView(){
 function shell(){
   return `
   <header>
+    <div class="mm-wrap">
+      <button class="mm-btn" id="mm-btn" aria-label="Přepnout modul" title="Přepnout modul">☰</button>
+      <nav class="mm-panel" id="mm-panel" hidden>
+        <div class="mm-h">Přepnout modul</div>
+        <a href="index.html">🏠 Portál</a>
+        <a class="cur" href="nakup.html">🛒 Nákupní požadavky</a>
+        <a href="dovolenky.html">🌴 Dovolenky</a>
+        <a href="nastaveni.html">⚙️ Nastavení</a>
+      </nav>
+    </div>
     <div class="brand">${logoSvg()}</div>
     <div><h1>Nákupní požadavky</h1><div class="sub">Interní objednávkový systém · Firebase</div></div>
     <div class="chips">
@@ -1132,6 +1150,15 @@ function authMsg(code){
 }
 
 render();
+</script>
+<script>
+/* Přepínač modulů (☰) – nezávislý na aplikaci, přežije překreslení. */
+document.addEventListener('click',function(e){
+  var p=document.getElementById('mm-panel'); if(!p) return;
+  if(e.target.closest('#mm-btn')){ e.stopPropagation(); p.hidden=!p.hidden; return; }
+  if(!e.target.closest('#mm-panel')) p.hidden=true;
+});
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var p=document.getElementById('mm-panel'); if(p) p.hidden=true; } });
 </script>
 </body>
 </html>
