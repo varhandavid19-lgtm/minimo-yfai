@@ -194,9 +194,12 @@ function appView(){
 
 function wireLogin(){
   document.getElementById('loginForm')?.addEventListener('submit',async e=>{
-    e.preventDefault(); loginBusy=true; loginErr=''; render();
-    try{ await signInWithEmailAndPassword(auth,
-      document.getElementById('li-email').value.trim(), document.getElementById('li-pass').value); }
+    e.preventDefault();
+    // Přečti hodnoty PŘED překreslením (render smaže obsah polí)
+    const email=document.getElementById('li-email').value.trim();
+    const pass=document.getElementById('li-pass').value;
+    loginBusy=true; loginErr=''; render();
+    try{ await signInWithEmailAndPassword(auth, email, pass); }
     catch(err){ loginBusy=false; loginErr=loginErrMsg(err.code); render(); }
   });
 }
