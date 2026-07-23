@@ -55,6 +55,28 @@
   .udel{background:#fdecea;border:1px solid #f5cfca;color:var(--red);border-radius:8px;
     font-size:14px;line-height:1;padding:5px 9px;cursor:pointer;font-weight:700}
   .udel:hover{background:var(--red);color:#fff}
+  .btn-edit{background:#fff;border:1px solid var(--line);color:#2563a8;border-radius:8px;font-size:12px;font-weight:700;padding:6px 12px;cursor:pointer}
+  .btn-edit:hover{background:#eef3fb}
+  td.pos{white-space:normal;max-width:460px}
+  .pchip{display:inline-flex;align-items:center;gap:5px;background:#eef3fb;border:1px solid #d6e2f3;color:#28456e;
+    border-radius:20px;padding:3px 9px;font-size:11.5px;font-weight:600;margin:2px 3px 2px 0}
+  .pchip.rm button{background:transparent;border:0;color:#7b8ba3;font-size:13px;line-height:1;padding:0;cursor:pointer}
+  .pchip.rm button:hover{color:var(--red)}
+  .pchips{display:flex;flex-wrap:wrap;gap:2px;min-height:26px;margin-bottom:8px}
+
+  /* dialog úpravy uživatele */
+  .dlg-wrap{position:fixed;inset:0;background:rgba(12,26,48,.55);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px}
+  .dlg{background:#fff;border-radius:12px;max-width:440px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.35);overflow:hidden}
+  .dlg.dlg-lg{max-width:560px}
+  .dlg .t{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;padding:12px 16px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .dlg .t .x{margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;padding:0 4px;cursor:pointer}
+  .dlg .c{padding:16px}
+  .dlg .fld label{display:block;font-size:12px;font-weight:700;color:#41506b;margin-bottom:5px}
+  .dlg .fld select{width:100%}
+  .dlg .hintx{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .dlg .b{padding:12px 16px;border-top:1px solid var(--line);background:#fafbfd;display:flex;gap:8px;justify-content:flex-end}
+  .btn-primary{background:var(--navy-2);color:#fff;font-weight:700;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
 
   .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;
     background:linear-gradient(160deg,#0f2f5f,#2a5ea3)}
@@ -114,10 +136,21 @@ const ROLE2LEVEL = {zadavatel:'basic', skladnik:'warehouse', schvalovatel:'appro
 const LEVEL2ROLE = {basic:'zadavatel', warehouse:'skladnik', approver:'schvalovatel', wadmin:'admin', superadmin:'admin'};
 const levelOf = d => (d && d.level && LEVEL_BY[d.level]) ? d.level : ((d && ROLE2LEVEL[d.role]) || 'basic');
 
+/* ===== Sekce a pozice (odpovědnosti) ===== */
+const SECTIONS = [
+  {key:'engineering', label:'Engineering',
+   positions:['IMM PE','SLUSH PE','FOAM PE','ASSY PE','GB/DP PE','PE coordinator','Change coordinator','ME manager','AME']},
+  {key:'maintenance', label:'Maintenance',
+   positions:['Elektrikář','Mechanik','PLC technik','PLC programátor','Skladník','Spareparts Buyer','MAINTENANCE coordinator','Mistr','Shift leader','Nástrojař','Tooling engineer','Toolshop leader']},
+  {key:'toolsetters', label:'Toolsetters',
+   positions:['TS IMM','TS SLUSH','TS FOAM','TS GB/DP','TS ASSY']},
+];
+
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const badge = key => { const l=LEVEL_BY[key]||LEVEL_BY.basic; return `<span class="badge" style="background:${l.color}">${esc(l.label)}</span>`; };
 
 let me=null, myLevel='basic', users=[], ready=false, unsub=null, toastMsg=null, toastKind='';
+let uedit=null;   // editační okno uživatele {uid,name,level,team,positions:[]}
 const appEl=document.getElementById('app');
 
 onAuthStateChanged(auth, async (user)=>{
@@ -139,10 +172,41 @@ function subscribe(){
   }, e=>toast('Chyba načítání uživatelů: '+e.message,'err'));
 }
 
-async function setLevel(uid, level){
+function editUserView(){
+  const u=uedit;
+  const lvlOpts=LEVELS.map(l=>`<option value="${l.key}" ${u.level===l.key?'selected':''}>${esc(l.label)}</option>`).join('');
+  const posOpts=SECTIONS.map(s=>`<optgroup label="${esc(s.label)}">${s.positions
+    .map(p=>`<option value="${esc(p)}" ${u.positions.includes(p)?'disabled':''}>${esc(p)}</option>`).join('')}</optgroup>`).join('');
+  const chips=u.positions.length
+    ? u.positions.map(p=>`<span class="pchip rm">${esc(p)}<button data-rmpos="${esc(p)}" title="Odebrat">✕</button></span>`).join('')
+    : '<span style="color:var(--muted);font-size:12px">Zatím žádné pozice</span>';
+  return `<div class="dlg-wrap" id="ue-wrap"><div class="dlg dlg-lg">
+    <div class="t">✏️ ${esc(u.name)}<button class="x" id="ue-x">✕</button></div>
+    <div class="c">
+      <div class="fld"><label>Level (oprávnění napříč moduly)</label><select id="ue-level">${lvlOpts}</select></div>
+      <div class="fld" style="margin-top:14px"><label>Pozice / odpovědnosti</label>
+        <div class="pchips">${chips}</div>
+        <select id="ue-pos"><option value="">＋ přidat pozici…</option>${posOpts}</select>
+        <div class="hintx">Vyber postupně všechny procesy/role, které člověk umí (klidně z více sekcí). Podle toho se pak hlídá zastupitelnost.</div>
+      </div>
+    </div>
+    <div class="b">
+      <button class="btn-ghost" id="ue-cancel">Zrušit</button>
+      <button class="btn-primary" id="ue-save">Uložit</button>
+    </div>
+  </div></div>`;
+}
+function openEdit(uid){
+  const u=users.find(x=>x.uid===uid); if(!u) return;
+  uedit={uid, name:u.name||uid, level:levelOf(u), team:u.team||'', positions:(u.positions||[]).slice()};
+  render();
+}
+async function saveUser(){
+  const u=uedit;
+  const sel=document.getElementById('ue-level'); if(sel) u.level=sel.value;
   try{
-    await updateDoc(doc(db,'users',uid), {level, role: LEVEL2ROLE[level]});
-    toast('Level uložen.','ok');
+    await updateDoc(doc(db,'users',u.uid), {level:u.level, role:LEVEL2ROLE[u.level], positions:u.positions});
+    uedit=null; toast('Uloženo.','ok'); render();
   }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
 }
 async function removeUser(uid, name){
@@ -172,20 +236,21 @@ function denyView(){
 function view(){
   const rows = users.length ? users.map(u=>{
     const lvl=levelOf(u);
-    const opts=LEVELS.map(l=>`<option value="${l.key}" ${lvl===l.key?'selected':''}>${esc(l.label)}</option>`).join('');
     const meMark = u.uid===me.uid ? '<span class="me-tag">(vy)</span>' : '';
     const delBtn = u.uid===me.uid
       ? `<span class="uid" title="Sebe nelze smazat">—</span>`
       : `<button class="udel" data-del="${u.uid}" data-name="${esc(u.name||u.uid)}" title="Smazat uživatele">✕</button>`;
+    const chips = (u.positions||[]).length
+      ? (u.positions||[]).map(p=>`<span class="pchip">${esc(p)}</span>`).join(' ')
+      : '<span style="color:var(--muted)">—</span>';
     return `<tr>
       <td class="nm">${esc(u.name||'—')}${meMark}</td>
-      <td>${esc(u.team||'—')}</td>
       <td>${badge(lvl)}</td>
-      <td><select data-uid="${u.uid}">${opts}</select></td>
-      <td class="uid">${esc(u.uid)}</td>
+      <td class="pos">${chips}</td>
+      <td class="ta-c"><button class="btn-edit" data-edit="${u.uid}">Upravit</button></td>
       <td class="ta-c">${delBtn}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:22px">Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.</td></tr>`;
+  }).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:22px">Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.</td></tr>`;
 
   const legend = LEVELS.map(l=>`<div class="lvl">
     <span class="b">${badge(l.key)}</span>
@@ -201,10 +266,11 @@ function view(){
         Účet vytvořený jen ve Firebase&nbsp;Authentication se zde nezobrazí, dokud se přes něj někdo nepřihlásí.
       </p>
       <div class="tblwrap"><table>
-        <thead><tr><th>Jméno</th><th>Úsek / tým</th><th>Aktuální level</th><th>Změnit level</th><th>Účet (uid)</th><th>Smazat</th></tr></thead>
+        <thead><tr><th>Jméno</th><th>Level</th><th>Pozice / odpovědnosti</th><th>Upravit</th><th>Smazat</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </div></div>
+    ${uedit?editUserView():''}
 
     <div class="panel"><h2>ℹ️ Co který level znamená</h2><div class="body">
       <div class="legend">${legend}</div>
@@ -218,10 +284,26 @@ function view(){
 
 function wire(){
   document.getElementById('btn-logout')?.addEventListener('click',()=>signOut(auth));
-  document.querySelectorAll('select[data-uid]').forEach(sel=>
-    sel.addEventListener('change',()=>setLevel(sel.getAttribute('data-uid'), sel.value)));
+  document.querySelectorAll('button[data-edit]').forEach(b=>
+    b.addEventListener('click',()=>openEdit(b.getAttribute('data-edit'))));
   document.querySelectorAll('button[data-del]').forEach(btn=>
     btn.addEventListener('click',()=>removeUser(btn.getAttribute('data-del'), btn.getAttribute('data-name'))));
+
+  if(uedit){
+    document.getElementById('ue-level')?.addEventListener('change',e=>{uedit.level=e.target.value;});
+    const psel=document.getElementById('ue-pos');
+    psel?.addEventListener('change',()=>{
+      const v=psel.value;
+      if(v && !uedit.positions.includes(v)){ uedit.positions.push(v); render(); }
+    });
+    document.querySelectorAll('[data-rmpos]').forEach(b=>b.addEventListener('click',()=>{
+      uedit.positions=uedit.positions.filter(p=>p!==b.getAttribute('data-rmpos')); render();
+    }));
+    document.getElementById('ue-save')?.addEventListener('click',saveUser);
+    document.getElementById('ue-cancel')?.addEventListener('click',()=>{uedit=null;render();});
+    document.getElementById('ue-x')?.addEventListener('click',()=>{uedit=null;render();});
+    document.getElementById('ue-wrap')?.addEventListener('click',e=>{if(e.target.id==='ue-wrap'){uedit=null;render();}});
+  }
 }
 
 function toast(m,k=''){ toastMsg=m; toastKind=k; renderToast(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;renderToast();},3000); }
