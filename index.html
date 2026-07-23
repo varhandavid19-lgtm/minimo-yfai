@@ -96,8 +96,18 @@ const db = getFirestore(fbApp);
 
 /* Společné levely (stejné napříč moduly). Můstek na staré role nákupní appky. */
 const LEVEL_KEYS=['basic','warehouse','approver','wadmin','superadmin'];
+const LEVEL_RANK={basic:1,warehouse:2,approver:3,wadmin:4,superadmin:5};
 const ROLE2LEVEL={zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
 const levelOf=d=>(d && d.level && LEVEL_KEYS.includes(d.level)) ? d.level : ((d && ROLE2LEVEL[d.role])||'basic');
+/* Přístup k modulům (Skryté/Jen číst/Zapisovat). Nenastaveno → výchozí podle levelu:
+   Nastavení jen Super Admin, ostatní moduly přístupné všem. Nastavuje se v Nastavení. */
+const resolveModule=(mods,level,key)=>{ const p=mods&&mods[key];
+  if(p==='none'||p==='read'||p==='write') return p;
+  return key==='nastaveni' ? ((LEVEL_RANK[level]||1)>=5?'write':'none') : 'write'; };
+const allowedMods=(mods,level)=>['portal',
+  resolveModule(mods,level,'nakup')!=='none'?'nakup':null,
+  resolveModule(mods,level,'plan')!=='none'?'dovolenky':null,
+  resolveModule(mods,level,'nastaveni')!=='none'?'nastaveni':null].filter(Boolean);
 
 /* Zajistí, že přihlášený má záznam v users (aby se objevil ve správě uživatelů). */
 async function ensureUserDoc(user){
@@ -126,15 +136,15 @@ function logoSvg(){
 
 /* Moduly portálu. active:true = funkční (odkaz), jinak „připravujeme". */
 const MODULES = [
-  {ico:'🛒', nm:'Nákupní požadavky', ds:'Evidence a schvalování nákupních požadavků ve výrobě.', href:'nakup.html', active:true},
-  {ico:'🗓️', nm:'Plánování směn a přítomnosti', ds:'Dovolené, nepřítomnosti a plánování směn po sekcích.', href:'dovolenky.html', active:true},
+  {ico:'🛒', nm:'Nákupní požadavky', ds:'Evidence a schvalování nákupních požadavků ve výrobě.', href:'nakup.html', active:true, key:'nakup'},
+  {ico:'🗓️', nm:'Plánování směn a přítomnosti', ds:'Dovolené, nepřítomnosti a plánování směn po sekcích.', href:'dovolenky.html', active:true, key:'plan'},
   {ico:'⏱️', nm:'Docházka',          ds:'Evidence příchodů a odchodů. Připravujeme.', active:false},
   {ico:'🔧', nm:'Údržba',            ds:'Hlášení a evidence oprav a údržby strojů. Připravujeme.', active:false},
   {ico:'⚠️', nm:'Reklamace',         ds:'Evidence reklamací a neshod kvality. Připravujeme.', active:false},
-  {ico:'⚙️', nm:'Nastavení',         ds:'Správa uživatelů a jejich levelů.', href:'nastaveni.html', active:true, superadmin:true},
+  {ico:'⚙️', nm:'Nastavení',         ds:'Správa uživatelů, práv a modulů.', href:'nastaveni.html', active:true, key:'nastaveni'},
 ];
 
-let me=null, myLevel='basic', loginBusy=false, loginErr='';
+let me=null, myLevel='basic', myModules={}, loginBusy=false, loginErr='';
 const appEl=document.getElementById('app');
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -144,6 +154,7 @@ onAuthStateChanged(auth, async (user)=>{
   me={email:user.email};
   const d=await ensureUserDoc(user);
   myLevel=levelOf(d);
+  myModules=(d && d.modules) || {};
   render();
 });
 
@@ -166,7 +177,7 @@ function loginView(){
 }
 
 function appView(){
-  const tiles = MODULES.filter(m=> !m.superadmin || myLevel==='superadmin').map(m=> m.active
+  const tiles = MODULES.filter(m=> !m.key || resolveModule(myModules,myLevel,m.key)!=='none').map(m=> m.active
     ? `<a class="tile active" href="${m.href}">
          <span class="ico">${m.ico}</span>
          <span class="nm">${esc(m.nm)}</span>
@@ -180,7 +191,7 @@ function appView(){
          <span class="badge">Připravujeme</span>
        </div>`).join('');
   const LEVEL_LABEL={basic:'Basic',warehouse:'Warehouse',approver:'Approver',wadmin:'Warehouse Admin',superadmin:'Super Admin'};
-  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Portál',cur:'portal',user:esc(me.email),level:LEVEL_LABEL[myLevel]||'',logoutAttr:'id="btn-logout"'}) : '';
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Hlavní stránka',cur:'portal',user:esc(me.email),level:LEVEL_LABEL[myLevel]||'',logoutAttr:'id="btn-logout"',modules:allowedMods(myModules,myLevel)}) : '';
   return `${uh}
   <main>
     <div class="intro"><h2>Vyberte aplikaci</h2><p>Přihlášení platí pro všechny moduly současně.</p></div>

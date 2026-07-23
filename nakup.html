@@ -307,7 +307,23 @@ const ROLES = {
 const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai'];
 const isForcedAdmin = email => ADMIN_EMAILS.includes(String(email||'').trim().toLowerCase());
 
-const P = () => ROLES[me?.role] || ROLES.zadavatel;
+/* ===== Přístup k modulům (společné napříč portálem) ===== */
+const LEVEL_RANK={basic:1,warehouse:2,approver:3,wadmin:4,superadmin:5};
+const ROLE2LEVEL={zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
+const resolveModule=(mods,level,key)=>{ const p=mods&&mods[key];
+  if(p==='none'||p==='read'||p==='write') return p;
+  return key==='nastaveni' ? ((LEVEL_RANK[level]||1)>=5?'write':'none') : 'write'; };
+const allowedMods=(mods,level)=>['portal',
+  resolveModule(mods,level,'nakup')!=='none'?'nakup':null,
+  resolveModule(mods,level,'plan')!=='none'?'dovolenky':null,
+  resolveModule(mods,level,'nastaveni')!=='none'?'nastaveni':null].filter(Boolean);
+const nakupAccess=()=>resolveModule(me&&me.modules, (me&&me.level)||'basic', 'nakup');
+const isNakupRO=()=>nakupAccess()==='read';       // modul jen pro čtení
+const nakupBlocked=()=>nakupAccess()==='none';    // modul skrytý
+
+/* Oprávnění podle role; při „jen pro čtení" se všechna práva na zápis vypnou. */
+const P = () => { const base = ROLES[me?.role] || ROLES.zadavatel;
+  return isNakupRO() ? {label:base.label, lvl:base.lvl, edit:false, approve:false, del:false, admin:false} : base; };
 
 const DEFAULT_CONFIG = {
   rates:{CZK:25.0,EUR:1,USD:0.92},
@@ -374,8 +390,9 @@ onAuthStateChanged(auth, async (user)=>{
   loginBusy=false;                       // po (od)přihlášení vždy uvolnit přihlašovací formulář
   if(!user){ me=null; loginErr=''; fatalErr=''; teardown(); render(); return; }
   try{
-    await ensureConfig();
     me = await loadProfile(user);
+    if(nakupBlocked()){ render(); return; }   // modul skrytý – nenačítáme data
+    await ensureConfig();
     subscribeRows();
     if(P().admin) subscribeUsers();
     render();
@@ -404,14 +421,15 @@ async function loadProfile(user){
     const role = forced ? 'admin' : (d.role||'zadavatel');
     // účet ze seznamu "vždy admin", ale v databázi admina nemá → doplníme ho
     if(forced && d.role!=='admin'){ try{ await updateDoc(ref,{role:'admin'}); }catch(e){} }
-    return {uid:user.uid, email:user.email, name:d.name||user.email, role, team:d.team||'—'};
+    const level = (d.level && LEVEL_RANK[d.level]) ? d.level : (ROLE2LEVEL[role]||'basic');
+    return {uid:user.uid, email:user.email, name:d.name||user.email, role, team:d.team||'—', level, modules:d.modules||{}};
   }
   // první uživatel v systému = admin; účty ze seznamu taky; ostatní zadavatelé
   const anyUsers = await getDocs(collection(db,'users'));
   const role = (forced || anyUsers.empty) ? 'admin' : 'zadavatel';
   const prof = {name:user.email.split('@')[0], role, team: role==='admin'?'Administrátor':'—'};
   await setDoc(ref, prof);
-  return Object.assign({uid:user.uid, email:user.email}, prof);
+  return Object.assign({uid:user.uid, email:user.email, level:ROLE2LEVEL[role]||'basic', modules:{}}, prof);
 }
 
 function subscribeRows(){
@@ -459,6 +477,7 @@ function render(){
   if(!authReady){ app.innerHTML=splash('Připojuji se k Firebase…'); return; }
   if(fatalErr){ app.innerHTML=splash(fatalErr,true); bind(); return; }
   if(!me){ app.innerHTML=loginView()+dlgView()+`<div id="toast-node">${toastView()}</div>`; bind(); return; }
+  if(nakupBlocked()){ app.innerHTML=noAccessView(); bind(); return; }
   if(!dataReady){ app.innerHTML=splash('Načítám požadavky…'); return; }
   app.innerHTML = shell()+dlgView()+(qrOpen?qrScanView():'')+`<div id="toast-node">${toastView()}</div>`;
   bind();
@@ -470,6 +489,14 @@ function splash(msg,err){
     <h2>${err?'Chyba':'Nákupní požadavky'}</h2>
     <p class="s" ${err?'style="color:#c0392b"':''}>${esc(msg)}</p>
     ${err?'<button class="btn-primary" data-a="reload" style="width:100%;padding:9px;margin-top:6px">Zkusit znovu</button>':''}
+  </div></div>`;
+}
+function noAccessView(){
+  return `<div class="login-wrap"><div class="login" style="text-align:center">
+    <div class="brand">${logoSvg()}</div>
+    <h2>Nemáte přístup</h2>
+    <p class="s">K modulu Nákupní požadavky nemáte oprávnění.<br>Obraťte se na správce (modul Nastavení).</p>
+    <a href="index.html" class="btn-primary" style="display:inline-block;text-decoration:none;padding:9px 16px;margin-top:6px">← Hlavní stránka</a>
   </div></div>`;
 }
 
@@ -489,7 +516,7 @@ function loginView(){
 
 /* ---------- shell ---------- */
 function shell(){
-  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Nákupní požadavky',cur:'nakup',user:esc(me.name),level:esc(me.team+' · '+P().label),logoutAttr:'data-a="logout"'}) : '';
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Nákupní požadavky',cur:'nakup',user:esc(me.name),level:esc(me.team+' · '+P().label),logoutAttr:'data-a="logout"',modules:allowedMods(me&&me.modules,(me&&me.level)||'basic')}) : '';
   return `
   ${uh}
   <div class="tabbar">
@@ -556,7 +583,7 @@ function listView(){
     ${card('Hodnota požadavků',num(sumEur,0)+' €','bez zamítnutých · kurz '+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
   </div>
   ${roleNotice()}
-  <div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button></div>
+  ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':'<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button></div>'}
   <div class="panel">
     <h2>Přehled požadavků <span class="right">${rr.length} z ${rows.length} záznamů</span></h2>
     <div class="legend">Podbarvení řádku = stav:
@@ -692,7 +719,7 @@ function modalView(){
       <div class="r">
         ${(!isNew&&P().edit&&needsPoptat(r))?`<button class="btn-ghost" data-a="poptat" data-v="${r._id}">Poptat</button>`:''}
         ${(!isNew&&P().approve&&!r.approvedBy&&r.status!=='zamítnuto')?`<button class="btn-danger" data-a="reject" data-v="${r._id}">✕ Zamítnout</button><button class="btn-ok" data-a="approve" data-v="${r._id}">✔ Schválit za sebe</button>`:''}
-        ${!isNew?`<button class="btn-ghost" data-a="dup" data-v="${r._id}">Kopie</button>`:''}
+        ${(!isNew&&!isNakupRO())?`<button class="btn-ghost" data-a="dup" data-v="${r._id}">Kopie</button>`:''}
         ${(!isNew&&P().del)?`<button class="btn-danger" data-a="del" data-v="${r._id}">Smazat</button>`:''}
         <button class="btn-ghost" data-a="close">${ed?'Zrušit':'Zavřít'}</button>
         ${ed?`<button class="btn-primary" data-a="save">${isNew?'Založit požadavek':'Uložit změny'}</button>`:''}
@@ -944,7 +971,12 @@ function bind(){
   if(qrOpen) startQr();
 }
 
+const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject',
+  'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','save-rates','req',
+  'user-role','user-name','user-team']);
 async function act(a,v,el,ev){
+  // Pojistka: v režimu „jen pro čtení" neprojde žádná zapisovací akce (i kdyby zbylo tlačítko).
+  if(isNakupRO() && WRITE_ACTIONS.has(a)){ toast('Tento modul máte jen pro čtení.','err'); return; }
   switch(a){
     case 'reload': location.reload(); return;
     case 'login':{

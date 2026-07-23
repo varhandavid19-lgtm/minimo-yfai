@@ -319,7 +319,22 @@ const PERM_BY = {none:'Skryté', read:'Jen číst', self:'Zapisovat jen sebe', a
 const defaultPerm = level => (LEVEL_RANK[level]||1) >= 3 ? 'all' : 'self';
 const resolvePerm = (u, sectionKey) => { const p=u&&u.perms&&u.perms[sectionKey];
   return (p && PERM_BY[p]) ? p : defaultPerm(levelOf(u)); };
-const curPerm = () => resolvePerm(myDoc, section);            // právo přihlášeného v aktuální sekci
+/* Přístup k celému modulu Plánování (Skryté/Jen číst/Zapisovat) – zastřeší práva sekcí. */
+const resolveModule=(mods,level,key)=>{ const p=mods&&mods[key];
+  if(p==='none'||p==='read'||p==='write') return p;
+  return key==='nastaveni' ? ((LEVEL_RANK[level]||1)>=5?'write':'none') : 'write'; };
+const allowedMods=(mods,level)=>['portal',
+  resolveModule(mods,level,'nakup')!=='none'?'nakup':null,
+  resolveModule(mods,level,'plan')!=='none'?'dovolenky':null,
+  resolveModule(mods,level,'nastaveni')!=='none'?'nastaveni':null].filter(Boolean);
+const modCap = () => resolveModule(myDoc&&myDoc.modules, levelOf(myDoc), 'plan');
+/* Výsledné právo v sekci = právo sekce omezené přístupem k modulu
+   (modul „Jen číst" → i sekce jen čtou; modul „Skryté" → nic). */
+const secPerm = s => { const base=resolvePerm(myDoc,s), cap=modCap();
+  if(cap==='none') return 'none';
+  if(cap==='read') return base==='none'?'none':'read';
+  return base; };
+const curPerm = () => secPerm(section);                      // výsledné právo v aktuální sekci
 const canEditAll = () => curPerm()==='all';                  // smí upravovat kohokoli v sekci
 const canEditPerson = id => { const pm=curPerm(); return pm==='all' || (pm==='self' && id===(me&&me.uid)); };
 
@@ -422,7 +437,7 @@ function subscribe(){
   // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
   unsubPeople = onSnapshot(collection(db,'users'),
     s=>{ allUsers=s.docs.map(d=>{const x=d.data();
-           return {id:d.id, name:x.name||d.id, positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}};});
+           return {id:d.id, name:x.name||d.id, positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}, modules:x.modules||{}};});
          myDoc = allUsers.find(u=>u.id===me.uid) || null;
          render(); },
     e=>toast('Chyba načítání lidí: '+e.message,'err'));
@@ -541,7 +556,7 @@ function render(){
   if(c){ calScrollL=c.scrollLeft; calScrollT=c.scrollTop; }
   if(!me){ appEl.innerHTML=loginView(); wireLogin(); return; }
   // sekce, které přihlášený vidí (bez těch se stavem „Skryté")
-  const visible = SECTIONS.filter(s=>resolvePerm(myDoc,s.key)!=='none');
+  const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   if(visible.length && !visible.some(s=>s.key===section)) section=visible[0].key;
   // lidé aktuální sekce (podle přiřazených pozic v Nastavení)
   people = allUsers.filter(u=>inSection(u,section)).sort(bySurname);
@@ -594,7 +609,7 @@ function loginView(){
 }
 
 function appView(){
-  const visible = SECTIONS.filter(s=>resolvePerm(myDoc,s.key)!=='none');
+  const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   if(!visible.length){
     return `${headerView()}<main><div class="empty-cal" style="margin-top:20px">
       Nemáte přístup k žádné sekci plánování.<br>Obraťte se prosím na správce (modul ⚙️ Nastavení).</div></main>`;
@@ -613,7 +628,7 @@ function appView(){
 }
 
 function tabBar(){
-  const visible = SECTIONS.filter(s=>resolvePerm(myDoc,s.key)!=='none');
+  const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   const t=(s)=>`<button class="tab ${section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
   const pm=curPerm();
   const permNote = pm==='all' ? 'V této sekci můžete upravovat všechny.'
@@ -623,7 +638,7 @@ function tabBar(){
 }
 
 function headerView(){
-  return window.uheaderHTML ? window.uheaderHTML({module:'Plánování směn a přítomnosti',cur:'dovolenky',user:esc(me.email),level:'',logoutAttr:'id="btn-logout"'}) : '';
+  return window.uheaderHTML ? window.uheaderHTML({module:'Plánování směn a přítomnosti',cur:'dovolenky',user:esc(me.email),level:'',logoutAttr:'id="btn-logout"',modules:allowedMods(myDoc&&myDoc.modules, levelOf(myDoc))}) : '';
 }
 
 function formPanel(){

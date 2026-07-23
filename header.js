@@ -23,6 +23,8 @@
   window.uheaderHTML = function(o){
     o = o || {};
     function link(href, ico, label, key){
+      // o.modules (pole klíčů) omezí, které moduly se v menu ukážou; „portal" je vždy vidět
+      if(o.modules && key!=='portal' && o.modules.indexOf(key)<0) return '';
       return '<a class="'+(o.cur===key?'cur':'')+'" href="'+href+'">'+ico+' '+label+'</a>';
     }
     return '<header class="uhdr">'
@@ -30,7 +32,7 @@
         + '<button class="uh-menu" id="mm-btn" aria-label="Menu modulů" title="Moduly">☰</button>'
         + '<nav class="mm-panel" id="mm-panel" hidden>'
           + '<div class="mm-h">Přepnout modul</div>'
-          + link('index.html','🏠','Portál','portal')
+          + link('index.html','🏠','Hlavní stránka','portal')
           + link('nakup.html','🛒','Nákupní požadavky','nakup')
           + link('dovolenky.html','🗓️','Plánování směn','dovolenky')
           + link('nastaveni.html','⚙️','Nastavení','nastaveni')
