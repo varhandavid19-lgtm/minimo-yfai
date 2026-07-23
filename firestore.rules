@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isAdmin()        { return signedIn() && myRole() == 'admin'; }
+    function isSklad()        { return signedIn() && myRole() == 'skladnik'; }
+    function isSchvalovatel() { return signedIn() && myRole() == 'schvalovatel'; }
+    function canEdit()        { return isAdmin() || isSklad(); }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /meta/config {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if isAdmin()
+                    || (signedIn()
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq'])
+                        && request.resource.data.seq == resource.data.seq + 1);
+    }
+
+    match /requests/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+                    && request.resource.data.author == request.auth.uid
+                    && request.resource.data.status in ['nový','ve schvalování'];
+      allow update: if canEdit()
+                    || (isSchvalovatel()
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvedBy','approvedAt','status','poznamka','hist']));
+      allow delete: if isAdmin();
+    }
+
+    // --- Dovolenky ---
+    match /people/{id} {
+      allow read, write: if signedIn();
+    }
+    match /absences/{id} {
+      allow read, write: if signedIn();
+    }
+
+  }
+}
