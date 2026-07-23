@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dovolenky — YFAI</title>
+<style>
+  :root{
+    --navy-1:#0f2f5f; --navy-2:#1b4b8f; --panel:#1e4c8a;
+    --bg:#f4f6f9; --card:#ffffff; --line:#dde4ec; --text:#16233a; --muted:#6b7a90;
+    --green:#1f9254; --red:#c0392b; --amber:#b7791f; --blue:#2563a8;
+    --radius:8px; font-synthesis-weight:none;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:13px}
+  button{font-family:inherit;font-size:12px;cursor:pointer;border-radius:var(--radius);border:1px solid transparent;padding:8px 13px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input,select,textarea{font-family:inherit;font-size:13.5px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:var(--radius);background:#fff;color:var(--text);width:100%}
+  input:focus,select:focus,textarea:focus{outline:2px solid #2a5ea3;outline-offset:0;border-color:#2a5ea3}
+  a{color:#2563a8}
+
+  /* ---- hlavička ---- */
+  header{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;padding:12px 18px;
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-.3px;line-height:1.1}
+  header .sub{font-size:11.5px;opacity:.75;margin-top:2px}
+  .brand{background:#fff;border-radius:8px;padding:8px 13px;display:flex;align-items:center;
+    box-shadow:0 2px 8px rgba(0,0,0,.22);flex:none}
+  .brand svg{display:block;height:50px;width:auto}
+  .chips{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .chip{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:20px;
+    padding:4px 11px;font-size:11px;white-space:nowrap}
+  .btn-logout{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;
+    border-radius:20px;font-size:11px;padding:5px 13px}
+  @media(max-width:640px){header h1{font-size:19px}.brand svg{height:40px}}
+
+  main{padding:16px 22px 46px;max-width:none;margin:0 auto}
+  .toprow{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-bottom:14px}
+  @media(max-width:900px){.toprow{grid-template-columns:1fr}}
+
+  .panel{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(15,47,95,.05)}
+  .panel > h2{background:var(--panel);color:#fff;margin:0;font-size:13px;font-weight:700;padding:10px 14px;
+    display:flex;align-items:center;gap:9px}
+  .panel > h2 .right{margin-left:auto;font-weight:500;font-size:11px;opacity:.85}
+  .panel .body{padding:14px}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .f{display:flex;flex-direction:column;gap:5px}
+  .f.span2{grid-column:span 2}
+  .f label{font-size:12px;font-weight:700;color:#41506b}
+  .f .req{color:var(--red)}
+  .btn-primary{background:var(--navy-2);color:#fff;font-weight:700}
+  .btn-primary:hover{background:#163f78}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b}
+  .btn-danger{background:var(--red);color:#fff}
+  .formfoot{margin-top:10px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .formfoot .msg{font-size:12.5px;font-weight:600}
+  .formfoot .msg.err{color:var(--red)}
+  .formfoot .msg.ok{color:var(--green)}
+  .formrow{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .formrow .f{flex:1 1 150px;min-width:140px}
+  .formrow .f.grow{flex:2 1 190px}
+  .formrow .f.addbtn{flex:0 0 auto;min-width:0}
+  .formrow .f.addbtn button{padding:9px 24px}
+  .formrow .f.dcount{flex:0 0 92px;min-width:80px}
+
+  .tabbar{background:#fff;border-bottom:1px solid var(--line);padding:0 18px;display:flex;gap:4px}
+  .tab{background:transparent;border:0;border-bottom:3px solid transparent;border-radius:0;
+    padding:12px 16px;font-size:13.5px;font-weight:700;color:#6b7a90}
+  .tab:hover{color:var(--navy-2)}
+  .tab.active{color:var(--navy-1);border-bottom-color:#f6821f}
+
+  .settings{max-width:1200px}
+  .statsyear{display:flex;align-items:center;gap:8px;margin:2px 0 12px;font-size:12.5px;color:#41506b}
+  .statsyear b{font-size:14px;color:var(--navy-1);min-width:46px;text-align:center}
+  .nav.sm{width:30px;height:30px;font-size:15px}
+  .addperson input{flex:1;min-width:150px}
+  .tblwrap{overflow-x:auto}
+  .ptable{width:100%;border-collapse:collapse;font-size:13px}
+  .ptable th{background:#16355f;color:#fff;text-align:left;padding:9px 11px;font-size:10.5px;
+    letter-spacing:.5px;text-transform:uppercase;font-weight:700}
+  .ptable th.num{text-align:right}
+  .ptable td{padding:8px 11px;border-bottom:1px solid #eef1f5;vertical-align:middle}
+  .ptable tbody tr:hover td{background:#f7f9fc}
+  .ptable td.nm{font-weight:600;white-space:nowrap}
+  .ptable td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .ptable td.num b{font-size:14px;color:var(--navy-1)}
+  .ptable td.num b.neg{color:var(--red)}
+  .ptable td.num .of{color:var(--muted);font-size:11px}
+  .ptable td.ta-c{text-align:center}
+  .ptable .proc{padding:6px 8px;font-size:12.5px;max-width:280px}
+  .ptable .rm{background:transparent;border:0;color:#9aa7b8;font-size:16px;line-height:1;padding:2px 6px}
+  .ptable .rm:hover{color:var(--red)}
+  .ptable .tempty{color:var(--muted);text-align:center;padding:22px}
+
+  /* ---- lidé ---- */
+  .people{display:flex;flex-direction:column;gap:7px;max-height:210px;overflow:auto}
+  .prow{display:flex;align-items:center;gap:8px;background:#f7f9fc;border:1px solid var(--line);
+    border-radius:8px;padding:7px 8px 7px 12px}
+  .prow .pinfo{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+  .prow .nm{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prow .vac{font-size:11px;color:var(--muted)}
+  .prow .vac b{color:#41506b;font-variant-numeric:tabular-nums}
+  .prow .vac b.neg{color:var(--red)}
+  .prow button{background:transparent;border:0;color:#9aa7b8;font-size:16px;line-height:1;padding:2px 6px}
+  .prow button:hover{color:var(--red)}
+  .addperson{display:flex;gap:8px;margin-bottom:11px}
+  .addperson input{flex:1}
+
+  /* ---- legenda ---- */
+  .legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:10px 14px;margin-bottom:12px;
+    background:#fff;border:1px solid var(--line);border-radius:12px;font-size:12px;color:#41506b}
+  .legend .item{display:flex;align-items:center;gap:7px;white-space:nowrap}
+  .legend .sw{width:20px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.08)}
+
+  /* ---- kalendář ---- */
+  .calbar{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .calbar .yr{font-size:17px;font-weight:800;color:var(--navy-1);min-width:230px;text-align:center}
+  .calbar button.nav{background:#fff;border:1px solid var(--line);color:var(--navy-2);font-size:16px;
+    font-weight:800;width:38px;height:38px;border-radius:10px;padding:0}
+  .calbar button.nav:hover{background:#eef3fb}
+  .calbar .hint{margin-left:auto;font-size:11.5px;color:var(--muted)}
+
+  .cal-wrap{overflow:auto;max-height:76vh;border:1px solid var(--line);border-radius:12px;background:#fff}
+  table.cal{border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:11px}
+  .cal col.namecol{width:190px}
+  .cal col.dcol{width:29px}
+  .cal th,.cal td{border-right:1px solid #eef1f6;border-bottom:1px solid #eef1f6;text-align:center;padding:0;height:33px}
+  .cal thead th{background:#f7f9fc;color:#41506b;font-weight:700;user-select:none}
+  .cal tr.months th{position:sticky;top:0;z-index:4;height:27px;font-size:12px;letter-spacing:.4px;
+    text-transform:uppercase;background:#e7eefb;color:var(--navy-2);border-bottom:1px solid #d0dcef}
+  .cal tr.months th.malt{background:#dbe6f7}
+  .cal tr.days th{position:sticky;top:27px;z-index:4;height:31px;font-size:11px;color:#5b6b82;font-weight:600;line-height:1.05}
+  .cal tr.days th .wd{display:block;font-size:8.5px;font-weight:600;color:#aab4c2}
+  .cal tr.days th.today .wd{color:#ffe6d5}
+  .cal .malt{background:#f1f4fa}
+  .cal .corner{position:sticky;left:0;z-index:7;background:#e7eefb;text-align:left;padding:0 12px;
+    box-shadow:2px 0 0 #d0dcef}
+  .cal tr.months th.corner{z-index:8;font-size:13px}
+  .cal tr.days th.corner{z-index:8;background:#f7f9fc;font-size:11px;text-transform:none;letter-spacing:0;color:#41506b}
+  .cal td.name{position:sticky;left:0;z-index:3;background:#fff;text-align:left;padding:0 12px;font-weight:600;
+    font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 0 #e6ebf2}
+  .cal tbody tr:hover td.name{background:#f7f9fc}
+  .cal td.d{cursor:pointer}
+  .cal td.d:hover{outline:2px solid #2a5ea3;outline-offset:-2px;position:relative;z-index:2}
+  .cal th.we,.cal td.we{background:#e9edf3}
+  .cal th.hol,.cal td.hol{background:#e6d9fb}
+  .cal th.hol{color:#6d3fc4}
+  .cal .mstart{border-left:2px solid #c3d0e2}
+  .cal tr.days th.today{background:#f6821f;color:#fff;font-weight:800;border-radius:5px}
+  .cal-inner{position:relative;width:max-content;min-width:100%}
+  .cal td.d .lab{font-size:9px;font-weight:800;color:rgba(25,30,42,.34);pointer-events:none;letter-spacing:0}
+  /* Dnešek: prázdná políčka lehce oranžová, políčka s nepřítomností nechají svou barvu vyniknout */
+  .cal td.today:not(.has){background:#fde3c8}
+  /* Pruh dneška = jen oranžové linky po stranách sloupce (nepřekrývá barvy nepřítomností) */
+  .today-band{position:absolute;top:0;bottom:0;z-index:2;pointer-events:none;
+    box-shadow:inset 3px 0 0 #e8590c,inset -3px 0 0 #e8590c}
+  .cal td.holmark{box-shadow:inset 0 3px 0 #9b6ff0}
+
+  .empty-cal{padding:34px;text-align:center;color:var(--muted)}
+
+  /* ---- přihlášení ---- */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,#0f2f5f,#2a5ea3);padding:16px}
+  .login{background:#fff;border-radius:14px;width:360px;padding:26px;box-shadow:0 22px 55px rgba(0,0,0,.35)}
+  .login .brand{margin:0 auto 18px;box-shadow:none;border:1px solid var(--line);width:max-content}
+  .login .brand svg{height:56px}
+  .login h2{margin:0 0 3px;font-size:18px;text-align:center}
+  .login p.s{margin:0 0 18px;font-size:11.5px;color:var(--muted);text-align:center}
+  .login .f{margin-bottom:12px}
+  .login button{width:100%;padding:10px;font-size:13px}
+  .login .hint{margin-top:15px;font-size:11px;color:var(--muted);line-height:1.7;
+    border-top:1px solid var(--line);padding-top:12px;text-align:center}
+  .loginerr{background:#fdecea;border:1px solid #f5cfca;color:var(--red);font-size:11.5px;
+    padding:8px 10px;border-radius:8px;margin-bottom:12px;font-weight:600}
+
+  /* ---- dialog ---- */
+  .dlg-wrap{position:fixed;inset:0;background:rgba(12,26,48,.55);display:flex;align-items:center;
+    justify-content:center;z-index:80;padding:16px}
+  .dlg{background:#fff;border-radius:12px;max-width:440px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.35);overflow:hidden}
+  .dlg.dlg-lg{max-width:600px}
+  .egrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .egrid .f.span2{grid-column:span 2}
+  .egrid .f.span3{grid-column:span 3}
+  .egrid .f label{font-size:12px;font-weight:700;color:#41506b;margin-bottom:4px;display:block}
+  .dlg .b .grow1{flex:1}
+  @media(max-width:560px){.egrid{grid-template-columns:1fr 1fr}.egrid .f.span2,.egrid .f.span3{grid-column:span 2}}
+  .dlg .t{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;padding:12px 16px;
+    font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .dlg .t .x{margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;padding:0 4px}
+  .dlg .c{padding:16px;font-size:13px;line-height:1.6}
+  .dlg .b{padding:12px 16px;border-top:1px solid var(--line);background:#fafbfd;display:flex;gap:8px;
+    justify-content:flex-end;flex-wrap:wrap}
+  .absitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;
+    padding:9px 11px;margin-bottom:8px}
+  .absitem .dot{width:14px;height:14px;border-radius:4px;flex:none}
+  .absitem .info{flex:1}
+  .absitem .info b{font-size:13px}
+  .absitem .info div{font-size:11.5px;color:var(--muted)}
+
+  /* ---- toast ---- */
+  .toast{position:fixed;right:16px;bottom:16px;z-index:90;background:#16233a;color:#fff;border-radius:10px;
+    padding:11px 15px;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:380px}
+  .toast.err{background:var(--red)}
+  .toast.ok{background:var(--green)}
+
+  /* ===== MOBIL (musí být až na konci CSS, aby přebilo výchozí pravidla) ===== */
+  @media(max-width:680px){
+    header{padding:10px 12px;gap:10px}
+    header h1{font-size:18px}
+    header .sub{display:none}
+    main{padding:12px 10px 30px}
+    .panel .body{padding:11px}
+    .formrow .f{flex:1 1 100%;min-width:0}
+    .legend{gap:5px 9px;font-size:9.5px;padding:7px 9px}
+    .legend .item{gap:5px}
+    .legend .sw{width:13px;height:10px}
+    .calbar .hint{display:none}
+    .calbar .yr{min-width:70px;font-size:16px}
+    .cal-wrap{max-height:66vh}
+    .cal td.name{font-size:12px;padding:0 8px}
+    .cal tr.days th{font-size:10px}
+    .settings{max-width:none}
+    .addperson{flex-direction:column}
+    .addperson input,.addperson .btn-primary{width:100%}
+    .ptable{font-size:12px}
+    .ptable th,.ptable td{padding:7px 6px}
+    .ptable .proc{max-width:none}
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="login-wrap"><div class="login"><h2>Načítám…</h2><p class="s">Připojuji se k Firebase.</p></div></div></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+/* ====== FIREBASE KONFIGURACE (projekt dovolenky) ======
+   Jde o veřejné frontendové klíče – je správné a bezpečné mít je zde v kódu.
+   Zabezpečení řeší pravidla Firestore (firestore.rules), ne skrývání klíčů. */
+const firebaseConfig = {
+  apiKey: "AIzaSyDi3OVq2Al0WXFPgqhMAN9lPGuExOU80Cc",
+  authDomain: "nakupni-pozadavky.firebaseapp.com",
+  projectId: "nakupni-pozadavky",
+  storageBucket: "nakupni-pozadavky.firebasestorage.app",
+  messagingSenderId: "214674774365",
+  appId: "1:214674774365:web:7f7b51c8169b75f8acb0b4",
+  measurementId: "G-BGDMXEWBQH"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+function logoSvg(){
+  return `<svg viewBox="0 0 300 138" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YFAI minimo">
+    <defs>
+      <pattern id="yfai-stripes" patternUnits="userSpaceOnUse" x="0" y="8" width="10" height="9.8">
+        <rect x="0" y="0" width="10" height="5.9" fill="#1f66b5"/>
+      </pattern>
+    </defs>
+    <text x="150" y="86" text-anchor="middle" fill="url(#yfai-stripes)"
+      font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="108"
+      textLength="244" lengthAdjust="spacingAndGlyphs">YFAI</text>
+    <text x="150" y="128" text-anchor="middle" fill="#111418"
+      font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="42"
+      letter-spacing="1" textLength="246" lengthAdjust="spacingAndGlyphs">minimo</text>
+  </svg>`;
+}
+
+/* ==========================================================
+   Dovolenky — evidence nepřítomnosti (Firestore + Auth)
+   Kolekce ve Firestore (projekt dovolenky):
+     people    — naši lidé  { name, order, createdAt }
+     absences  — nepřítomnosti { personId, personName, type, from, to, note, createdBy, createdAt }
+   Svátky se do databáze neukládají — počítají se v prohlížeči (české státní svátky).
+   ========================================================== */
+
+/* Druhy nepřítomnosti + barvy (světlé, moderní). Svátek je zvláštní – dopočítává se automaticky. */
+const TYPES = [
+  {k:'Dovolená',        fill:'#f5c518', short:'D'},
+  {k:'Náhradní volno',  fill:'#35c1d6', short:'NV'},
+  {k:'Nemoc',           fill:'#f2726b', short:'N'},
+  {k:'Lékař',           fill:'#e879a6', short:'L'},
+  {k:'Neplacené volno', fill:'#9aa7b8', short:'NP'},
+  {k:'Služební cesta',  fill:'#5b9df5', short:'SC'},
+];
+const TYPE_BY = Object.fromEntries(TYPES.map(t=>[t.k,t]));
+const HOLIDAY_FILL = '#b98cf0';
+const DEFAULT_VACATION = 25;   // výchozí nárok na dovolenou (pracovních dní za rok)
+
+const MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+const WD = ['Ne','Po','Út','St','Čt','Pá','So'];
+
+/* ---------- stav aplikace ---------- */
+let me=null;               // přihlášený uživatel {email}
+let people=[];             // naši lidé
+let absences=[];           // nepřítomnosti
+let page='prehled';        // 'prehled' | 'nastaveni'
+const _now0=new Date();
+let calYear=_now0.getFullYear();   // rok zobrazený v kalendáři (posouvá se do stran)
+let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
+let statsYear=_now0.getFullYear(); // rok pro výpočet zůstatku dovolené
+let loginBusy=false, loginErr='';
+let form={personId:'',from:today(),to:today(),type:'Dovolená',note:'',days:1};
+let newPerson='', newProc='';
+let formMsg='', formMsgKind='';
+let dlg=null;              // {personName, dateStr, items:[...]}
+let edit=null, editMsg=''; // úprava existující nepřítomnosti (kliknutím v kalendáři)
+let collision=null;        // {list:[...], from, to} – upozornění na kolizi ve stejném úseku
+let toastMsg=null, toastKind='';
+let calScrollL=0, calScrollT=0;
+
+/* ---------- pomocné ---------- */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* Řazení lidí podle příjmení (poslední slovo jména), pak podle celého jména. */
+const surname = n => {const p=String(n||'').trim().split(/\s+/);return p[p.length-1]||'';};
+const bySurname = (a,b)=> surname(a.name).localeCompare(surname(b.name),'cs') || String(a.name||'').localeCompare(String(b.name||''),'cs');
+function today(){const d=new Date();return iso(d.getFullYear(),d.getMonth(),d.getDate());}
+function iso(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+const dCz = ds => {const[y,m,d]=ds.split('-');return `${+d}. ${+m}. ${y}`;};
+function toast(m,k=''){toastMsg=m;toastKind=k;render();clearTimeout(toast._t);toast._t=setTimeout(()=>{toastMsg=null;render();},3200);}
+
+/* Velikonoční neděle (Meeus/Jones/Butcher) – pro Velký pátek a Velikonoční pondělí. */
+function easterSunday(y){
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,
+    f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,
+    i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+    month=Math.floor((h+l-7*m+114)/31),day=((h+l-7*m+114)%31)+1;
+  return new Date(y,month-1,day);
+}
+/* České státní svátky pro daný rok → Map 'YYYY-MM-DD' → název. */
+function czHolidays(y){
+  const map=new Map();
+  const fixed=[[0,1,'Nový rok'],[4,1,'Svátek práce'],[4,8,'Den vítězství'],
+    [6,5,'Cyril a Metoděj'],[6,6,'Jan Hus'],[8,28,'Den české státnosti'],
+    [9,28,'Vznik ČSR'],[10,17,'Den boje za svobodu'],[11,24,'Štědrý den'],
+    [11,25,'1. svátek vánoční'],[11,26,'2. svátek vánoční']];
+  fixed.forEach(([m,d,n])=>map.set(iso(y,m,d),n));
+  const es=easterSunday(y);
+  const gf=new Date(es);gf.setDate(es.getDate()-2);
+  const em=new Date(es);em.setDate(es.getDate()+1);
+  map.set(iso(gf.getFullYear(),gf.getMonth(),gf.getDate()),'Velký pátek');
+  map.set(iso(em.getFullYear(),em.getMonth(),em.getDate()),'Velikonoční pondělí');
+  return map;
+}
+
+/* Projde všechny dny nepřítomnosti od–do (včetně). */
+function eachDay(from,to,cb){
+  let d=new Date(from+'T00:00:00'), end=new Date(to+'T00:00:00');
+  let guard=0;
+  while(d<=end && guard++<800){ cb(iso(d.getFullYear(),d.getMonth(),d.getDate())); d.setDate(d.getDate()+1); }
+}
+/* Svátky s cache (rychlejší opakované dotazy). */
+const _holCache={};
+function holsOf(y){ return _holCache[y] || (_holCache[y]=czHolidays(y)); }
+const isWorkday = ds => { const dow=new Date(ds+'T00:00:00').getDay();
+  return dow!==0 && dow!==6 && !holsOf(+ds.slice(0,4)).get(ds); };
+/* Počet pracovních dnů (bez víkendů a svátků) v rozsahu od–do. */
+function workingDays(from,to){
+  if(!from||!to||to<from) return 0;
+  let n=0; eachDay(from,to,ds=>{ if(isWorkday(ds)) n++; });
+  return n;
+}
+/* Český popis počtu dnů. */
+function dayLabel(n){ n=Number(n);
+  if(n===0.5) return '0,5 dne';
+  if(n===1) return '1 den';
+  if(Number.isInteger(n) && n>=2 && n<=4) return n+' dny';
+  return String(n).replace('.',',')+' dní'; }
+
+/* ==========================================================
+   FIREBASE — přihlášení a načítání dat
+   ========================================================== */
+let unsubPeople=null, unsubAbs=null;
+
+onAuthStateChanged(auth, (user)=>{
+  loginBusy=false;
+  if(!user){ me=null; loginErr=''; teardown(); render(); return; }
+  me={email:user.email, uid:user.uid};
+  subscribe();
+  render();
+});
+
+function teardown(){
+  if(unsubPeople){unsubPeople();unsubPeople=null;}
+  if(unsubAbs){unsubAbs();unsubAbs=null;}
+  people=[]; absences=[];
+}
+function subscribe(){
+  unsubPeople = onSnapshot(collection(db,'people'),
+    s=>{ people=s.docs.map(d=>({id:d.id,...d.data()})).sort(bySurname); render(); },
+    e=>toast('Chyba načítání lidí: '+e.message,'err'));
+  unsubAbs = onSnapshot(collection(db,'absences'),
+    s=>{ absences=s.docs.map(d=>({id:d.id,...d.data()})); render(); },
+    e=>toast('Chyba načítání nepřítomností: '+e.message,'err'));
+}
+
+async function doLogin(email,pass){
+  loginBusy=true; loginErr=''; render();
+  try{ await signInWithEmailAndPassword(auth,email.trim(),pass); }
+  catch(e){ loginBusy=false; loginErr=loginErrMsg(e.code); render(); }
+}
+function loginErrMsg(code){
+  const m={'auth/invalid-email':'Neplatný e-mail.',
+    'auth/user-not-found':'Účet s tímto e-mailem neexistuje.',
+    'auth/wrong-password':'Nesprávné heslo.',
+    'auth/invalid-credential':'Nesprávný e-mail nebo heslo.',
+    'auth/too-many-requests':'Příliš mnoho pokusů, zkuste to za chvíli.',
+    'auth/operation-not-allowed':'Přihlašování e-mailem není ve Firebase zapnuté.'};
+  return m[code]||('Přihlášení se nezdařilo ('+code+').');
+}
+
+/* ==========================================================
+   ZÁPIS DAT
+   ========================================================== */
+async function addPerson(name,process){
+  name=name.trim(); if(!name) return;
+  try{
+    const maxOrder=people.reduce((a,p)=>Math.max(a,p.order||0),0);
+    await addDoc(collection(db,'people'),{name,process:(process||'').trim(),order:maxOrder+1,createdAt:serverTimestamp()});
+    newPerson=''; newProc=''; render();
+  }catch(e){ toast('Nepodařilo se přidat: '+e.message,'err'); }
+}
+async function updatePersonProcess(id,val){
+  try{ await updateDoc(doc(db,'people',id),{process:(val||'').trim()}); }
+  catch(e){ toast('Nepodařilo se uložit zařazení: '+e.message,'err'); }
+}
+async function removePerson(id,name){
+  if(!confirm(`Odebrat „${name}" ze seznamu lidí?\n\nJeho záznamy nepřítomnosti tím z kalendáře zmizí.`)) return;
+  try{ await deleteDoc(doc(db,'people',id)); toast('Osoba odebrána.','ok'); }
+  catch(e){ toast('Nepodařilo se odebrat: '+e.message,'err'); }
+}
+async function addAbsence(bypass){
+  formMsg=''; formMsgKind='';
+  // Vezmi aktuální hodnoty přímo z formuláře (co je vidět, to platí)
+  const selEl=document.getElementById('fa-person'); if(selEl) form.personId=selEl.value;
+  const fEl=document.getElementById('fa-from'); if(fEl) form.from=fEl.value;
+  const tEl=document.getElementById('fa-to'); if(tEl) form.to=tEl.value;
+  const yEl=document.getElementById('fa-type'); if(yEl) form.type=yEl.value;
+  const nEl=document.getElementById('fa-note'); if(nEl) form.note=nEl.value;
+  const dEl=document.getElementById('fa-days'); if(dEl) form.days=parseFloat(String(dEl.value).replace(',','.'))||0;
+  const p=people.find(x=>x.id===form.personId);
+  if(!p){ formMsg='Vyberte zaměstnance.'; formMsgKind='err'; render(); return; }
+  if(!form.from||!form.to){ formMsg='Vyplňte datum od i do.'; formMsgKind='err'; render(); return; }
+  if(form.to<form.from){ formMsg='Datum „do" nesmí být před „od".'; formMsgKind='err'; render(); return; }
+  if(!TYPE_BY[form.type]){ formMsg='Vyberte druh nepřítomnosti.'; formMsgKind='err'; render(); return; }
+  if(!(form.days>0) || Math.round(form.days*2)!==form.days*2){
+    formMsg='Počet dnů musí být násobek 0,5 (např. 0,5, 1, 2,5).'; formMsgKind='err'; render(); return; }
+  // Půlden = jeden den (diagonální políčko); celé dny = počet pracovních dnů v rozsahu
+  let fromD=form.from, toD=form.to, days=form.days;
+  if(days===0.5){ toD=fromD; }
+  else{ days=workingDays(fromD,toD);
+    if(days<=0){ formMsg='V zadaném rozsahu nejsou žádné pracovní dny.'; formMsgKind='err'; render(); return; } }
+  // Kontrola kolize: dovolená s kolegou ze stejného úseku
+  if(!bypass && form.type==='Dovolená'){
+    const list=findCollisions(p, fromD, toD);
+    if(list.length){ collision={list, from:fromD, to:toD}; render(); return; }
+  }
+  try{
+    await addDoc(collection(db,'absences'),{
+      personId:p.id, personName:p.name, type:form.type,
+      from:fromD, to:toD, note:form.note.trim(), days,
+      createdBy:me.email, createdAt:serverTimestamp()
+    });
+    form={personId:p.id,from:fromD,to:toD,type:form.type,note:'',days};
+    formMsg='Nepřítomnost přidána.'; formMsgKind='ok'; collision=null;
+    render();
+  }catch(e){ formMsg='Nepodařilo se uložit: '+e.message; formMsgKind='err'; render(); }
+}
+/* Najde kolegy ze stejného úseku, kteří mají v zadaném termínu dovolenou. */
+function findCollisions(person, from, to){
+  const proc=(person.process||'').trim().toLowerCase();
+  if(!proc) return [];
+  const list=[];
+  people.forEach(o=>{
+    if(o.id===person.id) return;
+    if((o.process||'').trim().toLowerCase()!==proc) return;
+    absences.forEach(a=>{
+      if(a.personId!==o.id || a.type!=='Dovolená') return;
+      if(a.from<=to && a.to>=from) list.push({name:o.name, from:a.from, to:a.to, process:o.process});
+    });
+  });
+  return list;
+}
+async function removeAbsence(id){
+  try{ await deleteDoc(doc(db,'absences',id)); toast('Záznam smazán.','ok'); dlg=null; edit=null; render(); }
+  catch(e){ toast('Nepodařilo se smazat: '+e.message,'err'); }
+}
+/* Uloží úpravy existující nepřítomnosti (z editačního okna). */
+async function saveEdit(){
+  editMsg=''; const e=edit; const g=id=>document.getElementById(id);
+  e.personId=g('ed-person').value; e.from=g('ed-from').value; e.to=g('ed-to').value;
+  e.type=g('ed-type').value; e.note=g('ed-note').value;
+  e.days=parseFloat(String(g('ed-days').value).replace(',','.'))||0;
+  const p=people.find(x=>x.id===e.personId);
+  if(!p){ editMsg='Vyberte zaměstnance.'; render(); return; }
+  if(!e.from||!e.to){ editMsg='Vyplňte datum od i do.'; render(); return; }
+  if(e.to<e.from){ editMsg='Datum „do" nesmí být před „od".'; render(); return; }
+  if(!TYPE_BY[e.type]){ editMsg='Vyberte druh nepřítomnosti.'; render(); return; }
+  if(!(e.days>0) || Math.round(e.days*2)!==e.days*2){ editMsg='Počet dnů musí být násobek 0,5.'; render(); return; }
+  let fromD=e.from, toD=e.to, days=e.days;
+  if(days===0.5){ toD=fromD; }
+  else{ days=workingDays(fromD,toD); if(days<=0){ editMsg='V zadaném rozsahu nejsou žádné pracovní dny.'; render(); return; } }
+  try{
+    await updateDoc(doc(db,'absences',e.id),{
+      personId:p.id, personName:p.name, type:e.type, from:fromD, to:toD, note:e.note.trim(), days });
+    edit=null; toast('Změny uloženy.','ok'); render();
+  }catch(err){ editMsg='Nepodařilo se uložit: '+err.message; render(); }
+}
+
+/* ==========================================================
+   RENDER
+   ========================================================== */
+const appEl=document.getElementById('app');
+
+function render(){
+  const c=document.querySelector('.cal-wrap');
+  if(c){ calScrollL=c.scrollLeft; calScrollT=c.scrollTop; }
+  if(!me){ appEl.innerHTML=loginView(); wireLogin(); return; }
+  appEl.innerHTML = appView();
+  wireApp();
+  alignCalendar();
+  positionTodayBand();
+  renderToast();
+}
+
+/* Kalendář: při prvním zobrazení roku srovná pohled tak, aby aktuální měsíc
+   byl vlevo (ostatní roky na leden). Jinak zachová dosavadní odscrollování. */
+function alignCalendar(){
+  const wrap=document.querySelector('.cal-wrap'); if(!wrap) return;
+  if(calYear!==alignedYear){
+    if(!wrap.querySelector('table.cal')){ wrap.scrollLeft=calScrollL; return; } // ještě bez dat – příště
+    alignedYear=calYear;
+    const now=new Date();
+    if(calYear===now.getFullYear()){
+      const mob=window.innerWidth<=680, DC=mob?30:34;
+      let idx=0; for(let m=0;m<now.getMonth();m++) idx+=new Date(calYear,m+1,0).getDate();
+      wrap.scrollLeft=idx*DC;            // první den aktuálního měsíce k levému okraji
+    }else wrap.scrollLeft=0;
+    calScrollL=wrap.scrollLeft;
+  }else{ wrap.scrollLeft=calScrollL; wrap.scrollTop=calScrollT; }
+}
+
+/* Umístí zvýrazňovací pruh přesně na sloupec dneška. */
+function positionTodayBand(){
+  const band=document.querySelector('.today-band'), inner=document.querySelector('.cal-inner');
+  const td=document.querySelector('td.today');
+  if(!band||!inner||!td){ if(band) band.style.display='none'; return; }
+  const ir=inner.getBoundingClientRect(), tr=td.getBoundingClientRect();
+  band.style.display='';
+  band.style.left = (tr.left-ir.left)+'px';
+  band.style.width = tr.width+'px';
+}
+
+function loginView(){
+  return `<div class="login-wrap"><form class="login" id="loginForm">
+    <div class="brand">${logoSvg()}</div>
+    <h2>Dovolenky</h2>
+    <p class="s">Evidence nepřítomnosti · YFAI</p>
+    ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
+    <div class="f"><label>E-mail</label><input type="email" id="li-email" autocomplete="username" required></div>
+    <div class="f"><label>Heslo</label><input type="password" id="li-pass" autocomplete="current-password" required></div>
+    <button type="submit" class="btn-primary" ${loginBusy?'disabled':''}>${loginBusy?'Přihlašuji…':'Přihlásit se'}</button>
+    <div class="hint">Aplikace je určená vedoucím pracovníkům.<br>Účet vám zakládá správce.</div>
+  </form></div>`;
+}
+
+function appView(){
+  return `${headerView()}
+  ${tabBar()}
+  <main>
+    ${page==='nastaveni' ? settingsView() : overviewView()}
+  </main>
+  ${dlg?dialogView():''}
+  ${edit?editView():''}
+  ${collision?collisionView():''}`;
+}
+
+function tabBar(){
+  const t=(id,label)=>`<button class="tab ${page===id?'active':''}" data-tab="${id}">${label}</button>`;
+  return `<div class="tabbar">${t('prehled','📅 Přehled')}${t('nastaveni','⚙️ Nastavení')}</div>`;
+}
+
+function overviewView(){
+  return `${formPanel()}
+    ${legendView()}
+    ${calBar()}
+    ${calendarView()}`;
+}
+
+function settingsView(){
+  return `<div class="settings">${peoplePanel()}</div>`;
+}
+
+function headerView(){
+  return `<header>
+    <div class="brand">${logoSvg()}</div>
+    <div><h1>Dovolenky</h1><div class="sub">Evidence nepřítomnosti · YFAI</div></div>
+    <div class="chips">
+      <a class="btn-logout" href="index.html" style="text-decoration:none">← Portál</a>
+      <span class="chip">${esc(me.email)}</span>
+      <button class="btn-logout" id="btn-logout">Odhlásit</button>
+    </div>
+  </header>`;
+}
+
+function formPanel(){
+  // ať je vždy někdo vybraný (jinak by šlo omylem odeslat prázdného zaměstnance)
+  if((!form.personId || !people.some(p=>p.id===form.personId)) && people.length) form.personId=people[0].id;
+  const opts=people.map(p=>`<option value="${p.id}" ${form.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
+  const tOpts=TYPES.map(t=>`<option value="${esc(t.k)}" ${form.type===t.k?'selected':''}>${esc(t.k)}</option>`).join('');
+  const noPeople = !people.length;
+  return `<div class="panel"><h2>➕ Nová nepřítomnost</h2><div class="body">
+    <div class="formrow">
+      <div class="f grow"><label>Zaměstnanec <span class="req">*</span></label>
+        <select id="fa-person">${noPeople?'<option value="">— přidejte lidi v Nastavení —</option>':''}${opts}</select></div>
+      <div class="f"><label>Od <span class="req">*</span></label><input type="date" id="fa-from" value="${form.from}"></div>
+      <div class="f"><label>Do <span class="req">*</span></label><input type="date" id="fa-to" value="${form.to}"></div>
+      <div class="f dcount"><label>Počet dnů <span class="req">*</span></label>
+        <input type="number" id="fa-days" step="0.5" min="0.5" value="${form.days}" title="Např. 0,5 pro půlden"></div>
+      <div class="f grow"><label>Druh <span class="req">*</span></label><select id="fa-type">${tOpts}</select></div>
+      <div class="f grow"><label>Poznámka</label><input type="text" id="fa-note" value="${esc(form.note)}" placeholder="nepovinné"></div>
+      <div class="f addbtn"><button class="btn-primary" id="fa-add" ${noPeople?'disabled':''}>Přidat</button></div>
+    </div>
+    ${formMsg?`<div class="formfoot"><span class="msg ${formMsgKind}">${esc(formMsg)}</span></div>`:''}
+  </div></div>`;
+}
+
+function peoplePanel(){
+  const rows = people.length ? people.map(p=>{
+    const st=vacStats(p.id);
+    const neg = st.remaining<0 ? 'neg' : '';
+    return `<tr>
+      <td class="nm">${esc(p.name)}</td>
+      <td><input class="proc" data-proc="${p.id}" value="${esc(p.process||'')}" placeholder="např. Montáž A"></td>
+      <td class="num">${st.planned}</td>
+      <td class="num"><b class="${neg}">${st.remaining}</b> <span class="of">/ ${DEFAULT_VACATION}</span></td>
+      <td class="ta-c"><button class="rm" data-del-person="${p.id}" data-name="${esc(p.name)}" title="Odebrat">✕</button></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" class="tempty">Zatím žádní lidé. Přidejte prvního níže.</td></tr>`;
+  return `<div class="panel"><h2>👥 Naši lidé <span class="right">${people.length} osob</span></h2><div class="body">
+    <div class="addperson">
+      <input type="text" id="np-name" value="${esc(newPerson)}" placeholder="Jméno a příjmení (např. Martin Dobeš)">
+      <input type="text" id="np-proc" value="${esc(newProc)}" placeholder="Zařazení / úsek (nepovinné)">
+      <button class="btn-primary" id="np-add">Přidat</button>
+    </div>
+    <div class="statsyear">
+      <span>Zůstatek dovolené za rok</span>
+      <button class="nav sm" id="sy-prev" title="Předchozí rok">‹</button>
+      <b>${statsYear}</b>
+      <button class="nav sm" id="sy-next" title="Další rok">›</button>
+    </div>
+    <div class="tblwrap"><table class="ptable">
+      <thead><tr><th>Jméno</th><th>Zařazení / úsek</th><th class="num">Rozplánováno</th><th class="num">Zůstatek</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div></div>`;
+}
+
+function legendView(){
+  const items = TYPES.map(t=>`<span class="item"><span class="sw" style="background:${t.fill}"></span>${esc(t.k)}</span>`).join('')
+    + `<span class="item"><span class="sw" style="background:${HOLIDAY_FILL}"></span>Svátek (státní)</span>`
+    + `<span class="item"><span class="sw" style="background:#eef1f5"></span>Víkend</span>`;
+  return `<div class="legend">${items}</div>`;
+}
+
+function calBar(){
+  return `<div class="calbar">
+    <button class="nav" id="yr-prev" title="Předchozí rok">‹</button>
+    <div class="yr">${calYear}</div>
+    <button class="nav" id="yr-next" title="Další rok">›</button>
+    <button class="btn-ghost" id="go-today">Dnes</button>
+    <span class="hint">Posouvejte kalendář do stran ↔ (např. na prosinec) · kliknutím na políčko upravíte záznam</span>
+  </div>`;
+}
+
+/* Sestaví strukturu roku (měsíce → dny) i mapu svátků. */
+function buildYear(y){
+  const hol=czHolidays(y), t=today(), now=new Date(), cy=now.getFullYear(), cm=now.getMonth();
+  const months=[];
+  for(let m=0;m<12;m++){
+    const dim=new Date(y,m+1,0).getDate(), days=[], alt=(m%2===1);
+    for(let d=1;d<=dim;d++){
+      const ds=iso(y,m,d), dow=new Date(y,m,d).getDay();
+      days.push({ds,d,m,alt,first:d===1,mcur:(y===cy&&m===cm&&d===1),dow,
+        weekend:(dow===0||dow===6),holiday:hol.get(ds)||'',today:ds===t});
+    }
+    months.push({name:MONTHS[m],m,alt,days});
+  }
+  return months;
+}
+/* Statistika dovolené osoby za zvolený rok: kolik má rozplánováno a kolik zbývá.
+   Počítají se jen dny typu „Dovolená" a jen pracovní dny (bez víkendů a svátků). */
+function vacStats(personId){
+  const y=statsYear, yStart=iso(y,0,1), yEnd=iso(y,11,31);
+  let planned=0;
+  absences.forEach(a=>{
+    if(a.personId!==personId || a.type!=='Dovolená' || !a.from || !a.to) return;
+    if(a.days===0.5){                                  // půlden se počítá jako 0,5
+      if(a.from>=yStart && a.from<=yEnd) planned+=0.5;
+      return;
+    }
+    if(a.to<yStart || a.from>yEnd) return;
+    eachDay(a.from<yStart?yStart:a.from, a.to>yEnd?yEnd:a.to, ds=>{
+      if(isWorkday(ds)) planned++;   // jen pracovní dny (víkend ani svátek dovolenou neujídají)
+    });
+  });
+  return {planned, remaining: DEFAULT_VACATION - planned};
+}
+/* Mapa nepřítomností pro rozsah dat: personId → { 'YYYY-MM-DD': absence }.
+   Víkendy a svátky se nevyplňují. Půlden (days===0.5) je jen jeden den. */
+function absenceMap(startDs,endDs){
+  const by={};
+  absences.forEach(a=>{
+    if(!a.from||!a.to) return;
+    if(a.days===0.5){                                  // půlden = jediné políčko
+      const ds=a.from;
+      if(ds<startDs||ds>endDs) return;
+      (by[a.personId]||(by[a.personId]={}))[ds]=a;
+      return;
+    }
+    if(a.to<startDs||a.from>endDs) return;
+    (by[a.personId]||(by[a.personId]={}));
+    eachDay(a.from<startDs?startDs:a.from, a.to>endDs?endDs:a.to, ds=>{
+      if(isWorkday(ds)) by[a.personId][ds]=a;          // víkend ani svátek nevyplňujeme
+    });
+  });
+  return by;
+}
+
+function calendarView(){
+  if(!people.length){
+    return `<div class="cal-wrap"><div class="empty-cal">Zatím nemáte žádné lidi. Přidejte je v záložce <b>⚙️ Nastavení</b>.</div></div>`;
+  }
+  const mob=window.innerWidth<=680;
+  const NC=mob?110:180, DC=mob?30:34;
+  const months=buildYear(calYear), by=absenceMap(iso(calYear,0,1),iso(calYear,11,31));
+  const allDays=months.flatMap(mo=>mo.days);
+  const colgroup=`<colgroup><col style="width:${NC}px">${allDays.map(()=>`<col style="width:${DC}px">`).join('')}</colgroup>`;
+  const monthsRow=`<tr class="months"><th class="corner">${calYear}</th>${
+    months.map(mo=>`<th class="mstart ${mo.alt?'malt':''}" colspan="${mo.days.length}">${mo.name}</th>`).join('')}</tr>`;
+  const daysRow=`<tr class="days"><th class="corner">Zaměstnanec</th>${
+    allDays.map(dd=>{
+      let cls='';
+      if(dd.holiday)cls='hol'; else if(dd.weekend)cls='we'; else if(dd.alt)cls='malt';
+      if(dd.first)cls+=' mstart'; if(dd.mcur)cls+=' mcur';
+      if(dd.today)cls+=' today';
+      const tt=dd.holiday?`Svátek: ${dd.holiday}`:dCz(dd.ds);
+      return `<th class="${cls}" title="${esc(tt)}"><span class="wd">${WD[dd.dow]}</span>${dd.d}</th>`;
+    }).join('')}</tr>`;
+  const body=people.map(p=>{
+    const pm=by[p.id]||{};
+    const cells=allDays.map((dd,i)=>{
+      const a=pm[dd.ds];
+      let cls='d', style='', tt=`${p.name} • ${dCz(dd.ds)}`, inner='';
+      if(dd.holiday)cls+=' hol'; else if(dd.weekend)cls+=' we'; else if(dd.alt)cls+=' malt';
+      if(dd.first)cls+=' mstart'; if(dd.mcur)cls+=' mcur';
+      if(dd.today)cls+=' today';
+      if(dd.holiday)tt+=` • Svátek: ${dd.holiday}`;
+      if(a){
+        cls+=' has';                         // má nepřítomnost → dnešek ji nepodbarvuje
+        const T=TYPE_BY[a.type]||{fill:'#ccc',short:'?'};
+        if(a.days===0.5){                    // půlden: políčko rozdělené úhlopříčně napůl
+          style=`background:linear-gradient(135deg, transparent 0 50%, ${T.fill} 50% 100%)`;
+          cls+=' half';
+        }else{
+          style=`background:${T.fill}`;
+          const nx=allDays[i+1];             // souvislý pruh: zakryj předěl mezi stejnými dny
+          if(nx && !nx.first && pm[nx.ds] && pm[nx.ds].id===a.id) style+=`;border-right-color:${T.fill}`;
+        }
+        if(dd.holiday)cls+=' holmark';
+        inner=`<span class="lab">${T.short}</span>`;   // slabé písmeno typu v každé buňce
+        tt+=` • ${a.type}${a.days?(' ('+dayLabel(a.days)+')'):''}${a.note?(' — '+a.note):''}`;
+      }
+      return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
+    }).join('');
+    return `<tr><td class="name" title="${esc(p.name)}">${esc(p.name)}</td>${cells}</tr>`;
+  }).join('');
+  return `<div class="cal-wrap"><div class="cal-inner"><table class="cal">${colgroup}<thead>${monthsRow}${daysRow}</thead><tbody>${body}</tbody></table><div class="today-band" style="display:none"></div></div></div>`;
+}
+
+function dialogView(){
+  const items = dlg.items.length ? dlg.items.map(a=>{
+    const t=TYPE_BY[a.type]||{fill:'#ccc'};
+    return `<div class="absitem">
+      <span class="dot" style="background:${t.fill}"></span>
+      <div class="info"><b>${esc(a.type)}</b>
+        <div>${dCz(a.from)} – ${dCz(a.to)}${a.days?(' · '+dayLabel(a.days)):''}${a.note?(' · '+esc(a.note)):''}</div>
+        <div>zadal(a): ${esc(a.createdBy||'—')}</div></div>
+      <button class="btn-danger" data-del-abs="${a.id}">Smazat</button>
+    </div>`;
+  }).join('') : `<p style="color:var(--muted);margin:0 0 4px">Na tento den zde není žádná nepřítomnost.</p>`;
+  const holNote = dlg.holiday ? `<p style="margin:10px 0 0;color:#6d3fc4"><b>Státní svátek:</b> ${esc(dlg.holiday)}</p>` : '';
+  return `<div class="dlg-wrap" id="dlg-wrap"><div class="dlg">
+    <div class="t">${esc(dlg.personName)} · ${dCz(dlg.dateStr)}<button class="x" id="dlg-x">✕</button></div>
+    <div class="c">${items}${holNote}</div>
+    <div class="b"><button class="btn-ghost" id="dlg-close">Zavřít</button></div>
+  </div></div>`;
+}
+
+function editView(){
+  const e=edit;
+  const opts=people.map(p=>`<option value="${p.id}" ${e.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
+  const tOpts=TYPES.map(t=>`<option value="${esc(t.k)}" ${e.type===t.k?'selected':''}>${esc(t.k)}</option>`).join('');
+  return `<div class="dlg-wrap" id="ed-wrap"><div class="dlg dlg-lg">
+    <div class="t">✏️ Úprava nepřítomnosti<button class="x" id="ed-x">✕</button></div>
+    <div class="c">
+      <div class="egrid">
+        <div class="f span3"><label>Zaměstnanec</label><select id="ed-person">${opts}</select></div>
+        <div class="f"><label>Od</label><input type="date" id="ed-from" value="${e.from}"></div>
+        <div class="f"><label>Do</label><input type="date" id="ed-to" value="${e.to}"></div>
+        <div class="f"><label>Počet dnů</label><input type="number" id="ed-days" step="0.5" min="0.5" value="${e.days}"></div>
+        <div class="f span3"><label>Druh</label><select id="ed-type">${tOpts}</select></div>
+        <div class="f span3"><label>Poznámka</label><input type="text" id="ed-note" value="${esc(e.note||'')}" placeholder="nepovinné"></div>
+      </div>
+      ${editMsg?`<div class="formfoot"><span class="msg err">${esc(editMsg)}</span></div>`:''}
+    </div>
+    <div class="b">
+      <button class="btn-danger" id="ed-del">Smazat</button>
+      <span class="grow1"></span>
+      <button class="btn-ghost" id="ed-cancel">Zrušit</button>
+      <button class="btn-primary" id="ed-save">Uložit změny</button>
+    </div>
+  </div></div>`;
+}
+
+function collisionView(){
+  const items=collision.list.map(c=>{
+    const T=TYPE_BY['Dovolená'];
+    return `<div class="absitem"><span class="dot" style="background:${T.fill}"></span>
+      <div class="info"><b>${esc(c.name)}</b>
+        <div>Dovolená · ${dCz(c.from)} – ${dCz(c.to)}${c.process?(' · '+esc(c.process)):''}</div></div></div>`;
+  }).join('');
+  return `<div class="dlg-wrap" id="col-wrap"><div class="dlg">
+    <div class="t">⚠️ Kolize dovolené<button class="x" id="col-x">✕</button></div>
+    <div class="c">
+      <p style="margin:0 0 10px">V tomto termínu už má dovolenou jiný pracovník ze stejného úseku:</p>
+      ${items}
+      <p style="margin:12px 0 0;font-weight:700">Opravdu chceš dovolenou přesto potvrdit?</p>
+    </div>
+    <div class="b">
+      <button class="btn-ghost" id="col-cancel">Zrušit</button>
+      <button class="btn-primary" id="col-ok">Potvrdit i přesto</button>
+    </div>
+  </div></div>`;
+}
+
+function renderToast(){
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  if(!toastMsg) return;
+  const el=document.createElement('div');
+  el.className='toast '+toastKind; el.textContent=toastMsg;
+  document.body.appendChild(el);
+}
+
+/* ==========================================================
+   WIRE — navěšení událostí po každém renderu
+   ========================================================== */
+function wireLogin(){
+  const f=document.getElementById('loginForm');
+  if(f) f.addEventListener('submit',e=>{e.preventDefault();
+    doLogin(document.getElementById('li-email').value, document.getElementById('li-pass').value);});
+}
+
+function wireApp(){
+  document.getElementById('btn-logout')?.addEventListener('click',()=>signOut(auth));
+
+  // přepínání záložek Přehled / Nastavení
+  document.querySelectorAll('[data-tab]').forEach(b=>
+    b.addEventListener('click',()=>{ page=b.getAttribute('data-tab'); render(); }));
+
+  // formulář nepřítomnosti – průběžně držíme stav, ať se při živé aktualizaci nic neztratí
+  const bind=(id,key,ev='input')=>{const el=document.getElementById(id);
+    if(el) el.addEventListener(ev,()=>{form[key]=el.value;});};
+  bind('fa-person','personId','change'); bind('fa-type','type','change'); bind('fa-note','note');
+  // Od/Do: po změně přepočítej „počet dnů" (pracovní dny v rozsahu), pokud v poli zrovna nepíšu
+  const daysEl=document.getElementById('fa-days');
+  const recompDays=()=>{ if(!daysEl || document.activeElement===daysEl) return;
+    const d=workingDays(form.from,form.to); if(d>0){ form.days=d; daysEl.value=d; } };
+  ['fa-from','fa-to'].forEach(id=>{const el=document.getElementById(id);
+    if(el) el.addEventListener('change',()=>{ form[id==='fa-from'?'from':'to']=el.value; recompDays(); });});
+  daysEl?.addEventListener('input',()=>{ form.days=parseFloat(String(daysEl.value).replace(',','.'))||0; });
+  document.getElementById('fa-add')?.addEventListener('click',()=>addAbsence());
+
+  // lidé (Nastavení)
+  const np=document.getElementById('np-name');
+  if(np) np.addEventListener('input',()=>{newPerson=np.value;});
+  const npp=document.getElementById('np-proc');
+  if(npp) npp.addEventListener('input',()=>{newProc=npp.value;});
+  document.getElementById('np-add')?.addEventListener('click',()=>addPerson(newPerson,newProc));
+  np?.addEventListener('keydown',e=>{if(e.key==='Enter')addPerson(newPerson,newProc);});
+  npp?.addEventListener('keydown',e=>{if(e.key==='Enter')addPerson(newPerson,newProc);});
+  document.querySelectorAll('[data-del-person]').forEach(b=>
+    b.addEventListener('click',()=>removePerson(b.getAttribute('data-del-person'),b.getAttribute('data-name'))));
+  // úprava zařazení / úseku u osoby (uloží se po opuštění pole)
+  document.querySelectorAll('[data-proc]').forEach(inp=>
+    inp.addEventListener('change',()=>updatePersonProcess(inp.getAttribute('data-proc'), inp.value)));
+
+  // rok pro výpočet zůstatku dovolené (v Nastavení)
+  document.getElementById('sy-prev')?.addEventListener('click',()=>{statsYear--;render();});
+  document.getElementById('sy-next')?.addEventListener('click',()=>{statsYear++;render();});
+
+  // rok kalendáře + skok na dnešek
+  document.getElementById('yr-prev')?.addEventListener('click',()=>{calYear--;alignedYear=null;calScrollL=0;render();});
+  document.getElementById('yr-next')?.addEventListener('click',()=>{calYear++;alignedYear=null;calScrollL=0;render();});
+  document.getElementById('go-today')?.addEventListener('click',()=>{
+    calYear=new Date().getFullYear(); alignedYear=null; render(); });
+
+  // dialog kolize dovolené
+  document.getElementById('col-ok')?.addEventListener('click',()=>{collision=null;addAbsence(true);});
+  document.getElementById('col-cancel')?.addEventListener('click',()=>{collision=null;render();});
+  document.getElementById('col-x')?.addEventListener('click',()=>{collision=null;render();});
+  document.getElementById('col-wrap')?.addEventListener('click',e=>{if(e.target.id==='col-wrap'){collision=null;render();}});
+
+  // klik do kalendáře
+  const wrap=document.querySelector('.cal-wrap');
+  if(wrap) wrap.addEventListener('click',e=>{
+    const td=e.target.closest('td.d'); if(!td) return;
+    openDay(td.getAttribute('data-person'), td.getAttribute('data-date'));
+  });
+
+  // dialog
+  document.getElementById('dlg-x')?.addEventListener('click',()=>{dlg=null;render();});
+  document.getElementById('dlg-close')?.addEventListener('click',()=>{dlg=null;render();});
+  document.getElementById('dlg-wrap')?.addEventListener('click',e=>{if(e.target.id==='dlg-wrap'){dlg=null;render();}});
+  document.querySelectorAll('[data-del-abs]').forEach(b=>
+    b.addEventListener('click',()=>removeAbsence(b.getAttribute('data-del-abs'))));
+
+  // editační okno nepřítomnosti
+  if(edit){
+    const eb=(id,key)=>{const el=document.getElementById(id);
+      if(el) el.addEventListener('input',()=>{edit[key]=el.value;});};
+    eb('ed-person','personId'); eb('ed-type','type'); eb('ed-note','note');
+    const edDays=document.getElementById('ed-days');
+    const edRecomp=()=>{ if(!edDays||document.activeElement===edDays) return;
+      const d=workingDays(edit.from,edit.to); if(d>0){ edit.days=d; edDays.value=d; } };
+    ['ed-from','ed-to'].forEach(id=>{const el=document.getElementById(id);
+      if(el) el.addEventListener('change',()=>{ edit[id==='ed-from'?'from':'to']=el.value; edRecomp(); });});
+    edDays?.addEventListener('input',()=>{ edit.days=parseFloat(String(edDays.value).replace(',','.'))||0; });
+    document.getElementById('ed-save')?.addEventListener('click',saveEdit);
+    document.getElementById('ed-del')?.addEventListener('click',()=>{
+      if(confirm('Opravdu smazat tento záznam?')) removeAbsence(edit.id); });
+    document.getElementById('ed-cancel')?.addEventListener('click',()=>{edit=null;render();});
+    document.getElementById('ed-x')?.addEventListener('click',()=>{edit=null;render();});
+    document.getElementById('ed-wrap')?.addEventListener('click',e=>{if(e.target.id==='ed-wrap'){edit=null;render();}});
+  }
+}
+
+/* Klik na políčko dne:
+   - je-li tam nepřítomnost → otevře editační okno (úprava / smazání),
+   - jinak → předvyplní hlavní formulář na tento den. */
+function openDay(personId,dateStr){
+  const p=people.find(x=>x.id===personId); if(!p) return;
+  const items=absences.filter(a=>a.personId===personId && a.from<=dateStr && a.to>=dateStr);
+  if(items.length){
+    const a=items[items.length-1];   // zobrazená nepřítomnost (poslední zapsaná vyhrává)
+    edit={id:a.id, personId:a.personId, from:a.from, to:a.to, type:a.type,
+      note:a.note||'', days:(a.days!=null?a.days:workingDays(a.from,a.to))};
+    editMsg=''; render();
+  }else{
+    form={personId,from:dateStr,to:dateStr,type:form.type,note:'',days:1};
+    formMsg=''; formMsgKind=''; render();
+    document.getElementById('fa-person')?.scrollIntoView({behavior:'smooth',block:'center'});
+    toast('Formulář předvyplněn – doplňte druh a uložte.','');
+  }
+}
+
+/* Při změně velikosti okna překresli kalendář, ať se přizpůsobí (mobil ↔ monitor). */
+let _rz; window.addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>{ if(me) render(); },160);});
+</script>
+</body>
+</html>

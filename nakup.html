@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nákupní požadavky — YFAI minimo</title>
+<style>
+  :root{
+    --navy-1:#0f2f5f; --navy-2:#1b4b8f; --panel:#1e4c8a;
+    --bg:#f4f6f9; --card:#ffffff; --line:#dde4ec; --text:#16233a; --muted:#6b7a90;
+    --green:#1f9254; --green-bg:#e8f6ee; --red:#c0392b; --red-bg:#fdecea;
+    --amber:#b7791f; --amber-bg:#fdf3e2; --blue:#2563a8; --blue-bg:#e9f1fb;
+    --purple:#6b46c1; --purple-bg:#f0ebfa; --grey:#6b7a90; --grey-bg:#eef1f5;
+    --radius:6px; font-synthesis-weight:none;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:13px}
+  button{font-family:inherit;font-size:12px;cursor:pointer;border-radius:var(--radius);border:1px solid transparent;padding:7px 12px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input,select,textarea{font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;color:var(--text);width:100%}
+  input:focus,select:focus,textarea:focus{outline:2px solid #2a5ea3;outline-offset:0;border-color:#2a5ea3}
+  a{color:#2563a8}
+
+  header{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;padding:12px 18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  header h1{font-size:26px;margin:0;font-weight:800;letter-spacing:-.3px;line-height:1.1}
+  header .sub{font-size:11.5px;opacity:.72;margin-top:3px}
+  .brand{background:#fff;border-radius:8px;padding:9px 14px;display:flex;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.22);flex:none}
+  .brand svg{display:block;height:56px;width:auto}
+  .login .brand{margin:0 auto 16px;box-shadow:none;border:1px solid var(--line);padding:12px 18px}
+  .login .brand svg{height:64px}
+  @media(max-width:640px){header h1{font-size:20px}.brand svg{height:42px}}
+  .chips{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .chip{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:20px;padding:4px 11px;font-size:11px;white-space:nowrap}
+  .chip.green{background:#1f9254;border-color:#1f9254}
+  .chip.role{background:#6b46c1;border-color:#6b46c1}
+  .btn-logout{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:20px;font-size:11px;padding:4px 12px}
+
+  .tabbar{background:#fff;border-bottom:1px solid var(--line);padding:9px 18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .tab{background:#eef1f5;color:#41506b;border:1px solid var(--line);font-weight:600}
+  .tab.active{background:var(--navy-2);color:#fff;border-color:var(--navy-2)}
+  .tab.violet.active{background:#6b46c1;border-color:#6b46c1}
+  .spacer{margin-left:auto;display:flex;gap:8px}
+  .btn-primary{background:var(--navy-2);color:#fff}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b}
+  .btn-danger{background:#c0392b;color:#fff}
+  .btn-ok{background:#1f9254;color:#fff}
+
+  main{padding:14px 18px 40px}
+  .notice{background:var(--blue-bg);border:1px solid #cbdff5;border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:12px;color:#28456e}
+  .notice.warn{background:var(--amber-bg);border-color:#f2dfb8;color:#7a5410}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px}
+  .kcard{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--grey);border-radius:var(--radius);padding:11px 13px}
+  .kcard .lbl{font-size:10px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .kcard .val{font-size:26px;font-weight:700;margin:4px 0 2px}
+  .kcard .note{font-size:11px;color:var(--muted)}
+
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:14px}
+  .panel > h2{background:var(--panel);color:#fff;margin:0;font-size:13px;font-weight:700;padding:9px 13px;display:flex;align-items:center;gap:10px}
+  .panel > h2 .right{margin-left:auto;font-weight:500;font-size:11px;opacity:.85}
+  .panel .body{padding:13px}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);background:#fafbfd}
+  .filters input,.filters select{width:auto;min-width:130px}
+  .filters .grow{flex:1;min-width:200px}
+  label.check{display:flex;gap:6px;align-items:center;font-size:12px;color:#41506b;white-space:nowrap;cursor:pointer}
+  label.check input{width:auto}
+
+  .tblwrap{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
+  thead th{background:#16355f;color:#fff;text-align:left;padding:8px 10px;font-size:10px;letter-spacing:.6px;text-transform:uppercase;cursor:pointer;user-select:none}
+  thead th.no-sort{cursor:default}
+  tbody td{padding:8px 10px;border-bottom:1px solid #eef1f5;vertical-align:top;background:var(--row,transparent)}
+  tbody tr:hover td{filter:brightness(.975)}
+  tr.crit td{background:#f8d2ce}
+  tr.crit td:first-child{box-shadow:inset 4px 0 0 var(--red)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:8px 13px;border-bottom:1px solid var(--line);background:#fff;font-size:11px;color:var(--muted)}
+  .legend i{display:inline-block;width:22px;height:11px;border-radius:3px;border:1px solid var(--line);margin-right:5px;vertical-align:-2px;font-style:normal}
+  .datefilter{display:flex;align-items:center;gap:5px;font-size:12px;color:#41506b;white-space:nowrap}
+  .datefilter input{width:auto;min-width:0;padding:6px 7px;font-size:12px}
+  td.desc{white-space:normal;min-width:230px;max-width:330px}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .muted{color:var(--muted)}
+  .empty{padding:26px;text-align:center;color:var(--muted)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid transparent}
+  .b-grey{background:var(--grey-bg);color:#4a5a70;border-color:#dfe4ea}
+  .b-blue{background:var(--blue-bg);color:var(--blue);border-color:#cbdff5}
+  .b-amber{background:var(--amber-bg);color:var(--amber);border-color:#f2dfb8}
+  .b-green{background:var(--green-bg);color:var(--green);border-color:#c4e6d3}
+  .b-green-dark{background:#157347;color:#fff;border-color:#0f5c37}
+  .b-purple{background:var(--purple-bg);color:var(--purple);border-color:#ddd2f5}
+  .b-red{background:var(--red-bg);color:var(--red);border-color:#f5cfca}
+  .newbar{margin-bottom:12px}
+  .btn-new{background:linear-gradient(180deg,#f6821f,#e8590c);color:#fff;font-size:18px;font-weight:800;padding:16px 36px;border-radius:10px;
+    box-shadow:0 4px 14px rgba(232,89,12,.4);letter-spacing:.4px;text-transform:uppercase}
+  .btn-new:hover{background:linear-gradient(180deg,#e8590c,#c94f0a);box-shadow:0 6px 18px rgba(232,89,12,.5)}
+  .critlist{margin-top:5px;display:flex;flex-direction:column;gap:2px}
+  .critline{display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 4px;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden}
+  .critline:hover{background:var(--red-bg)}
+  .critline .cno{font-weight:700;color:#c0392b;font-variant-numeric:tabular-nums}
+  .critline .cwhat{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+  .critline .cwhere{color:var(--muted);font-weight:600}
+  .rowbtn{background:#fff;border:1px solid var(--line);color:#41506b;padding:3px 8px;font-size:11px;margin:0 4px 3px 0}
+  .rowbtn.ok{border-color:#c4e6d3;background:var(--green-bg);color:var(--green);font-weight:700}
+  .rowbtn.no{border-color:#f5cfca;background:var(--red-bg);color:var(--red);font-weight:700}
+  .stock-warn{color:var(--red);font-weight:700}
+  .late{color:var(--red);font-weight:700}
+
+  .overlay{position:fixed;inset:0;background:rgba(12,26,48,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto;z-index:50}
+  .modal{background:#fff;border-radius:10px;width:100%;max-width:1040px;margin:auto;box-shadow:0 18px 50px rgba(0,0,0,.3)}
+  .modal h3{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:14px 18px;font-size:17px;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:10px}
+  .modal h3 .x{margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;line-height:1;padding:0 4px}
+  .robar{padding:9px 15px;background:var(--grey-bg);border-bottom:1px solid var(--line);font-size:11.5px;color:#4a5a70}
+  .form{padding:20px;display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+  .f{display:flex;flex-direction:column;gap:4px}
+  .f label{font-size:12.5px;font-weight:700;color:#41506b}
+  .f .req{color:var(--red)}
+  .f.span2{grid-column:span 2}.f.span4{grid-column:span 4}
+  .f .calc{background:#f4f6f9;border:1px dashed #c8d3e0;border-radius:var(--radius);padding:7px 9px;font-weight:700;font-variant-numeric:tabular-nums}
+  .f .ro{background:#fafbfd;border:1px solid var(--line);border-radius:var(--radius);padding:7px 9px;min-height:33px;white-space:pre-wrap;word-break:break-word}
+  .f .err{font-size:10px;color:var(--red);font-weight:600}
+  .f.invalid input,.f.invalid select,.f.invalid textarea{border-color:var(--red);background:#fff8f7}
+  .modal .foot{padding:12px 15px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;background:#fafbfd;border-radius:0 0 8px 8px;flex-wrap:wrap}
+  .modal .foot .msg{font-size:12px;color:var(--red);font-weight:600}
+  .modal .foot .r{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .modal .form input,.modal .form select,.modal .form textarea{font-size:14.5px;padding:9px 11px}
+  .modal .form .f label{font-size:13px}
+  .modal .form .f .ro,.modal .form .f .calc{font-size:14px}
+  .stockbox{grid-column:span 4;display:flex;align-items:center;gap:11px;background:#eef6ff;border:1px solid #cbdff5;border-radius:var(--radius);padding:12px 14px}
+  .stockbox input{width:auto;transform:scale(1.25)}
+  .stockbox label{font-size:14px;font-weight:700;color:#28456e;cursor:pointer;margin:0}
+  .hist{padding:0 15px 12px;font-size:11px;color:var(--muted)}
+  .hist div{padding:3px 0;border-top:1px dotted var(--line)}
+
+  #qr-reader{width:100%;border-radius:6px;overflow:hidden}
+  #qr-reader video{width:100%!important;height:auto!important;border-radius:6px;display:block}
+  .qrbtn{background:#eef6ff;border:1px solid #cbdff5;color:#28456e;font-weight:700}
+  .dlg-wrap{position:fixed;inset:0;background:rgba(12,26,48,.6);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px}
+  .dlg{background:#fff;border-radius:8px;max-width:440px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.35);overflow:hidden}
+  .dlg .t{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;padding:10px 14px;font-size:13px;font-weight:700}
+  .dlg .c{padding:15px;font-size:13px;line-height:1.6}
+  .dlg .c input{margin-top:9px}
+  .dlg .b{padding:12px 15px;border-top:1px solid var(--line);background:#fafbfd;display:flex;gap:8px;justify-content:flex-end}
+  .toast{position:fixed;right:16px;bottom:16px;z-index:90;background:#16233a;color:#fff;border-radius:8px;padding:11px 15px;font-size:12.5px;
+    box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:380px}
+  .toast.err{background:#c0392b}
+  .toast.ok{background:#1f9254}
+  .banner{background:var(--red-bg);border:1px solid #f5cfca;border-left:4px solid var(--red);color:#8c2f22;
+    border-radius:var(--radius);padding:9px 12px;margin:14px 18px 0;font-size:12px}
+  .banner b{color:#8c2f22}
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#0f2f5f,#2a5ea3)}
+  .login{background:#fff;border-radius:10px;width:350px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+  .login h2{margin:0 0 3px;font-size:17px}
+  .login p.s{margin:0 0 16px;font-size:11px;color:var(--muted)}
+  .login .f{margin-bottom:11px}
+  .login button{width:100%;padding:9px}
+  .login .hint{margin-top:13px;font-size:10.5px;color:var(--muted);line-height:1.7;border-top:1px solid var(--line);padding-top:10px}
+  .login .hint b{color:#41506b}
+  .loginerr{background:var(--red-bg);border:1px solid #f5cfca;color:var(--red);font-size:11px;padding:7px 9px;border-radius:var(--radius);margin-bottom:11px;font-weight:600}
+
+  .admgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .adm table{white-space:normal}
+  .taglist{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+  .tag{background:var(--blue-bg);border:1px solid #cbdff5;color:#28456e;border-radius:20px;padding:3px 6px 3px 10px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px}
+  .tag button{background:transparent;border:0;color:#7b8ba3;padding:0 3px;font-size:13px;line-height:1}
+  .inline{display:flex;gap:7px;align-items:center}
+  .inline input,.inline select{width:auto;flex:1}
+  .switch{display:flex;align-items:center;justify-content:center}
+  .secbox{border:1px solid var(--line);border-radius:var(--radius);padding:10px 11px;margin-bottom:9px;background:#fafbfd}
+  .sechead{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12px}
+  .atts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .att{display:flex;align-items:center;gap:6px;background:var(--blue-bg);border:1px solid #cbdff5;border-radius:20px;padding:3px 5px 3px 10px;font-size:11px}
+  .att .open{background:transparent;border:0;color:#28456e;font-weight:600;padding:0;font-size:11px;text-decoration:underline}
+  .att .rm{background:transparent;border:0;color:#7b8ba3;padding:0 3px;font-size:13px;line-height:1}
+  .att .sz{color:var(--muted)}
+  .filebtn{border:1px dashed #c8d3e0;background:#fafbfd;border-radius:var(--radius);padding:6px 9px;font-size:11.5px;color:#41506b;cursor:pointer}
+  .filebtn input{display:none}
+  .clip{color:#2563a8;font-weight:700;font-size:11px}
+  .autohint{font-size:10.5px;color:#1f9254;font-weight:600;margin-top:2px}
+  .autohint.grey{color:var(--muted);font-weight:500}
+  .rolebox{border:1px solid var(--line);border-radius:var(--radius);padding:9px 11px;margin-bottom:8px;background:#fafbfd}
+  .rolebox b{font-size:12px}
+  .rolebox p{margin:3px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+  @media(max-width:900px){.form{grid-template-columns:repeat(2,1fr)}.f.span4{grid-column:span 2}.admgrid{grid-template-columns:1fr}}
+
+  /* ===== MOBIL: tabulka -> karty, formulář a filtry do jednoho sloupce ===== */
+  @media(max-width:680px){
+    header{padding:10px 12px;gap:10px}
+    header h1{font-size:19px}
+    .chips{gap:6px}
+    main{padding:12px 10px 34px}
+    .newbar .btn-new{width:100%;font-size:17px;padding:15px 20px}
+
+    /* filtry pod sebe */
+    .filters{flex-direction:column;align-items:stretch;gap:9px}
+    .filters input,.filters select,.filters .grow{width:100%;min-width:0}
+    .filters .datefilter{justify-content:space-between}
+    .filters .datefilter input{flex:1}
+    .filters .btn-ghost{width:100%}
+
+    /* tabulka jako karty */
+    .tblwrap{overflow-x:visible}
+    table{white-space:normal}
+    thead{display:none}
+    tbody tr{display:block;border:1px solid var(--line);border-left:5px solid var(--line);
+      border-radius:8px;margin:0 0 11px;padding:6px 12px;background:var(--row,#fff);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    tr.crit td:first-child{box-shadow:none}
+    tr.crit{border-left-color:var(--red)}
+    tbody td{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+      padding:6px 0;border:0;border-bottom:1px solid #eef1f5;background:none;white-space:normal;text-align:right}
+    tbody td:last-child{border-bottom:0}
+    tbody td::before{content:attr(data-label);font-weight:700;color:var(--muted);
+      text-align:left;flex:none;font-size:11px;text-transform:uppercase;letter-spacing:.4px;padding-top:2px}
+    tbody td.desc{flex-direction:column;text-align:left}
+    tbody td.desc::before{margin-bottom:2px}
+    td.desc{max-width:none;min-width:0}
+    .hide-mobile{display:none}
+    tbody tr:hover td{filter:none}
+    .empty{display:block;text-align:center}
+    .empty::before{content:''}
+
+    /* okno požadavku přes celou šířku, jeden sloupec */
+    .overlay{padding:8px}
+    .modal{border-radius:8px}
+    .form{grid-template-columns:1fr;padding:14px}
+    .f.span2,.f.span4,.stockbox{grid-column:span 1}
+    .modal .foot .r{width:100%}
+    .modal .foot .r button{flex:1}
+
+    /* administrace do jednoho sloupce */
+    .admgrid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="login-wrap"><div class="login"><h2>Načítám…</h2><p class="s">Připojuji se k Firebase.</p></div></div></div>
+
+<!-- Čtečka QR/čárových kódů (skenování foťákem). Načítá se z CDN, nevadí když chybí síť. -->
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<script type="module">
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
+  onSnapshot, query, orderBy, serverTimestamp, runTransaction }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+/* ====== FIREBASE KONFIGURACE (David / projekt nakupni-pozadavky) ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDi3OVq2Al0WXFPgqhMAN9lPGuExOU80Cc",
+  authDomain: "nakupni-pozadavky.firebaseapp.com",
+  projectId: "nakupni-pozadavky",
+  storageBucket: "nakupni-pozadavky.firebasestorage.app",
+  messagingSenderId: "214674774365",
+  appId: "1:214674774365:web:7f7b51c8169b75f8acb0b4",
+  measurementId: "G-BGDMXEWBQH"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+function logoSvg(){
+  return `<svg viewBox="0 0 300 138" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YFAI minimo">
+    <defs>
+      <pattern id="yfai-stripes" patternUnits="userSpaceOnUse" x="0" y="8" width="10" height="9.8">
+        <rect x="0" y="0" width="10" height="5.9" fill="#1f66b5"/>
+      </pattern>
+    </defs>
+    <text x="150" y="86" text-anchor="middle" fill="url(#yfai-stripes)"
+      font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="108"
+      textLength="244" lengthAdjust="spacingAndGlyphs">YFAI</text>
+    <text x="150" y="128" text-anchor="middle" fill="#111418"
+      font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="42"
+      letter-spacing="1" textLength="246" lengthAdjust="spacingAndGlyphs">minimo</text>
+  </svg>`;
+}
+/* ==========================================================
+   Nákupní požadavky — ostrá verze na Firebase (Firestore + Auth)
+   Kolekce ve Firestore:
+     requests   — jednotlivé požadavky
+     users      — profil + role (dokument id = uid uživatele)
+     meta/config — účty, úseky, povinná pole, kurzy, čítač čísel
+   ========================================================== */
+
+const STATUSES = [
+  {k:'poptáno',cls:'b-grey'},{k:'nový',cls:'b-blue'},{k:'ve schvalování',cls:'b-amber'},
+  {k:'schváleno',cls:'b-green'},{k:'odesláno',cls:'b-purple'},{k:'doručeno',cls:'b-green-dark'},{k:'zamítnuto',cls:'b-red'}
+];
+const PRIORITIES = [
+  {k:'kritická',cls:'b-red'},{k:'vysoká',cls:'b-amber'},{k:'běžná',cls:'b-blue'},{k:'nízká',cls:'b-grey'}
+];
+const TYPES = ['Nový požadavek','Doplnění skladu'];
+const ROLES = {
+  zadavatel:   {label:'Zadavatel',    lvl:1, edit:false, approve:false, del:false, admin:false,
+                popis:'Zakládá požadavky, hledá a sleduje jejich stav. Po odeslání už požadavek needituje.'},
+  skladnik:    {label:'Skladník',     lvl:2, edit:true,  approve:false, del:false, admin:false,
+                popis:'Mění stav požadavku, doplňuje datum dodání, účet a ostatní údaje.'},
+  schvalovatel:{label:'Schvalovatel', lvl:3, edit:false, approve:true,  del:false, admin:false,
+                popis:'Schvaluje nebo zamítá požadavky. Stačí schválení jednoho z nich.'},
+  admin:       {label:'Administrátor',lvl:4, edit:true,  approve:true,  del:true,  admin:true,
+                popis:'Plná práva — data, uživatelé, účty i nastavení povinných polí.'}
+};
+/* Účty, které jsou VŽDY administrátor — pojistka proti zamčení z administrace.
+   Když se některým z nich rozhodí role v databázi, po přihlášení se admin
+   automaticky obnoví. Porovnává se bez ohledu na velikost písmen. */
+const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai'];
+const isForcedAdmin = email => ADMIN_EMAILS.includes(String(email||'').trim().toLowerCase());
+
+const P = () => ROLES[me?.role] || ROLES.zadavatel;
+
+const DEFAULT_CONFIG = {
+  rates:{CZK:25.0,EUR:1,USD:0.92},
+  accounts:[{code:'511300',name:'Údržba budovy'},{code:'511305',name:''},{code:'511310',name:''},
+    {code:'511315',name:''},{code:'511320',name:''},{code:'511600',name:''},{code:'511680',name:''},{code:'511690',name:''}],
+  sections:[{name:'Slush',machines:['Slush01','Slush02','Slush03']},
+    {name:'Assembly',machines:['Assembly01','Assembly02']},{name:'IMM',machines:['IMM07','IMM012']}],
+  fields:[
+    {id:'status',label:'Stav schvalování',req:true,lock:true},
+    {id:'sklad',label:'Skladové číslo',req:false},
+    {id:'popis',label:'Popis',req:true},
+    {id:'priorita',label:'Priorita',req:true},
+    {id:'mnozstvi',label:'Množství',req:true},
+    {id:'cena',label:'Cena / ks',req:false},
+    {id:'vyrobce',label:'Výrobce položky',req:false},
+    {id:'ucet',label:'Účet',req:true},
+    {id:'usek',label:'Úsek',req:true},
+    {id:'stroj',label:'Stroj / pod-úsek',req:false},
+    {id:'datum',label:'Datum dodání',req:false},
+    {id:'min',label:'MIN skladem',req:false},
+    {id:'max',label:'MAX skladem',req:false},
+    {id:'url',label:'URL odkaz',req:false},
+    {id:'poznamka',label:'Poznámka',req:false}
+  ],
+  seq:0
+};
+
+/* ---------- stav aplikace ---------- */
+let me=null;           // {uid,email,name,role,team}
+let cfg=null;          // meta/config
+let rows=[];           // requests (živě z Firestore)
+let usersList=[];      // users (jen pro admina)
+let tab='pozadavky', authReady=false, dataReady=false, fatalErr='';
+let sort={col:'created',dir:-1};
+let filters={q:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false};
+let editing=null, errs={}, footMsg='';
+let dlg=null, toastMsg=null, toastKind='', drafts={};
+let loginBusy=false, loginErr='';
+let qrOpen=false, qr=null;   // stav QR skeneru
+
+/* ---------- pomocné ---------- */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v,d=2)=>(isFinite(v)?Number(v):0).toLocaleString('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
+const badge = (v,defs)=>{const d=defs.find(x=>x.k===v);return `<span class="badge ${d?d.cls:'b-grey'}">${esc(v||'—')}</span>`;};
+const total = r => (Number(r.cena)||0)*(Number(r.mnozstvi)||0);
+const totalEur = r => r.mena==='EUR'?total(r):total(r)/((cfg?.rates?.[r.mena])||1);
+const fld = id => (cfg?.fields||[]).find(f=>f.id===id)||{label:id,req:false};
+const today = () => new Date().toISOString().slice(0,10);
+const dateCz = d => d ? String(d).slice(0,10).split('-').reverse().map(x=>String(Number(x))).join('. ')+'.' : '—';
+const acc = c => (cfg?.accounts||[]).find(a=>a.code===c);
+const accName = c => (acc(c)||{}).name || '';
+const accLabel = c => c ? (accName(c)?c+' — '+accName(c):c) : '';
+const ROW_TINT = {'poptáno':'#f6f7f9','nový':'#ffffff','ve schvalování':'#fdf6e9','schváleno':'#eefaf2','odesláno':'#f5f1fd','doručeno':'#bfe6cb','zamítnuto':'#fdf1ef'};
+const needsPoptat = r => (Number(r.cena)||0)===0 && r.status==='nový' && !r.approvedBy;
+const toAskGlobal = () => rows.filter(needsPoptat).length;
+
+/* ==========================================================
+   FIREBASE — auth, načítání, zápis
+   ========================================================== */
+let unsubRows=null, unsubUsers=null;
+
+onAuthStateChanged(auth, async (user)=>{
+  authReady=true;
+  loginBusy=false;                       // po (od)přihlášení vždy uvolnit přihlašovací formulář
+  if(!user){ me=null; loginErr=''; fatalErr=''; teardown(); render(); return; }
+  try{
+    await ensureConfig();
+    me = await loadProfile(user);
+    subscribeRows();
+    if(P().admin) subscribeUsers();
+    render();
+  }catch(e){ fatalErr = 'Chyba při načítání dat: '+e.message; render(); }
+});
+
+function teardown(){ if(unsubRows){unsubRows();unsubRows=null;} if(unsubUsers){unsubUsers();unsubUsers=null;} rows=[]; usersList=[]; dataReady=false; }
+
+async function ensureConfig(){
+  const ref = doc(db,'meta','config');
+  const snap = await getDoc(ref);
+  if(!snap.exists()){
+    await setDoc(ref, DEFAULT_CONFIG);        // první přihlášený založí výchozí konfiguraci
+    cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  }else{
+    cfg = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), snap.data());
+  }
+}
+
+async function loadProfile(user){
+  const ref = doc(db,'users',user.uid);
+  const snap = await getDoc(ref);
+  const forced = isForcedAdmin(user.email);
+  if(snap.exists()){
+    const d = snap.data();
+    const role = forced ? 'admin' : (d.role||'zadavatel');
+    // účet ze seznamu "vždy admin", ale v databázi admina nemá → doplníme ho
+    if(forced && d.role!=='admin'){ try{ await updateDoc(ref,{role:'admin'}); }catch(e){} }
+    return {uid:user.uid, email:user.email, name:d.name||user.email, role, team:d.team||'—'};
+  }
+  // první uživatel v systému = admin; účty ze seznamu taky; ostatní zadavatelé
+  const anyUsers = await getDocs(collection(db,'users'));
+  const role = (forced || anyUsers.empty) ? 'admin' : 'zadavatel';
+  const prof = {name:user.email.split('@')[0], role, team: role==='admin'?'Administrátor':'—'};
+  await setDoc(ref, prof);
+  return Object.assign({uid:user.uid, email:user.email}, prof);
+}
+
+function subscribeRows(){
+  if(unsubRows) return;
+  const q1 = query(collection(db,'requests'), orderBy('createdTs','desc'));
+  unsubRows = onSnapshot(q1, snap=>{
+    rows = snap.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    dataReady=true; if(!qrOpen) render();
+  }, err=>{ fatalErr='Nemám přístup k datům: '+err.message; render(); });
+}
+function subscribeUsers(){
+  if(unsubUsers) return;
+  unsubUsers = onSnapshot(collection(db,'users'), snap=>{
+    usersList = snap.docs.map(d=>Object.assign({uid:d.id}, d.data()));
+    if(tab==='admin') render();
+  }, ()=>{});
+}
+
+async function saveConfig(){
+  try{ await setDoc(doc(db,'meta','config'), cfg); }
+  catch(e){ toast('Nastavení se neuložilo: '+e.message,'err'); }
+}
+
+/* Založí nový přihlašovací účet (e-mail + heslo) ve Firebase Authentication.
+   Používá dočasnou druhou instanci aplikace, aby vytvořením účtu NEODHLÁSILO
+   admina — ten zůstane přihlášený pod svým účtem. Vrací uid nového účtu. */
+async function createUserAccount(email,password){
+  const secApp = initializeApp(firebaseConfig,'userCreator');
+  const secAuth = getAuth(secApp);
+  try{
+    const cred = await createUserWithEmailAndPassword(secAuth,email,password);
+    const uid = cred.user.uid;
+    await signOut(secAuth);
+    return uid;
+  }finally{
+    await deleteApp(secApp);
+  }
+}
+
+/* ==========================================================
+   RENDER
+   ========================================================== */
+function render(){
+  const app=document.getElementById('app');
+  if(!authReady){ app.innerHTML=splash('Připojuji se k Firebase…'); return; }
+  if(fatalErr){ app.innerHTML=splash(fatalErr,true); bind(); return; }
+  if(!me){ app.innerHTML=loginView()+dlgView()+`<div id="toast-node">${toastView()}</div>`; bind(); return; }
+  if(!dataReady){ app.innerHTML=splash('Načítám požadavky…'); return; }
+  app.innerHTML = shell()+dlgView()+(qrOpen?qrScanView():'')+`<div id="toast-node">${toastView()}</div>`;
+  bind();
+  const di=document.getElementById('dlg-input'); if(di){di.focus();di.select();}
+}
+function splash(msg,err){
+  return `<div class="login-wrap"><div class="login" style="text-align:center">
+    <div class="brand">${logoSvg()}</div>
+    <h2>${err?'Chyba':'Nákupní požadavky'}</h2>
+    <p class="s" ${err?'style="color:#c0392b"':''}>${esc(msg)}</p>
+    ${err?'<button class="btn-primary" data-a="reload" style="width:100%;padding:9px;margin-top:6px">Zkusit znovu</button>':''}
+  </div></div>`;
+}
+
+/* ---------- login ---------- */
+function loginView(){
+  return `<div class="login-wrap"><div class="login">
+    <div class="brand">${logoSvg()}</div>
+    <h2 style="text-align:center">Nákupní požadavky</h2>
+    <p class="s" style="text-align:center">Interní objednávkový systém</p>
+    ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
+    <div class="f"><label>Firemní e-mail</label><input id="lg-user" type="email" autocomplete="username" ${loginBusy?'disabled':''}></div>
+    <div class="f"><label>Heslo</label><input id="lg-pass" type="password" autocomplete="current-password" ${loginBusy?'disabled':''}></div>
+    <button class="btn-primary" data-a="login" ${loginBusy?'disabled':''}>${loginBusy?'Přihlašuji…':'Přihlásit se'}</button>
+    <div class="hint">Účet ti zakládá administrátor (Kristýna Norková). Přihlašuješ se e-mailem a heslem, které jsi dostal.</div>
+  </div></div>`;
+}
+
+/* ---------- shell ---------- */
+function shell(){
+  return `
+  <header>
+    <div class="brand">${logoSvg()}</div>
+    <div><h1>Nákupní požadavky</h1><div class="sub">Interní objednávkový systém · Firebase</div></div>
+    <div class="chips">
+      <span class="chip">${new Date().toLocaleDateString('cs-CZ')} ${new Date().toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</span>
+      <span class="chip green">● Online</span>
+      <span class="chip role">${esc(P().label)}</span>
+      <span class="chip">${esc(me.name)} — ${esc(me.team)}</span>
+      <button class="btn-logout" data-a="logout">Odhlásit</button>
+    </div>
+  </header>
+  <div class="tabbar">
+    <button class="tab ${tab==='pozadavky'?'active':''}" data-a="tab" data-v="pozadavky">Požadavky</button>
+    ${P().admin?`<button class="tab violet ${tab==='admin'?'active':''}" data-a="tab" data-v="admin">⚙ Administrace</button>`:''}
+    <div class="spacer">
+      <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
+    </div>
+  </div>
+  <main>${tab==='admin'?adminView():listView()}</main>
+  ${editing?modalView():''}`;
+}
+
+/* ---------- seznam ---------- */
+function visibleRows(){
+  let r=rows.slice();
+  if(filters.mine) r=r.filter(x=>x.author===me.uid);
+  if(filters.status) r=r.filter(x=>x.status===filters.status);
+  if(filters.priorita) r=r.filter(x=>x.priorita===filters.priorita);
+  if(filters.ucet) r=r.filter(x=>x.ucet===filters.ucet);
+  if(filters.usek) r=r.filter(x=>x.usek===filters.usek);
+  if(filters.od) r=r.filter(x=>(x.created||'')>=filters.od);
+  if(filters.do) r=r.filter(x=>(x.created||'')<=filters.do);
+  if(filters.q){const q=filters.q.toLowerCase();
+    r=r.filter(x=>[x.poradove,x.sklad,x.popis,x.duvod,x.vyrobce,x.poznamka].join(' ').toLowerCase().includes(q));}
+  const c=sort.col;
+  r.sort((a,b)=>{
+    let x=c==='celkem'?totalEur(a):a[c], y=c==='celkem'?totalEur(b):b[c];
+    if(typeof x==='number'||typeof y==='number') return ((x||0)-(y||0))*sort.dir;
+    return String(x??'').localeCompare(String(y??''),'cs')*sort.dir;
+  });
+  return r;
+}
+function roleNotice(){
+  if(P().admin) return `<div class="notice">Máš plná práva. Povinná pole, uživatele a účty spravuješ v záložce Administrace.</div>`;
+  if(me.role==='skladnik') return `<div class="notice">Jako skladník měníš stav požadavků, datum dodání, účet i ostatní údaje. ${toAskGlobal()?`<b>${toAskGlobal()} nových požadavků nemá cenu — poptej je u dodavatele</b> tlačítkem Poptat.`:'Doplníš-li cenu, požadavek se sám posune ke schválení.'}</div>`;
+  if(me.role==='schvalovatel') return `<div class="notice">Otevři požadavek a odklikni <b>Schválit</b> nebo <b>Zamítnout</b>. Stačí schválení jednoho ze schvalovatelů — schválit můžeš i požadavek bez ceny. Ostatní údaje upravuje sklad.</div>`;
+  return `<div class="notice">Zakládáš požadavky a sleduješ jejich stav. Cenu vyplň, jen když ji znáš. Odeslaný požadavek už neupravíš — změnu napiš skladu.</div>`;
+}
+function listView(){
+  const rr=visibleRows();
+  const open=rows.filter(r=>['nový','ve schvalování','poptáno'].includes(r.status)).length;
+  const waiting=rows.filter(r=>!r.approvedBy && !['zamítnuto','doručeno'].includes(r.status)).length;
+  const toAsk=rows.filter(needsPoptat).length;
+  const crit=rows.filter(r=>r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status)).length;
+  const critRows=rows.filter(r=>r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status)).sort((a,b)=>String(a.created).localeCompare(String(b.created)));
+  const sumEur=rows.filter(r=>r.status!=='zamítnuto').reduce((a,r)=>a+totalEur(r),0);
+  const card=(l,v,n,c)=>`<div class="kcard" style="border-left-color:${c}"><div class="lbl">${l}</div><div class="val" style="color:${c}">${v}</div><div class="note">${n}</div></div>`;
+  const th=(c,l)=>`<th data-a="sort" data-v="${c}">${l}${sort.col===c?(sort.dir===1?' ▲':' ▼'):''}</th>`;
+  const shorten=(t,n=42)=>t&&t.length>n?t.slice(0,n-1).trim()+'…':t;
+  const critCard=`<div class="kcard" style="border-left-color:${crit?'#c0392b':'#6b7a90'}">
+    <div class="lbl">Kritická priorita</div><div class="val" style="color:${crit?'#c0392b':'#6b7a90'}">${crit}</div>
+    ${crit?`<div class="critlist">${critRows.slice(0,4).map(r=>`<div class="critline" data-a="open" data-v="${r._id}" title="${esc(r.popis||r.duvod)}">
+        <span class="cno">${esc((r.poradove||'—').replace('NP-2026-','#'))}</span><span class="cwhat">${esc(shorten(r.popis||r.duvod))}</span>
+        <span class="cwhere">${esc(r.stroj||r.usek||'—')}</span>
+        <span class="badge ${(STATUSES.find(s=>s.k===r.status)||{}).cls}" style="font-size:9px">${esc(r.status)}</span></div>`).join('')}${crit>4?`<div class="note" style="margin-top:4px">…a další ${crit-4}</div>`:''}</div>`:`<div class="note">nevyřízené</div>`}
+  </div>`;
+  const anyFilter = filters.q||filters.status||filters.priorita||filters.ucet||filters.usek||filters.od||filters.do||filters.mine;
+  return `
+  <div class="cards">
+    ${card('Otevřené požadavky',open,'poptáno · nový · ve schvalování','#16355f')}
+    ${card('K poptání u dodavatele',toAsk,'nové požadavky bez ceny',toAsk?'#b7791f':'#6b7a90')}
+    ${critCard}
+    ${card('Hodnota požadavků',num(sumEur,0)+' €','bez zamítnutých · kurz '+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
+  </div>
+  ${roleNotice()}
+  <div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button></div>
+  <div class="panel">
+    <h2>Přehled požadavků <span class="right">${rr.length} z ${rows.length} záznamů</span></h2>
+    <div class="legend">Podbarvení řádku = stav:
+      ${STATUSES.map(x=>`<span><i style="background:${ROW_TINT[x.k]}"></i>${x.k}</span>`).join('')}
+      <span style="margin-left:4px"><i style="background:#fff;box-shadow:inset 3px 0 0 #c0392b"></i>kritická priorita</span>
+    </div>
+    <div class="filters">
+      <input class="grow" id="f-q" placeholder="Hledat v popisu, skladovém čísle, výrobci…" value="${esc(filters.q)}">
+      <select id="f-usek"><option value="">Všechny linky</option>${cfg.sections.map(s=>`<option ${filters.usek===s.name?'selected':''}>${s.name}</option>`).join('')}</select>
+      <select id="f-status"><option value="">Všechny stavy</option>${STATUSES.map(s=>`<option ${filters.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
+      <select id="f-priorita"><option value="">Všechny priority</option>${PRIORITIES.map(p=>`<option ${filters.priorita===p.k?'selected':''}>${p.k}</option>`).join('')}</select>
+      <select id="f-ucet"><option value="">Všechny účty</option>${cfg.accounts.map(a=>`<option value="${esc(a.code)}" ${filters.ucet===a.code?'selected':''}>${esc(accLabel(a.code))}</option>`).join('')}</select>
+      <span class="datefilter">Vytvořeno <input type="date" id="f-od" value="${esc(filters.od)}">–<input type="date" id="f-do" value="${esc(filters.do)}"></span>
+      <label class="check"><input type="checkbox" id="f-mine" ${filters.mine?'checked':''}> Jen moje</label>
+      ${anyFilter?`<button class="btn-ghost" data-a="clear-filters">Zrušit filtry</button>`:''}
+    </div>
+    <div class="tblwrap"><table>
+      <thead><tr>
+        ${th('status','Stav')}${th('poradove','Č. požadavku')}${th('created','Vytvořeno')}${th('sklad','Skladové č.')}${th('popis','Popis')}
+        ${th('priorita','Priorita')}${th('mnozstvi','Množ.')}${th('cena','Cena / ks')}
+        <th class="no-sort">Cena celkem</th>${th('celkem','Celkem EUR')}${th('vyrobce','Výrobce')}${th('ucet','Účet')}${th('usek','Linka / stroj')}
+        ${th('datum','Dodání')}<th class="no-sort">MIN/MAX</th><th class="no-sort">Odkaz</th>
+        ${th('authorName','Zadal')}${th('approvedBy','Schválil')}<th class="no-sort">Akce</th>
+      </tr></thead>
+      <tbody>
+      ${rr.length?rr.map(r=>{
+        const late=r.datum&&r.datum<today()&&!['doručeno','zamítnuto'].includes(r.status);
+        const crit=r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status);
+        return `<tr class="${crit?'crit':''}" style="--row:${ROW_TINT[r.status]||'#fff'};cursor:pointer" data-a="open" data-v="${r._id}" title="Otevřít detail">
+          <td data-label="Stav">${badge(r.status,STATUSES)}</td>
+          <td data-label="Č. požadavku"><b>${esc(r.poradove||'—')}</b></td>
+          <td class="hide-mobile" data-label="Vytvořeno">${esc(dateCz(r.created))}</td>
+          <td class="hide-mobile" data-label="Skladové č.">${r.sklad?esc(r.sklad):'<span class="muted">—</span>'}</td>
+          <td class="desc" data-label="Popis">${r.typ==='Doplnění skladu'?`<span class="badge b-purple" style="font-size:9px;margin-right:5px">Doplnění skladu</span>`:''}${esc(r.popis||r.duvod||'')}${r.popis&&r.duvod?`<div class="muted" style="font-size:11px;margin-top:2px">📌 ${esc(r.duvod)}</div>`:''}${r.poznamka?`<div class="muted" style="font-size:11px;margin-top:2px">🗒 ${esc(r.poznamka)}</div>`:''}</td>
+          <td data-label="Priorita">${badge(r.priorita,PRIORITIES)}</td>
+          <td class="num" data-label="Množství">${r.mnozstvi}</td>
+          <td class="num hide-mobile" data-label="Cena / ks">${(Number(r.cena)||0)?num(r.cena)+' '+esc(r.mena):'<span class="badge b-amber">bez ceny</span>'}</td>
+          <td class="num hide-mobile" data-label="Cena celkem">${(Number(r.cena)||0)?num(total(r))+' '+esc(r.mena):'<span class="muted">—</span>'}</td>
+          <td class="num" data-label="Celkem EUR">${(Number(r.cena)||0)?`<b>${num(totalEur(r))} €</b>`:'<span class="muted">—</span>'}</td>
+          <td class="hide-mobile" data-label="Výrobce">${r.vyrobce?esc(r.vyrobce):'<span class="muted">—</span>'}</td>
+          <td class="hide-mobile" data-label="Účet">${r.ucet?`<b>${esc(r.ucet)}</b>${accName(r.ucet)?`<div class="muted" style="font-size:10.5px;white-space:normal;max-width:130px">${esc(accName(r.ucet))}</div>`:''}`:'<span class="muted">—</span>'}</td>
+          <td data-label="Linka / stroj">${r.usek?`<b>${esc(r.usek)}</b>${r.stroj?`<div class="muted" style="font-size:10.5px">${esc(r.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
+          <td class="${late?'late':''}" data-label="Dodání">${r.datum?esc(dateCz(r.datum))+(late?' ⚠':''):'<span class="muted">—</span>'}</td>
+          <td class="num hide-mobile ${(Number(r.min)||0)>0&&(Number(r.mnozstvi)||0)<Number(r.min)?'stock-warn':''}" data-label="MIN/MAX">${(r.min||r.max)?`${r.min||0} / ${r.max||0}`:'<span class="muted">—</span>'}</td>
+          <td class="hide-mobile" data-label="Odkaz">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ odkaz</a>`:'<span class="muted">—</span>'}</td>
+          <td class="hide-mobile" data-label="Zadal">${esc(r.authorName||'—')}</td>
+          <td class="hide-mobile" data-label="Schválil">${r.approvedBy?`<span class="badge b-green">✔ ${esc(r.approvedBy)}</span><div class="muted" style="font-size:10px">${esc(dateCz(r.approvedAt)||'')}</div>`:'<span class="muted">—</span>'}</td>
+          <td class="hide-mobile" data-label="Akce">${P().del?`<button class="rowbtn no" data-a="del" data-v="${r._id}">Smazat</button>`:'<span class="muted">—</span>'}</td>
+        </tr>`;}).join('')
+      :`<tr><td colspan="19" class="empty">Žádné požadavky neodpovídají filtru.</td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ---------- modal ---------- */
+function canEditRow(isNew){ return isNew || P().edit; }
+function machineSelect(r){
+  const sec=cfg.sections.find(x=>x.name===r.usek); const ms=sec?sec.machines:[];
+  if(!sec) return `<select id="e-stroj" disabled><option value="">nejdřív vyber linku</option></select>`;
+  if(!ms.length) return `<select id="e-stroj" disabled><option value="">linka nemá stroje</option></select>`;
+  return `<select id="e-stroj"><option value="">— celá linka (bez stroje) —</option>${ms.map(m=>`<option ${r.stroj===m?'selected':''}>${esc(m)}</option>`).join('')}</select>`;
+}
+function modalView(){
+  const r=editing, isNew=!r._id, ed=canEditRow(isNew);
+  const lab=id=>`${esc(fld(id).label)}${fld(id).req&&ed?' <span class="req">*</span>':''}`;
+  const wrap=(id,inner,cls='')=>`<div class="f ${cls} ${errs[id]?'invalid':''}"><label>${lab(id)}</label>${inner}${errs[id]?`<span class="err">${esc(errs[id])}</span>`:''}</div>`;
+  const wrapL=(id,label,inner,cls='',req=false)=>`<div class="f ${cls} ${errs[id]?'invalid':''}"><label>${esc(label)}${req&&ed?' <span class="req">*</span>':''}</label>${inner}${errs[id]?`<span class="err">${esc(errs[id])}</span>`:''}</div>`;
+  const ro=(id,val,cls='')=>`<div class="f ${cls}"><label>${esc(fld(id).label)}</label><div class="ro">${val?esc(val):'<span class="muted">—</span>'}</div></div>`;
+  const roL=(label,val,cls='')=>`<div class="f ${cls}"><label>${esc(label)}</label><div class="ro">${val?esc(val):'<span class="muted">—</span>'}</div></div>`;
+  const vyrobci=[...new Set(rows.map(x=>x.vyrobce).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'cs'));
+  const stockOn=!!r.newStock;
+  const statusLocked = isNew && !P().edit;
+  const body = ed ? `
+      ${statusLocked
+        ? `<div class="f"><label>Stav schvalování</label><div class="ro">nový</div><div id="auto-hint" class="autohint ${(Number(r.cena)||0)>0?'':'grey'}">${(Number(r.cena)||0)>0?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.'}</div></div>`
+        : wrap('status',`<select id="e-status">${STATUSES.map(s=>`<option ${r.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>`)}
+      ${wrapL('typ','Druh požadavku',`<select id="e-typ">${TYPES.map(t=>`<option ${(r.typ||'Nový požadavek')===t?'selected':''}>${esc(t)}</option>`).join('')}</select>`,'span2')}
+      <div class="f"><label>Pořadové číslo</label><div class="ro">${isNew?'<span class="muted">přidělí se po uložení</span>':esc(r.poradove)}</div></div>
+      ${wrap('sklad',`<input id="e-sklad" value="${esc(r.sklad)}" placeholder="SKL-…">`)}
+      ${wrap('priorita',`<select id="e-priorita">${PRIORITIES.map(p=>`<option ${r.priorita===p.k?'selected':''}>${p.k}</option>`).join('')}</select>`)}
+      ${wrapL('popis','Popis položky',`<textarea id="e-popis" rows="2" placeholder="Stručně co to je (např. lineární vedení 20 mm)">${esc(r.popis)}</textarea>`,'span4',false)}
+      ${wrapL('duvod','Důvod objednání',`<textarea id="e-duvod" rows="2" placeholder="Proč to objednáváme (např. výměna po havárii na Slush02)">${esc(r.duvod)}</textarea>`,'span4',true)}
+      ${wrap('mnozstvi',`<input id="e-mnozstvi" type="number" min="0" step="1" value="${esc(r.mnozstvi)}">`)}
+      ${wrapL('cena','Cena / ks (pokud ji známe)',`<div class="inline"><input id="e-cena" type="number" min="0" step="0.01" value="${esc(r.cena)}"><select id="e-mena" style="max-width:80px">${['CZK','EUR','USD'].map(m=>`<option ${r.mena===m?'selected':''}>${m}</option>`).join('')}</select></div>`)}
+      <div class="f"><label>Cena celkem</label><div class="calc" id="c-total">${num(total(r))} ${esc(r.mena)}</div></div>
+      <div class="f"><label>Cena v EUR</label><div class="calc" id="c-eur">${num(totalEur(r))} €</div></div>
+      ${wrapL('vyrobce','Výrobce položky',`<input id="e-vyrobce" list="vyrobci-list" value="${esc(r.vyrobce)}" placeholder="Hasco, Engel, Wera…"><datalist id="vyrobci-list">${vyrobci.map(m=>`<option value="${esc(m)}"></option>`).join('')}</datalist>`)}
+      ${wrap('ucet',`<select id="e-ucet"><option value="">— vyber účet —</option>${cfg.accounts.map(a=>`<option value="${esc(a.code)}" ${r.ucet===a.code?'selected':''}>${esc(accLabel(a.code))}</option>`).join('')}</select>`)}
+      ${wrapL('usek','Linka',`<select id="e-usek"><option value="">— vyber linku —</option>${cfg.sections.map(x=>`<option ${r.usek===x.name?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`,'',fld('usek').req)}
+      ${wrap('stroj',machineSelect(r))}
+      ${wrapL('datum','Předpokládané datum dodání',`<input id="e-datum" type="date" value="${esc(r.datum)}">`)}
+      <div class="stockbox"><input type="checkbox" id="e-newstock" ${stockOn?'checked':''}><label for="e-newstock">Založit jako novou skladovou položku?</label></div>
+      ${stockOn?`${wrap('min',`<input id="e-min" type="number" min="0" step="1" value="${esc(r.min)}">`,'span2')}
+      ${wrap('max',`<input id="e-max" type="number" min="0" step="1" value="${esc(r.max)}">`,'span2')}`:''}
+      ${wrap('url',`<input id="e-url" value="${esc(r.url)}" placeholder="https://…">`,'span2')}
+      ${wrapL('notifyEmail','Komu poslat e-mail o naskladnění',`<input id="e-notify" type="text" value="${esc(r.notifyEmail)}" placeholder="např. mistr@firma.cz, nakup@firma.cz">`,'span2')}
+      ${wrap('poznamka',`<textarea id="e-poznamka" rows="2" placeholder="Komentář pro nákup / schvalovatele">${esc(r.poznamka)}</textarea>`,'span4')}`
+  : `
+      <div class="f"><label>Stav schvalování</label><div class="ro">${badge(r.status,STATUSES)}</div></div>
+      <div class="f"><label>Pořadové číslo</label><div class="ro">${esc(r.poradove)}</div></div>
+      ${roL('Druh požadavku',r.typ||'Nový požadavek','span2')}
+      ${ro('sklad',r.sklad)}
+      <div class="f"><label>Priorita</label><div class="ro">${badge(r.priorita,PRIORITIES)}</div></div>
+      ${roL('Popis položky',r.popis,'span4')}
+      ${roL('Důvod objednání',r.duvod,'span4')}
+      ${ro('mnozstvi',r.mnozstvi)}
+      <div class="f"><label>Cena / ks</label><div class="ro">${(Number(r.cena)||0)?num(r.cena)+' '+esc(r.mena):'<span class="muted">bez ceny</span>'}</div></div>
+      <div class="f"><label>Cena celkem</label><div class="calc">${(Number(r.cena)||0)?num(total(r))+' '+esc(r.mena):'—'}</div></div>
+      <div class="f"><label>Cena v EUR</label><div class="calc">${(Number(r.cena)||0)?num(totalEur(r))+' €':'—'}</div></div>
+      ${ro('vyrobce',r.vyrobce)}
+      ${ro('ucet',accLabel(r.ucet))}
+      <div class="f"><label>Linka / stroj</label><div class="ro">${r.usek?esc(r.usek)+(r.stroj?' · '+esc(r.stroj):''):'<span class="muted">—</span>'}</div></div>
+      ${roL('Předpokládané datum dodání',dateCz(r.datum))}
+      ${(r.newStock||(Number(r.min)||0)>0||(Number(r.max)||0)>0)?`<div class="f"><label>MIN / MAX skladem</label><div class="ro">${(r.min||0)} / ${(r.max||0)}</div></div>`:''}
+      <div class="f span2"><label>URL odkaz</label><div class="ro">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>`:'<span class="muted">—</span>'}</div></div>
+      ${roL('Komu poslat e-mail o naskladnění',r.notifyEmail,'span2')}
+      ${ro('poznamka',r.poznamka,'span4')}
+      <div class="f span2"><label>Zadal</label><div class="ro">${esc(r.authorName||'—')} · ${esc(dateCz(r.created))}</div></div>
+      <div class="f span2"><label>Schválil</label><div class="ro">${r.approvedBy?esc(r.approvedBy)+' · '+esc(dateCz(r.approvedAt)):'<span class="muted">zatím neschváleno</span>'}</div></div>`;
+  const roleBar = ed
+      ? `<div class="robar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Vyplň ručně, nebo naskenuj štítek dílu:<button class="qrbtn" data-a="qr-open" style="padding:6px 12px;border-radius:6px">📷 Naskenovat QR / čárový kód</button></div>`
+      : (me.role==='schvalovatel'
+      ? `<div class="robar">Jako schvalovatel požadavek neupravuješ — rozhoduješ o něm tlačítky dole. Změny údajů zadej skladu.</div>`
+      : `<div class="robar">Požadavek je jen ke čtení. Změnu domluv se skladem.</div>`);
+  return `<div class="overlay" data-a="close-bg"><div class="modal">
+    <h3>${isNew?'Nový nákupní požadavek':esc(r.poradove)}${!isNew?` <span style="font-weight:400;opacity:.8;font-size:12px">${esc(r.authorName||'')}</span>`:''}<button class="x" data-a="close">✕</button></h3>
+    ${roleBar}
+    <div class="form">${body}</div>
+    ${(!isNew&&r.hist&&r.hist.length)?`<div class="hist"><b>Historie</b>${r.hist.slice(-8).reverse().map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
+    <div class="foot">
+      ${footMsg?`<span class="msg">${esc(footMsg)}</span>`:(ed?`<span class="muted">Pole s <span style="color:#c0392b">*</span> jsou povinná.</span>`:'')}
+      <div class="r">
+        ${(!isNew&&P().edit&&needsPoptat(r))?`<button class="btn-ghost" data-a="poptat" data-v="${r._id}">Poptat</button>`:''}
+        ${(!isNew&&P().approve&&!r.approvedBy&&r.status!=='zamítnuto')?`<button class="btn-danger" data-a="reject" data-v="${r._id}">✕ Zamítnout</button><button class="btn-ok" data-a="approve" data-v="${r._id}">✔ Schválit za sebe</button>`:''}
+        ${!isNew?`<button class="btn-ghost" data-a="dup" data-v="${r._id}">Kopie</button>`:''}
+        ${(!isNew&&P().del)?`<button class="btn-danger" data-a="del" data-v="${r._id}">Smazat</button>`:''}
+        <button class="btn-ghost" data-a="close">${ed?'Zrušit':'Zavřít'}</button>
+        ${ed?`<button class="btn-primary" data-a="save">${isNew?'Založit požadavek':'Uložit změny'}</button>`:''}
+      </div>
+    </div>
+  </div></div>`;
+}
+
+/* ---------- administrace ---------- */
+function adminView(){
+  return `
+  <div class="notice">Nastavení i uživatelé jsou uložení ve Firebase a platí pro celý tým.</div>
+  <div class="admgrid">
+    <div class="panel adm"><h2>Úrovně oprávnění</h2>
+      <div class="body">${Object.entries(ROLES).map(([k,v])=>`<div class="rolebox"><b>${v.lvl}. ${esc(v.label)}</b><p>${esc(v.popis)}</p></div>`).join('')}</div></div>
+
+    <div class="panel adm"><h2>Povinná pole <span class="right">brání uložení, pokud jsou prázdná</span></h2>
+      <div class="tblwrap"><table><thead><tr><th class="no-sort">Pole</th><th class="no-sort" style="width:110px;text-align:center">Povinné</th></tr></thead>
+        <tbody>${cfg.fields.map(f=>`<tr><td>${esc(f.label)}${f.lock?' <span class="muted">(systémové)</span>':''}</td>
+          <td class="switch"><input type="checkbox" data-a="req" data-v="${f.id}" ${f.req?'checked':''} ${f.lock?'disabled':''} style="width:auto"></td></tr>`).join('')}</tbody></table></div></div>
+
+    <div class="panel adm"><h2>Uživatelé a role</h2>
+      <div class="tblwrap"><table><thead><tr><th class="no-sort">Jméno</th><th class="no-sort">E-mail</th><th class="no-sort">Role</th><th class="no-sort">Útvar</th></tr></thead>
+        <tbody>${usersList.length?usersList.map(u=>`<tr>
+          <td><input value="${esc(u.name||'')}" data-a="user-name" data-v="${u.uid}" ${u.uid===me.uid?'disabled':''}></td>
+          <td class="muted">${esc(u.email||u.uid)}</td>
+          <td><select data-a="user-role" data-v="${u.uid}" ${u.uid===me.uid?'disabled':''}>${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v.lvl}. ${v.label}</option>`).join('')}</select></td>
+          <td><input value="${esc(u.team||'')}" data-a="user-team" data-v="${u.uid}"></td></tr>`).join('')
+          :'<tr><td colspan="4" class="muted" style="padding:12px">Zatím jen ty. Další lidé se objeví, jakmile se poprvé přihlásí nebo je založíš níže.</td></tr>'}</tbody></table></div>
+      <div class="body" style="border-top:1px solid var(--line)">
+        <div class="sechead"><b>Přidat uživatele</b><span class="muted">založí přihlášení i profil rovnou z aplikace</span></div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:9px">
+          <div class="f"><label>Jméno</label><input data-draft="nu-name" value="${esc(drafts['nu-name']||'')}" placeholder="Jan Novák"></div>
+          <div class="f"><label>Útvar</label><input data-draft="nu-team" value="${esc(drafts['nu-team']||'')}" placeholder="např. Údržba"></div>
+          <div class="f"><label>E-mail</label><input data-draft="nu-email" type="email" value="${esc(drafts['nu-email']||'')}" placeholder="jan.novak@firma.cz"></div>
+          <div class="f"><label>Počáteční heslo</label><input data-draft="nu-pass" type="text" value="${esc(drafts['nu-pass']||'')}" placeholder="aspoň 6 znaků"></div>
+          <div class="f"><label>Role</label><select data-draft="nu-role">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${(drafts['nu-role']||'zadavatel')===k?'selected':''}>${v.lvl}. ${esc(v.label)}</option>`).join('')}</select></div>
+          <div class="f"><label>&nbsp;</label><button class="btn-primary" data-a="add-user">Založit uživatele</button></div>
+        </div>
+        <p class="muted" style="font-size:11px;margin:10px 0 0;line-height:1.55">Zůstaneš přihlášený jako admin; nový účet se založí na pozadí. Počáteční heslo předej člověku a ať si ho po prvním přihlášení změní. <b>Mazání účtů a reset zapomenutého hesla</b> se dělá ve Firebase → Authentication (z aplikace to nejde).</p>
+      </div></div>
+
+    <div class="panel adm"><h2>Linky a stroje</h2>
+      <div class="body">
+        ${cfg.sections.map((sec,i)=>`<div class="secbox">
+          <div class="sechead"><b>${esc(sec.name)}</b><span class="muted">${sec.machines.length?sec.machines.length+' strojů':'bez strojů'}</span>
+            <button class="rowbtn" data-a="del-sec" data-v="${esc(sec.name)}" style="margin-left:auto">Odebrat linku</button></div>
+          <div class="taglist">${sec.machines.map(m=>`<span class="tag">${esc(m)}<button data-a="del-mach" data-v="${esc(sec.name)}|${esc(m)}">✕</button></span>`).join('')||'<span class="muted" style="font-size:11px">Zatím žádný stroj.</span>'}</div>
+          <div class="inline"><input id="m-${i}" data-draft="m-${esc(sec.name)}" value="${esc(drafts['m-'+sec.name]||'')}" placeholder="např. ${esc(sec.name)}01"><button class="btn-ghost" data-a="add-mach" data-v="${esc(sec.name)}|${i}">Přidat stroj</button></div>
+        </div>`).join('')}
+        <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
+        <div class="inline"><input id="new-sec" data-draft="new-sec" value="${esc(drafts['new-sec']||'')}" placeholder="Nová linka — Slush, Assembly, IMM"><button class="btn-primary" data-a="add-sec">Přidat linku</button></div>
+      </div></div>
+
+    <div class="panel adm"><h2>Nákladové účty</h2>
+      <div class="tblwrap"><table><thead><tr><th class="no-sort" style="width:90px">Účet</th><th class="no-sort">Popis</th><th class="no-sort" style="width:80px"></th></tr></thead>
+        <tbody>${cfg.accounts.map(a=>`<tr><td><b>${esc(a.code)}</b></td>
+          <td><input value="${esc(a.name)}" data-a="acc-name" data-v="${esc(a.code)}" placeholder="např. Údržba budovy"></td>
+          <td><button class="rowbtn" data-a="del-acc" data-v="${esc(a.code)}">Odebrat</button></td></tr>`).join('')}</tbody></table></div>
+      <div class="body" style="border-top:1px solid var(--line)">
+        <div class="inline"><input id="new-acc" data-draft="new-acc" value="${esc(drafts['new-acc']||'')}" placeholder="číslo účtu" style="max-width:150px">
+          <input id="new-acc-name" data-draft="new-acc-name" value="${esc(drafts['new-acc-name']||'')}" placeholder="popis účtu">
+          <button class="btn-primary" data-a="add-acc">Přidat</button></div>
+      </div></div>
+
+    <div class="panel adm"><h2>Kurzy</h2>
+      <div class="body">
+        <div class="f" style="margin-bottom:10px"><label>1 EUR = ? CZK</label><input id="r-czk" type="number" step="0.01" value="${cfg.rates.CZK}"></div>
+        <div class="f" style="margin-bottom:12px"><label>1 USD = ? EUR</label><input id="r-usd" type="number" step="0.01" value="${cfg.rates.USD}"></div>
+        <button class="btn-primary" data-a="save-rates">Uložit kurzy</button>
+      </div></div>
+  </div>`;
+}
+
+/* ---------- dialogy + toast ---------- */
+function dlgView(){
+  if(!dlg) return '';
+  return `<div class="dlg-wrap"><div class="dlg"><div class="t">${esc(dlg.title)}</div>
+    <div class="c">${esc(dlg.text)}${dlg.kind==='prompt'?`<input id="dlg-input" value="${esc(dlg.value||'')}" placeholder="${esc(dlg.placeholder||'')}">`:''}</div>
+    <div class="b">${dlg.kind!=='info'?`<button class="btn-ghost" data-a="dlg-no">Zrušit</button>`:''}
+      <button class="${dlg.danger?'btn-danger':'btn-primary'}" data-a="dlg-yes">${esc(dlg.ok||'Potvrdit')}</button></div></div></div>`;
+}
+function toastView(){ return toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:''; }
+
+/* ---------- QR / čárový kód ---------- */
+function qrScanView(){
+  return `<div class="dlg-wrap" style="z-index:95"><div class="dlg" style="max-width:380px">
+    <div class="t">📷 Naskenuj QR / čárový kód</div>
+    <div class="c" style="padding:12px">
+      <div id="qr-reader"></div>
+      <p class="muted" style="font-size:11px;margin-top:8px">Namiř zadní fotoaparát na kód. Předvyplní se skladové číslo (a další údaje, pokud jsou v kódu). Při prvním použití povol přístup ke kameře.</p>
+      <div id="qr-msg" class="loginerr" style="display:none;margin-top:8px"></div>
+    </div>
+    <div class="b"><button class="btn-ghost" data-a="qr-close">Zavřít</button></div>
+  </div></div>`;
+}
+function startQr(){
+  if(qr) return;
+  const msg=t=>{const m=document.getElementById('qr-msg');if(m){m.style.display='block';m.textContent=t;}};
+  if(!window.Html5Qrcode){ msg('Čtečka se nenačetla — zkontroluj připojení k internetu a zkus to znovu.'); return; }
+  try{
+    qr=new Html5Qrcode('qr-reader');
+    qr.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},
+      txt=>onQrScan(txt), ()=>{}
+    ).catch(e=>{ qr=null; msg('Kameru se nepodařilo spustit: '+(e&&e.message?e.message:e)); });
+  }catch(e){ qr=null; msg('Kameru se nepodařilo spustit.'); }
+}
+function stopQr(){ if(qr){ const x=qr; qr=null; try{ x.stop().then(()=>x.clear()).catch(()=>{}); }catch(e){} } }
+function onQrScan(text){ if(!qr) return; stopQr(); applyScan(text); }
+function applyScan(text){
+  qrOpen=false;
+  let data=null;
+  try{ const j=JSON.parse(text); if(j&&typeof j==='object'&&!Array.isArray(j)) data=j; }catch(e){}
+  if(editing){
+    if(data){
+      ['sklad','popis','duvod','vyrobce','ucet','usek','stroj','url','mnozstvi','cena','mena','priorita'].forEach(k=>{
+        if(data[k]!==undefined&&data[k]!==null&&data[k]!=='') editing[k]=data[k];
+      });
+    }else{
+      editing.sklad=String(text).trim();
+    }
+  }
+  render();
+  toast('Načteno z QR kódu.','ok');
+}
+function toast(msg,kind=''){
+  toastMsg=msg;toastKind=kind;clearTimeout(toast._t);
+  const host=document.getElementById('app');
+  if(host){let n=document.getElementById('toast-node');if(!n){n=document.createElement('div');n.id='toast-node';host.appendChild(n);}n.innerHTML=`<div class="toast ${kind}">${esc(msg)}</div>`;}
+  toast._t=setTimeout(()=>{toastMsg=null;const n=document.getElementById('toast-node');if(n)n.innerHTML='';},4500);
+}
+function ask(o){ return new Promise(res=>{dlg=Object.assign({kind:'confirm',title:'Potvrzení',ok:'Potvrdit'},o,{resolve:res});render();}); }
+const askYes=(t,o={})=>ask(Object.assign({text:t},o));
+const askText=(t,o={})=>ask(Object.assign({text:t,kind:'prompt',ok:'Odeslat'},o));
+const info=(t,o={})=>ask(Object.assign({text:t,kind:'info',title:'Informace',ok:'Rozumím'},o));
+
+/* Po naskladnění nabídne otevření e-mailu (Outlook) s předvyplněným upozorněním. */
+function offerDeliveryMail(r){
+  const to=[r.authorEmail,r.notifyEmail].filter(Boolean).join(',');
+  if(!to){ toast('Naskladněno. E-mail nemám komu poslat (chybí adresa).','ok'); return; }
+  const co = r.popis||r.duvod||('požadavek '+(r.poradove||''));
+  const subject = `Naskladněno: ${r.poradove||''} — ${co}`;
+  const body = `Dobrý den,\n\ndíl z Vašeho nákupního požadavku ${r.poradove||''} byl naskladněn.\n\n`
+    + `Položka: ${r.popis||r.duvod||'—'}\n`
+    + `Množství: ${r.mnozstvi||'—'}\n`
+    + `Linka / stroj: ${r.usek||'—'}${r.stroj?' / '+r.stroj:''}\n\n`
+    + `S pozdravem`;
+  const url = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  dlg = { kind:'confirm', title:'Naskladněno — poslat upozornění?',
+    text:`Požadavek ${r.poradove||''} je naskladněn. Otevřít e-mail s předvyplněným upozorněním pro: ${to}? (příjemce můžeš v Outlooku ještě upravit)`,
+    ok:'📧 Otevřít e-mail', mailto:url, resolve:()=>{} };
+  render();
+}
+
+/* ---------- formulář: sběr, přepočet, validace ---------- */
+function collect(){
+  const g=id=>{const el=document.getElementById(id);return el?el.value:undefined;};
+  const set={status:g('e-status'),typ:g('e-typ'),sklad:g('e-sklad'),popis:g('e-popis'),duvod:g('e-duvod'),priorita:g('e-priorita'),
+    mnozstvi:Number(g('e-mnozstvi'))||0,cena:Number(g('e-cena'))||0,mena:g('e-mena'),vyrobce:g('e-vyrobce'),
+    ucet:g('e-ucet'),usek:g('e-usek'),stroj:g('e-stroj'),datum:g('e-datum'),
+    min:Number(g('e-min'))||0,max:Number(g('e-max'))||0,url:g('e-url'),notifyEmail:g('e-notify'),poznamka:g('e-poznamka')};
+  Object.keys(set).forEach(k=>{if(set[k]!==undefined)editing[k]=set[k];});
+  const ns=document.getElementById('e-newstock'); if(ns) editing.newStock=ns.checked;
+}
+function recalc(){
+  collect();
+  const t=document.getElementById('c-total'),e=document.getElementById('c-eur');
+  if(t)t.textContent=num(total(editing))+' '+editing.mena;
+  if(e)e.textContent=num(totalEur(editing))+' €';
+  const h=document.getElementById('auto-hint');
+  if(h){const has=(Number(editing.cena)||0)>0;h.className='autohint '+(has?'':'grey');
+    h.textContent=has?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.';}
+}
+function validate(){
+  errs={};
+  const empty=v=>v===''||v===null||v===undefined||(typeof v==='number'&&v===0);
+  cfg.fields.forEach(f=>{if(f.req&&f.id!=='status'&&f.id!=='popis'&&empty(editing[f.id]))errs[f.id]='Povinné pole';});
+  if(empty(editing.duvod))errs.duvod='Povinné pole';
+  if(editing.url&&!/^https?:\/\//i.test(editing.url))errs.url='Odkaz musí začínat http:// nebo https://';
+  if(editing.min&&editing.max&&Number(editing.min)>Number(editing.max))errs.max='MAX musí být ≥ MIN';
+  return Object.keys(errs).length===0;
+}
+const AUTO_FROM=['nový','poptáno'];
+function applyAutoStatus(row,oldStatus,touched){
+  if(row.approvedBy||touched) return null;
+  if((Number(row.cena)||0)>0 && AUTO_FROM.includes(row.status)){ row.status='ve schvalování'; return `stav ${oldStatus} → ve schvalování (automaticky po doplnění ceny)`; }
+  return null;
+}
+
+/* pořadové číslo: bezpečně přes transakci nad meta/config.seq */
+async function nextNumber(){
+  const ref=doc(db,'meta','config');
+  const year=new Date().getFullYear();
+  const n=await runTransaction(db,async tx=>{
+    const s=await tx.get(ref); const seq=((s.data()||{}).seq||0)+1;
+    tx.update(ref,{seq}); return seq;
+  });
+  if(cfg) cfg.seq=n;
+  return 'NP-'+year+'-'+String(n).padStart(3,'0');
+}
+
+/* ---------- zápisy do Firestore ---------- */
+async function createRequest(){
+  const poradove=await nextNumber();
+  const rec=Object.assign({},editing,{
+    poradove, author:me.uid, authorName:me.name, authorEmail:me.email, created:today(), createdTs:serverTimestamp(),
+    approvedBy:null, approvedAt:null, hist:[`${today()} · ${me.name} · založil požadavek`]
+  });
+  const auto=applyAutoStatus(rec,'nový',false);
+  if(auto) rec.hist.push(`${today()} · systém · ${auto}`);
+  delete rec._id;
+  await addDoc(collection(db,'requests'),rec);
+  return poradove;
+}
+async function updateRequest(){
+  const id=editing._id; const old=rows.find(r=>r._id===id)||{};
+  const touched=old.status!==editing.status;
+  const hist=(editing.hist||[]).slice();
+  if(touched) hist.push(`${today()} · ${me.name} · stav ${old.status} → ${editing.status}`);
+  else hist.push(`${today()} · ${me.name} · upravil požadavek`);
+  if(!touched && (Number(old.cena)||0)===0 && (Number(editing.cena)||0)>0){
+    const auto=applyAutoStatus(editing,old.status,false);
+    if(auto) hist.push(`${today()} · ${me.name} · ${auto}`);
+  }
+  const {_id,...data}=editing; data.hist=hist;
+  await updateDoc(doc(db,'requests',id),data);
+}
+
+/* ==========================================================
+   BIND + AKCE
+   ========================================================== */
+function bind(){
+  document.querySelectorAll('[data-a]').forEach(el=>{
+    const a=el.dataset.a,v=el.dataset.v;
+    const isInput = (el.tagName==='SELECT'||el.type==='checkbox'||el.type==='file'||
+      (el.tagName==='INPUT'&&['acc-name','user-name','user-team','user-role'].includes(a)));
+    if(isInput) el.onchange=ev=>act(a,v,el,ev);
+    else el.onclick=ev=>{ev.stopPropagation();act(a,v,el,ev);};
+  });
+  const q=document.getElementById('f-q');
+  if(q) q.oninput=()=>{filters.q=q.value;const p=q.selectionStart;render();const n=document.getElementById('f-q');n.focus();n.setSelectionRange(p,p);};
+  ['status','priorita','ucet','usek','od','do'].forEach(k=>{const el=document.getElementById('f-'+k);if(el)el.onchange=()=>{filters[k]=el.value;render();};});
+  const m=document.getElementById('f-mine');if(m)m.onchange=()=>{filters.mine=m.checked;render();};
+  ['e-cena','e-mnozstvi','e-mena'].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=recalc;el.onchange=recalc;}});
+  document.querySelectorAll('[data-draft]').forEach(el=>{const h=()=>{drafts[el.dataset.draft]=el.value;};el.oninput=h;el.onchange=h;});
+  const us=document.getElementById('e-usek');if(us)us.onchange=()=>{collect();editing.stroj='';render();};
+  const ns=document.getElementById('e-newstock');if(ns)ns.onchange=()=>{collect();render();};
+  const lp=document.getElementById('lg-pass');if(lp)lp.onkeydown=e=>{if(e.key==='Enter')act('login');};
+  if(qrOpen) startQr();
+}
+
+async function act(a,v,el,ev){
+  switch(a){
+    case 'reload': location.reload(); return;
+    case 'login':{
+      const email=(document.getElementById('lg-user').value||'').trim();
+      const pass=document.getElementById('lg-pass').value||'';
+      if(!email||!pass){loginErr='Vyplň e-mail i heslo.';render();return;}
+      loginBusy=true;loginErr='';render();
+      try{ await signInWithEmailAndPassword(auth,email,pass); }
+      catch(e){ loginBusy=false; loginErr=authMsg(e.code); render(); }
+      return;
+    }
+    case 'logout': await signOut(auth); return;
+    case 'tab': tab=v; break;
+    case 'sort': sort=(sort.col===v)?{col:v,dir:-sort.dir}:{col:v,dir:1}; break;
+    case 'clear-filters': filters={q:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false}; break;
+    case 'dlg-yes':{const d=dlg;dlg=null;const val=d.kind==='prompt'?(document.getElementById('dlg-input')||{}).value||'':true;
+      if(d.mailto){const a2=document.createElement('a');a2.href=d.mailto;a2.rel='noopener';document.body.appendChild(a2);a2.click();a2.remove();}
+      render();d.resolve(d.kind==='prompt'?val:true);return;}
+    case 'dlg-no':{const d=dlg;dlg=null;render();d.resolve(d.kind==='prompt'?null:false);return;}
+
+    case 'new':
+      editing={status:'nový',typ:'Nový požadavek',poradove:'',sklad:'',popis:'',duvod:'',priorita:'běžná',mnozstvi:1,cena:0,mena:'CZK',
+        vyrobce:'',ucet:'',usek:'',stroj:'',datum:'',min:0,max:0,newStock:false,url:'',notifyEmail:'',poznamka:''};
+      errs={};footMsg='';break;
+    case 'open':{ editing=JSON.parse(JSON.stringify(rows.find(r=>r._id===v)));
+      if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
+      errs={};footMsg='';break;}
+    case 'dup':{const s=rows.find(r=>r._id===v);
+      editing=Object.assign(JSON.parse(JSON.stringify(s)),{_id:null,poradove:'',status:'nový',datum:'',approvedBy:null,approvedAt:null,hist:[]});
+      if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
+      errs={};footMsg='';break;}
+
+    case 'save':{
+      const isNew=!editing._id;
+      if(!canEditRow(isNew))return;
+      collect();
+      if(isNew&&!P().edit)editing.status='nový';
+      if(!validate()){footMsg='Doplň povinná pole označená červeně.';render();return;}
+      try{
+        if(isNew){const no=await createRequest();editing=null;footMsg='';toast('Požadavek '+no+' založen.','ok');}
+        else{
+          const old=rows.find(r=>r._id===editing._id)||{};
+          const becameDelivered = old.status!=='doručeno' && editing.status==='doručeno';
+          const saved=JSON.parse(JSON.stringify(editing));
+          await updateRequest();editing=null;footMsg='';toast('Změny uloženy.','ok');
+          if(becameDelivered) offerDeliveryMail(saved);
+        }
+      }catch(e){footMsg='Uložení selhalo: '+e.message;render();return;}
+      break;
+    }
+    case 'del':{
+      if(!P().del)return; const r=rows.find(x=>x._id===v);
+      if(await askYes(`Smazat požadavek ${r.poradove}? Tohle nejde vrátit.`,{title:'Smazání',ok:'Smazat',danger:true})){
+        try{await deleteDoc(doc(db,'requests',v));editing=null;toast('Požadavek smazán.','ok');}catch(e){toast('Nešlo smazat: '+e.message,'err');}
+      }break;
+    }
+    case 'poptat':{
+      if(!P().edit)return; const r=rows.find(x=>x._id===v);
+      const hist=(r.hist||[]).concat(`${today()} · ${me.name} · stav nový → poptáno`);
+      try{await updateDoc(doc(db,'requests',v),{status:'poptáno',hist});}catch(e){toast(e.message,'err');}
+      break;
+    }
+    case 'approve':{
+      if(!P().approve)return; const r=rows.find(x=>x._id===v);
+      if(r.approvedBy){await info('Požadavek už schválil '+r.approvedBy+'.');return;}
+      if(!await askYes(`Schválit požadavek ${r.poradove} za sebe? Stačí schválení jednoho ze schvalovatelů.`,{title:'Schválení',ok:'✔ Schválit'}))return;
+      const st=['nový','ve schvalování','poptáno'].includes(r.status)?'schváleno':r.status;
+      const hist=(r.hist||[]).concat(`${today()} · ${me.name} · schválil požadavek`);
+      try{await updateDoc(doc(db,'requests',v),{approvedBy:me.name,approvedAt:today(),status:st,hist});editing=null;toast('Požadavek '+r.poradove+' schválen.','ok');}
+      catch(e){toast('Schválení selhalo: '+e.message,'err');}
+      break;
+    }
+    case 'reject':{
+      if(!P().approve)return; const r=rows.find(x=>x._id===v);
+      const d=await askText(`Zamítnutí požadavku ${r.poradove}. Napiš důvod:`,{title:'Zamítnutí',ok:'✕ Zamítnout',danger:true,placeholder:'např. objednáno jinou cestou'});
+      if(d===null)return;
+      const hist=(r.hist||[]).concat(`${today()} · ${me.name} · zamítl požadavek${d?': '+d:''}`);
+      const poz=d?((r.poznamka?r.poznamka+' | ':'')+'Zamítnuto: '+d):r.poznamka;
+      try{await updateDoc(doc(db,'requests',v),{status:'zamítnuto',approvedBy:null,approvedAt:null,poznamka:poz,hist});editing=null;toast('Požadavek '+r.poradove+' zamítnut.','ok');}
+      catch(e){toast('Zamítnutí selhalo: '+e.message,'err');}
+      break;
+    }
+    case 'qr-open':{
+      if(!editing)return; collect();
+      if(!window.Html5Qrcode){toast('QR čtečka se nenačetla — zkontroluj internet a zkus to znovu.','err');return;}
+      qrOpen=true;break;
+    }
+    case 'qr-close': stopQr(); qrOpen=false; break;
+
+    case 'close': case 'close-bg':
+      if(a==='close-bg'&&ev&&ev.target!==el)return;
+      stopQr(); qrOpen=false; editing=null;errs={};footMsg='';break;
+
+    case 'export':{
+      const head=['Stav','Druh','Pořadové číslo','Vytvořeno','Skladové číslo','Popis položky','Důvod objednání','Priorita','Množství','Cena/ks','Měna','Cena celkem','Cena EUR','Výrobce','Účet','Popis účtu','Linka','Stroj','Předpokládané datum dodání','MIN','MAX','URL','Upozornit e-mailem','Poznámka','Zadal','Schválil','Schváleno dne'];
+      const lines=[head.join(';')].concat(visibleRows().map(r=>[r.status,r.typ||'Nový požadavek',r.poradove,r.created,r.sklad,r.popis,r.duvod,r.priorita,r.mnozstvi,r.cena,r.mena,total(r).toFixed(2),totalEur(r).toFixed(2),r.vyrobce,r.ucet,accName(r.ucet),r.usek,r.stroj,r.datum,r.min,r.max,r.url,r.notifyEmail||'',r.poznamka,r.authorName,r.approvedBy||'',r.approvedAt||'']
+        .map(x=>`"${String(x??'').replace(/"/g,'""')}"`).join(';')));
+      const b=new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv'});
+      const a2=document.createElement('a');a2.href=URL.createObjectURL(b);a2.download='nakupni_pozadavky.csv';a2.click();return;
+    }
+
+    /* --- administrace (jen admin, jinak Firestore pravidla stejně odmítnou) --- */
+    case 'req':{ if(!P().admin)return; fld(v).req=el.checked; await saveConfig(); return; }
+    case 'add-sec':{
+      if(!P().admin)return; const n=(drafts['new-sec']||'').trim(); if(!n)return;
+      if(cfg.sections.some(x=>x.name.toLowerCase()===n.toLowerCase())){toast('Linka už existuje.','err');return;}
+      cfg.sections.push({name:n,machines:[]});delete drafts['new-sec'];await saveConfig();break;
+    }
+    case 'del-sec':{
+      if(!P().admin)return; const used=rows.filter(r=>r.usek===v).length;
+      if(!await askYes(used?`Linka ${v} je u ${used} požadavků — ty zůstanou, jen zmizí z nabídky.`:`Odebrat linku ${v}?`,{title:'Odebrání linky',ok:'Odebrat',danger:true}))return;
+      cfg.sections=cfg.sections.filter(x=>x.name!==v);await saveConfig();break;
+    }
+    case 'add-mach':{
+      if(!P().admin)return; const [sn]=v.split('|'); const m=(drafts['m-'+sn]||'').trim(); if(!m)return;
+      const sec=cfg.sections.find(x=>x.name===sn);
+      if(sec.machines.some(x=>x.toLowerCase()===m.toLowerCase())){toast('Stroj už v úseku je.','err');return;}
+      sec.machines.push(m);sec.machines.sort((a,b)=>a.localeCompare(b,'cs',{numeric:true}));delete drafts['m-'+sn];await saveConfig();break;
+    }
+    case 'del-mach':{ if(!P().admin)return; const [sn,m]=v.split('|'); const sec=cfg.sections.find(x=>x.name===sn); sec.machines=sec.machines.filter(x=>x!==m); await saveConfig(); break; }
+    case 'add-acc':{
+      if(!P().admin)return; const code=(drafts['new-acc']||'').trim(); const nm=(drafts['new-acc-name']||'').trim();
+      if(!code){toast('Vyplň číslo účtu.','err');return;}
+      if(cfg.accounts.some(a=>a.code===code)){toast('Účet už existuje.','err');return;}
+      cfg.accounts.push({code,name:nm});cfg.accounts.sort((a,b)=>a.code.localeCompare(b.code,'cs',{numeric:true}));
+      delete drafts['new-acc'];delete drafts['new-acc-name'];await saveConfig();break;
+    }
+    case 'acc-name':{ if(!P().admin)return; acc(v).name=el.value.trim(); await saveConfig(); return; }
+    case 'del-acc':{
+      if(!P().admin)return; const used=rows.filter(r=>r.ucet===v).length;
+      if(!await askYes(used?`Účet ${v} je u ${used} požadavků — zůstane u nich, jen zmizí z nabídky.`:`Odebrat účet ${v}?`,{title:'Odebrání účtu',ok:'Odebrat',danger:true}))return;
+      cfg.accounts=cfg.accounts.filter(x=>x.code!==v);await saveConfig();break;
+    }
+    case 'save-rates':{
+      if(!P().admin)return;
+      cfg.rates.CZK=Number(document.getElementById('r-czk').value)||cfg.rates.CZK;
+      cfg.rates.USD=Number(document.getElementById('r-usd').value)||cfg.rates.USD;
+      await saveConfig();toast('Kurzy uloženy.','ok');break;
+    }
+    case 'add-user':{
+      if(!P().admin)return;
+      const name=(drafts['nu-name']||'').trim();
+      const email=(drafts['nu-email']||'').trim();
+      const pass=(drafts['nu-pass']||'');
+      const role=drafts['nu-role']||'zadavatel';
+      const team=(drafts['nu-team']||'').trim()||'—';
+      if(!name||!email||!pass){toast('Vyplň jméno, e-mail i počáteční heslo.','err');return;}
+      if(pass.length<6){toast('Heslo musí mít aspoň 6 znaků.','err');return;}
+      try{
+        const uid=await createUserAccount(email,pass);
+        await setDoc(doc(db,'users',uid),{name,role,team});
+        ['nu-name','nu-email','nu-pass','nu-role','nu-team'].forEach(k=>delete drafts[k]);
+        toast('Uživatel '+name+' založen. Předej mu heslo.','ok');
+      }catch(e){ toast('Založení selhalo: '+authMsg(e.code),'err'); return; }
+      break;
+    }
+    case 'user-role':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{role:el.value});}catch(e){toast(e.message,'err');} return; }
+    case 'user-name':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{name:el.value.trim()});}catch(e){toast(e.message,'err');} return; }
+    case 'user-team':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{team:el.value.trim()});}catch(e){toast(e.message,'err');} return; }
+  }
+  render();
+}
+
+function authMsg(code){
+  const m={
+    'auth/invalid-email':'Neplatný formát e-mailu.',
+    'auth/user-not-found':'Takový účet neexistuje. Ověř e-mail, nebo požádej administrátora o založení.',
+    'auth/wrong-password':'Nesprávné heslo.',
+    'auth/invalid-credential':'Nesprávný e-mail nebo heslo.',
+    'auth/too-many-requests':'Příliš mnoho pokusů. Zkus to za chvíli.',
+    'auth/network-request-failed':'Není spojení se sítí.',
+    'auth/email-already-in-use':'Účet s tímto e-mailem už existuje.',
+    'auth/weak-password':'Heslo je příliš slabé — použij aspoň 6 znaků.',
+    'auth/operation-not-allowed':'Ve Firebase není povolené přihlašování e-mailem a heslem.'
+  };
+  return m[code]||('Přihlášení se nepovedlo ('+code+').');
+}
+
+render();
+</script>
+</body>
+</html>
