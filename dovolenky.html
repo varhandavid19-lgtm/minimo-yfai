@@ -72,6 +72,9 @@
     padding:12px 16px;font-size:13.5px;font-weight:700;color:#6b7a90}
   .tab:hover{color:var(--navy-2)}
   .tab.active{color:var(--navy-1);border-bottom-color:#f6821f}
+  .tabbar{align-items:center}
+  .tb-note{margin-left:auto;font-size:11.5px;color:var(--muted);padding:0 4px;white-space:nowrap}
+  @media(max-width:680px){.tb-note{display:none}}
 
   .settings{max-width:1200px}
   .statsyear{display:flex;align-items:center;gap:8px;margin:2px 0 12px;font-size:12.5px;color:#41506b}
@@ -298,18 +301,33 @@ const DEFAULT_VACATION = 25;   // výchozí nárok na dovolenou (pracovních dn�
 const MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
 const WD = ['Ne','Po','Út','St','Čt','Pá','So'];
 
+/* Sekce a pozice (musí odpovídat modulu Nastavení). */
+const SECTIONS = [
+  {key:'engineering', label:'Engineering', positions:['IMM PE','SLUSH PE','FOAM PE','ASSY PE','GB/DP PE','PE coordinator','Change coordinator','ME manager','AME']},
+  {key:'maintenance', label:'Maintenance', positions:['Elektrikář','Mechanik','PLC technik','PLC programátor','Skladník','Spareparts Buyer','MAINTENANCE coordinator','Mistr','Shift leader','Nástrojař','Tooling engineer','Toolshop leader']},
+  {key:'toolsetters', label:'Toolsetters', positions:['TS IMM','TS SLUSH','TS FOAM','TS GB/DP','TS ASSY']},
+];
+const POS2SECTION = {}; SECTIONS.forEach(s=>s.positions.forEach(p=>{POS2SECTION[p]=s.key;}));
+const inSection = (u,key) => (u.positions||[]).some(p=>POS2SECTION[p]===key);
+/* Levely (kvůli právům – kdo může měnit koho). */
+const LEVEL_RANK = {basic:1,warehouse:2,approver:3,wadmin:4,superadmin:5};
+const ROLE2LEVEL = {zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
+const levelOf = d => (d && d.level && LEVEL_RANK[d.level]) ? d.level : ((d && ROLE2LEVEL[d.role]) || 'basic');
+const canEditAll = () => (LEVEL_RANK[myLevel]||1) >= 3;                 // Approver a výše mění všechny
+const canEditPerson = id => canEditAll() || id===(me&&me.uid);          // ostatní jen sebe
+
 /* ---------- stav aplikace ---------- */
-let me=null;               // přihlášený uživatel {email}
-let people=[];             // naši lidé
+let me=null;               // přihlášený uživatel {email, uid}
+let allUsers=[];           // všichni lidé z centrálního Nastavení (users)
+let people=[];             // lidé zobrazení v aktuální sekci (počítá se v render)
+let myLevel='basic';       // level přihlášeného (kvůli právům)
+let section='engineering'; // aktivní sekce
 let absences=[];           // nepřítomnosti
-let page='prehled';        // 'prehled' | 'nastaveni'
 const _now0=new Date();
 let calYear=_now0.getFullYear();   // rok zobrazený v kalendáři (posouvá se do stran)
 let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
-let statsYear=_now0.getFullYear(); // rok pro výpočet zůstatku dovolené
 let loginBusy=false, loginErr='';
 let form={personId:'',from:today(),to:today(),type:'Dovolená',note:'',days:1};
-let newPerson='', newProc='';
 let formMsg='', formMsgKind='';
 let dlg=null;              // {personName, dateStr, items:[...]}
 let edit=null, editMsg=''; // úprava existující nepřítomnosti (kliknutím v kalendáři)
@@ -391,11 +409,15 @@ onAuthStateChanged(auth, (user)=>{
 function teardown(){
   if(unsubPeople){unsubPeople();unsubPeople=null;}
   if(unsubAbs){unsubAbs();unsubAbs=null;}
-  people=[]; absences=[];
+  allUsers=[]; people=[]; absences=[];
 }
 function subscribe(){
-  unsubPeople = onSnapshot(collection(db,'people'),
-    s=>{ people=s.docs.map(d=>({id:d.id,...d.data()})).sort(bySurname); render(); },
+  // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
+  unsubPeople = onSnapshot(collection(db,'users'),
+    s=>{ allUsers=s.docs.map(d=>{const x=d.data();
+           return {id:d.id, name:x.name||d.id, positions:x.positions||[], level:x.level, role:x.role};});
+         const my=allUsers.find(u=>u.id===me.uid); myLevel = my ? levelOf(my) : 'basic';
+         render(); },
     e=>toast('Chyba načítání lidí: '+e.message,'err'));
   unsubAbs = onSnapshot(collection(db,'absences'),
     s=>{ absences=s.docs.map(d=>({id:d.id,...d.data()})); render(); },
@@ -420,23 +442,6 @@ function loginErrMsg(code){
 /* ==========================================================
    ZÁPIS DAT
    ========================================================== */
-async function addPerson(name,process){
-  name=name.trim(); if(!name) return;
-  try{
-    const maxOrder=people.reduce((a,p)=>Math.max(a,p.order||0),0);
-    await addDoc(collection(db,'people'),{name,process:(process||'').trim(),order:maxOrder+1,createdAt:serverTimestamp()});
-    newPerson=''; newProc=''; render();
-  }catch(e){ toast('Nepodařilo se přidat: '+e.message,'err'); }
-}
-async function updatePersonProcess(id,val){
-  try{ await updateDoc(doc(db,'people',id),{process:(val||'').trim()}); }
-  catch(e){ toast('Nepodařilo se uložit zařazení: '+e.message,'err'); }
-}
-async function removePerson(id,name){
-  if(!confirm(`Odebrat „${name}" ze seznamu lidí?\n\nJeho záznamy nepřítomnosti tím z kalendáře zmizí.`)) return;
-  try{ await deleteDoc(doc(db,'people',id)); toast('Osoba odebrána.','ok'); }
-  catch(e){ toast('Nepodařilo se odebrat: '+e.message,'err'); }
-}
 async function addAbsence(bypass){
   formMsg=''; formMsgKind='';
   // Vezmi aktuální hodnoty přímo z formuláře (co je vidět, to platí)
@@ -446,8 +451,9 @@ async function addAbsence(bypass){
   const yEl=document.getElementById('fa-type'); if(yEl) form.type=yEl.value;
   const nEl=document.getElementById('fa-note'); if(nEl) form.note=nEl.value;
   const dEl=document.getElementById('fa-days'); if(dEl) form.days=parseFloat(String(dEl.value).replace(',','.'))||0;
-  const p=people.find(x=>x.id===form.personId);
+  const p=allUsers.find(x=>x.id===form.personId);
   if(!p){ formMsg='Vyberte zaměstnance.'; formMsgKind='err'; render(); return; }
+  if(!canEditPerson(p.id)){ formMsg='Můžete zadávat jen svoji nepřítomnost.'; formMsgKind='err'; render(); return; }
   if(!form.from||!form.to){ formMsg='Vyplňte datum od i do.'; formMsgKind='err'; render(); return; }
   if(form.to<form.from){ formMsg='Datum „do" nesmí být před „od".'; formMsgKind='err'; render(); return; }
   if(!TYPE_BY[form.type]){ formMsg='Vyberte druh nepřítomnosti.'; formMsgKind='err'; render(); return; }
@@ -474,17 +480,19 @@ async function addAbsence(bypass){
     render();
   }catch(e){ formMsg='Nepodařilo se uložit: '+e.message; formMsgKind='err'; render(); }
 }
-/* Najde kolegy ze stejného úseku, kteří mají v zadaném termínu dovolenou. */
+/* Najde kolegy, kteří umí ALESPOŇ JEDNU stejnou pozici a mají v termínu dovolenou
+   (kontrola zastupitelnosti napříč sekcemi). */
 function findCollisions(person, from, to){
-  const proc=(person.process||'').trim().toLowerCase();
-  if(!proc) return [];
+  const myPos=new Set(person.positions||[]);
+  if(!myPos.size) return [];
   const list=[];
-  people.forEach(o=>{
+  allUsers.forEach(o=>{
     if(o.id===person.id) return;
-    if((o.process||'').trim().toLowerCase()!==proc) return;
+    const shared=(o.positions||[]).filter(p=>myPos.has(p));
+    if(!shared.length) return;
     absences.forEach(a=>{
       if(a.personId!==o.id || a.type!=='Dovolená') return;
-      if(a.from<=to && a.to>=from) list.push({name:o.name, from:a.from, to:a.to, process:o.process});
+      if(a.from<=to && a.to>=from) list.push({name:o.name, from:a.from, to:a.to, process:shared.join(', ')});
     });
   });
   return list;
@@ -499,8 +507,9 @@ async function saveEdit(){
   e.personId=g('ed-person').value; e.from=g('ed-from').value; e.to=g('ed-to').value;
   e.type=g('ed-type').value; e.note=g('ed-note').value;
   e.days=parseFloat(String(g('ed-days').value).replace(',','.'))||0;
-  const p=people.find(x=>x.id===e.personId);
+  const p=allUsers.find(x=>x.id===e.personId);
   if(!p){ editMsg='Vyberte zaměstnance.'; render(); return; }
+  if(!canEditPerson(p.id)){ editMsg='Můžete upravovat jen svoji nepřítomnost.'; render(); return; }
   if(!e.from||!e.to){ editMsg='Vyplňte datum od i do.'; render(); return; }
   if(e.to<e.from){ editMsg='Datum „do" nesmí být před „od".'; render(); return; }
   if(!TYPE_BY[e.type]){ editMsg='Vyberte druh nepřítomnosti.'; render(); return; }
@@ -524,6 +533,8 @@ function render(){
   const c=document.querySelector('.cal-wrap');
   if(c){ calScrollL=c.scrollLeft; calScrollT=c.scrollTop; }
   if(!me){ appEl.innerHTML=loginView(); wireLogin(); return; }
+  // lidé aktuální sekce (podle přiřazených pozic v Nastavení)
+  people = allUsers.filter(u=>inSection(u,section)).sort(bySurname);
   appEl.innerHTML = appView();
   wireApp();
   alignCalendar();
@@ -576,7 +587,10 @@ function appView(){
   return `${headerView()}
   ${tabBar()}
   <main>
-    ${page==='nastaveni' ? settingsView() : overviewView()}
+    ${formPanel()}
+    ${legendView()}
+    ${calBar()}
+    ${calendarView()}
   </main>
   ${dlg?dialogView():''}
   ${edit?editView():''}
@@ -584,19 +598,11 @@ function appView(){
 }
 
 function tabBar(){
-  const t=(id,label)=>`<button class="tab ${page===id?'active':''}" data-tab="${id}">${label}</button>`;
-  return `<div class="tabbar">${t('prehled','📅 Přehled')}${t('nastaveni','⚙️ Nastavení')}</div>`;
-}
-
-function overviewView(){
-  return `${formPanel()}
-    ${legendView()}
-    ${calBar()}
-    ${calendarView()}`;
-}
-
-function settingsView(){
-  return `<div class="settings">${peoplePanel()}</div>`;
+  const t=(s)=>`<button class="tab ${section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
+  const permNote = canEditAll()
+    ? 'Můžete upravovat všechny.'
+    : 'Můžete upravovat jen svoji nepřítomnost (ostatní jen prohlížet).';
+  return `<div class="tabbar">${SECTIONS.map(t).join('')}<span class="tb-note">${permNote}</span></div>`;
 }
 
 function headerView(){
@@ -604,15 +610,18 @@ function headerView(){
 }
 
 function formPanel(){
-  // ať je vždy někdo vybraný (jinak by šlo omylem odeslat prázdného zaměstnance)
-  if((!form.personId || !people.some(p=>p.id===form.personId)) && people.length) form.personId=people[0].id;
-  const opts=people.map(p=>`<option value="${p.id}" ${form.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
+  // koho smím zadávat: Approver+ všechny v sekci, ostatní jen sebe
+  const editable = canEditAll() ? people : people.filter(p=>p.id===(me&&me.uid));
+  if((!form.personId || !editable.some(p=>p.id===form.personId)) && editable.length) form.personId=editable[0].id;
+  const opts=editable.map(p=>`<option value="${p.id}" ${form.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
   const tOpts=TYPES.map(t=>`<option value="${esc(t.k)}" ${form.type===t.k?'selected':''}>${esc(t.k)}</option>`).join('');
-  const noPeople = !people.length;
+  const noPeople = !editable.length;
+  const emptyMsg = !people.length ? '— v této sekci nejsou lidé (přiřaďte pozice v Nastavení) —'
+                                  : '— nemáte koho upravovat —';
   return `<div class="panel"><h2>➕ Nová nepřítomnost</h2><div class="body">
     <div class="formrow">
       <div class="f grow"><label>Zaměstnanec <span class="req">*</span></label>
-        <select id="fa-person">${noPeople?'<option value="">— přidejte lidi v Nastavení —</option>':''}${opts}</select></div>
+        <select id="fa-person" ${!canEditAll()?'disabled':''}>${noPeople?`<option value="">${emptyMsg}</option>`:''}${opts}</select></div>
       <div class="f"><label>Od <span class="req">*</span></label><input type="date" id="fa-from" value="${form.from}"></div>
       <div class="f"><label>Do <span class="req">*</span></label><input type="date" id="fa-to" value="${form.to}"></div>
       <div class="f dcount"><label>Počet dnů <span class="req">*</span></label>
@@ -622,37 +631,6 @@ function formPanel(){
       <div class="f addbtn"><button class="btn-primary" id="fa-add" ${noPeople?'disabled':''}>Přidat</button></div>
     </div>
     ${formMsg?`<div class="formfoot"><span class="msg ${formMsgKind}">${esc(formMsg)}</span></div>`:''}
-  </div></div>`;
-}
-
-function peoplePanel(){
-  const rows = people.length ? people.map(p=>{
-    const st=vacStats(p.id);
-    const neg = st.remaining<0 ? 'neg' : '';
-    return `<tr>
-      <td class="nm">${esc(p.name)}</td>
-      <td><input class="proc" data-proc="${p.id}" value="${esc(p.process||'')}" placeholder="např. Montáž A"></td>
-      <td class="num">${st.planned}</td>
-      <td class="num"><b class="${neg}">${st.remaining}</b> <span class="of">/ ${DEFAULT_VACATION}</span></td>
-      <td class="ta-c"><button class="rm" data-del-person="${p.id}" data-name="${esc(p.name)}" title="Odebrat">✕</button></td>
-    </tr>`;
-  }).join('') : `<tr><td colspan="5" class="tempty">Zatím žádní lidé. Přidejte prvního níže.</td></tr>`;
-  return `<div class="panel"><h2>👥 Naši lidé <span class="right">${people.length} osob</span></h2><div class="body">
-    <div class="addperson">
-      <input type="text" id="np-name" value="${esc(newPerson)}" placeholder="Jméno a příjmení (např. Martin Dobeš)">
-      <input type="text" id="np-proc" value="${esc(newProc)}" placeholder="Zařazení / úsek (nepovinné)">
-      <button class="btn-primary" id="np-add">Přidat</button>
-    </div>
-    <div class="statsyear">
-      <span>Zůstatek dovolené za rok</span>
-      <button class="nav sm" id="sy-prev" title="Předchozí rok">‹</button>
-      <b>${statsYear}</b>
-      <button class="nav sm" id="sy-next" title="Další rok">›</button>
-    </div>
-    <div class="tblwrap"><table class="ptable">
-      <thead><tr><th>Jméno</th><th>Zařazení / úsek</th><th class="num">Rozplánováno</th><th class="num">Zůstatek</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
   </div></div>`;
 }
 
@@ -690,8 +668,8 @@ function buildYear(y){
 }
 /* Statistika dovolené osoby za zvolený rok: kolik má rozplánováno a kolik zbývá.
    Počítají se jen dny typu „Dovolená" a jen pracovní dny (bez víkendů a svátků). */
-function vacStats(personId){
-  const y=statsYear, yStart=iso(y,0,1), yEnd=iso(y,11,31);
+function vacStats(personId, year){
+  const y=year||calYear, yStart=iso(y,0,1), yEnd=iso(y,11,31);
   let planned=0;
   absences.forEach(a=>{
     if(a.personId!==personId || a.type!=='Dovolená' || !a.from || !a.to) return;
@@ -729,7 +707,8 @@ function absenceMap(startDs,endDs){
 
 function calendarView(){
   if(!people.length){
-    return `<div class="cal-wrap"><div class="empty-cal">Zatím nemáte žádné lidi. Přidejte je v záložce <b>⚙️ Nastavení</b>.</div></div>`;
+    const sl=SECTIONS.find(s=>s.key===section);
+    return `<div class="cal-wrap"><div class="empty-cal">V sekci <b>${esc(sl?sl.label:'')}</b> zatím nejsou žádní lidé.<br>Přiřaď lidem pozice této sekce v modulu <b>⚙️ Nastavení</b>.</div></div>`;
   }
   const mob=window.innerWidth<=680;
   const NC=mob?110:180, DC=mob?30:34;
@@ -786,20 +765,23 @@ function dialogView(){
       <div class="info"><b>${esc(a.type)}</b>
         <div>${dCz(a.from)} – ${dCz(a.to)}${a.days?(' · '+dayLabel(a.days)):''}${a.note?(' · '+esc(a.note)):''}</div>
         <div>zadal(a): ${esc(a.createdBy||'—')}</div></div>
-      <button class="btn-danger" data-del-abs="${a.id}">Smazat</button>
+      ${dlg.readonly?'':`<button class="btn-danger" data-del-abs="${a.id}">Smazat</button>`}
     </div>`;
   }).join('') : `<p style="color:var(--muted);margin:0 0 4px">Na tento den zde není žádná nepřítomnost.</p>`;
+  const roNote = dlg.readonly ? `<p style="margin:10px 0 0;color:var(--muted);font-size:12px">Tuto osobu můžete jen prohlížet. Upravovat můžete jen svoji nepřítomnost.</p>` : '';
   const holNote = dlg.holiday ? `<p style="margin:10px 0 0;color:#6d3fc4"><b>Státní svátek:</b> ${esc(dlg.holiday)}</p>` : '';
   return `<div class="dlg-wrap" id="dlg-wrap"><div class="dlg">
     <div class="t">${esc(dlg.personName)} · ${dCz(dlg.dateStr)}<button class="x" id="dlg-x">✕</button></div>
-    <div class="c">${items}${holNote}</div>
+    <div class="c">${items}${holNote}${roNote}</div>
     <div class="b"><button class="btn-ghost" id="dlg-close">Zavřít</button></div>
   </div></div>`;
 }
 
 function editView(){
   const e=edit;
-  const opts=people.map(p=>`<option value="${p.id}" ${e.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
+  // koho smím vybrat: Approver+ kohokoliv, ostatní jen sebe (vč. původní osoby záznamu)
+  const selectable = canEditAll() ? allUsers : allUsers.filter(p=>p.id===(me&&me.uid)||p.id===e.personId);
+  const opts=selectable.map(p=>`<option value="${p.id}" ${e.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
   const tOpts=TYPES.map(t=>`<option value="${esc(t.k)}" ${e.type===t.k?'selected':''}>${esc(t.k)}</option>`).join('');
   return `<div class="dlg-wrap" id="ed-wrap"><div class="dlg dlg-lg">
     <div class="t">✏️ Úprava nepřítomnosti<button class="x" id="ed-x">✕</button></div>
@@ -864,9 +846,11 @@ function wireLogin(){
 function wireApp(){
   document.getElementById('btn-logout')?.addEventListener('click',()=>signOut(auth));
 
-  // přepínání záložek Přehled / Nastavení
-  document.querySelectorAll('[data-tab]').forEach(b=>
-    b.addEventListener('click',()=>{ page=b.getAttribute('data-tab'); render(); }));
+  // přepínání sekcí (Engineering / Maintenance / Toolsetters)
+  document.querySelectorAll('[data-section]').forEach(b=>
+    b.addEventListener('click',()=>{
+      section=b.getAttribute('data-section'); form.personId=''; alignedYear=null; render();
+    }));
 
   // formulář nepřítomnosti – průběžně držíme stav, ať se při živé aktualizaci nic neztratí
   const bind=(id,key,ev='input')=>{const el=document.getElementById(id);
@@ -880,24 +864,6 @@ function wireApp(){
     if(el) el.addEventListener('change',()=>{ form[id==='fa-from'?'from':'to']=el.value; recompDays(); });});
   daysEl?.addEventListener('input',()=>{ form.days=parseFloat(String(daysEl.value).replace(',','.'))||0; });
   document.getElementById('fa-add')?.addEventListener('click',()=>addAbsence());
-
-  // lidé (Nastavení)
-  const np=document.getElementById('np-name');
-  if(np) np.addEventListener('input',()=>{newPerson=np.value;});
-  const npp=document.getElementById('np-proc');
-  if(npp) npp.addEventListener('input',()=>{newProc=npp.value;});
-  document.getElementById('np-add')?.addEventListener('click',()=>addPerson(newPerson,newProc));
-  np?.addEventListener('keydown',e=>{if(e.key==='Enter')addPerson(newPerson,newProc);});
-  npp?.addEventListener('keydown',e=>{if(e.key==='Enter')addPerson(newPerson,newProc);});
-  document.querySelectorAll('[data-del-person]').forEach(b=>
-    b.addEventListener('click',()=>removePerson(b.getAttribute('data-del-person'),b.getAttribute('data-name'))));
-  // úprava zařazení / úseku u osoby (uloží se po opuštění pole)
-  document.querySelectorAll('[data-proc]').forEach(inp=>
-    inp.addEventListener('change',()=>updatePersonProcess(inp.getAttribute('data-proc'), inp.value)));
-
-  // rok pro výpočet zůstatku dovolené (v Nastavení)
-  document.getElementById('sy-prev')?.addEventListener('click',()=>{statsYear--;render();});
-  document.getElementById('sy-next')?.addEventListener('click',()=>{statsYear++;render();});
 
   // rok kalendáře + skok na dnešek
   document.getElementById('yr-prev')?.addEventListener('click',()=>{calYear--;alignedYear=null;calScrollL=0;render();});
@@ -946,11 +912,20 @@ function wireApp(){
 }
 
 /* Klik na políčko dne:
-   - je-li tam nepřítomnost → otevře editační okno (úprava / smazání),
-   - jinak → předvyplní hlavní formulář na tento den. */
+   - mám-li právo na tuto osobu a je tam nepřítomnost → editační okno (úprava / smazání),
+   - mám-li právo a je prázdno → předvyplní hlavní formulář na tento den,
+   - nemám-li právo (jen prohlížení) → otevře náhledové okno bez možnosti úprav. */
 function openDay(personId,dateStr){
   const p=people.find(x=>x.id===personId); if(!p) return;
   const items=absences.filter(a=>a.personId===personId && a.from<=dateStr && a.to>=dateStr);
+  const mayEdit=canEditPerson(personId);
+  if(!mayEdit){
+    // jen prohlížení – náhledové okno (bez mazání a úprav)
+    const hol=holsOf(+dateStr.slice(0,4)).get(dateStr)||'';
+    dlg={personName:p.name, dateStr, items, holiday:hol, readonly:true};
+    render();
+    return;
+  }
   if(items.length){
     const a=items[items.length-1];   // zobrazená nepřítomnost (poslední zapsaná vyhrává)
     edit={id:a.id, personId:a.personId, from:a.from, to:a.to, type:a.type,
