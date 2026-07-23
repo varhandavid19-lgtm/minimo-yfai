@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nastavení · minimo · YFAI</title>
+<link rel="stylesheet" href="header.css">
 <style>
   :root{
     --navy-1:#0f2f5f; --navy-2:#1b4b8f; --panel:#1e4c8a;
@@ -26,14 +27,6 @@
   .chips{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .chip{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:20px;padding:4px 11px;font-size:11px;white-space:nowrap}
   .btn-logout{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:20px;font-size:11px;padding:5px 13px;text-decoration:none}
-  .mm-wrap{position:relative;flex:none}
-  .mm-btn{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:18px;line-height:1;width:40px;height:40px;border-radius:10px;padding:0;cursor:pointer}
-  .mm-btn:hover{background:rgba(255,255,255,.28)}
-  .mm-panel{position:absolute;top:48px;left:0;z-index:200;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.24);min-width:236px;padding:6px}
-  .mm-panel .mm-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;padding:8px 10px 5px}
-  .mm-panel a{display:flex;gap:9px;align-items:center;padding:9px 10px;border-radius:8px;text-decoration:none;color:var(--text);font-size:13.5px;font-weight:600}
-  .mm-panel a:hover{background:#eef3fb}
-  .mm-panel a.cur{background:#eef3fb;color:var(--navy-1)}
   @media(max-width:640px){header h1{font-size:18px}.brand svg{height:40px}}
 
   main{padding:22px 20px 46px;max-width:1000px;margin:0 auto}
@@ -183,24 +176,8 @@ function view(){
     <div class="t"><div>${esc(l.desc)}</div></div>
   </div>`).join('');
 
-  return `<header>
-    <div class="mm-wrap">
-      <button class="mm-btn" id="mm-btn" aria-label="Přepnout modul" title="Přepnout modul">☰</button>
-      <nav class="mm-panel" id="mm-panel" hidden>
-        <div class="mm-h">Přepnout modul</div>
-        <a href="index.html">🏠 Portál</a>
-        <a href="nakup.html">🛒 Nákupní požadavky</a>
-        <a href="dovolenky.html">🌴 Dovolenky</a>
-        <a class="cur" href="nastaveni.html">⚙️ Nastavení</a>
-      </nav>
-    </div>
-    <div class="brand">${logoSvg()}</div>
-    <div><h1>Nastavení · uživatelé</h1><div class="sub">Správa účtů a levelů · minimo · YFAI</div></div>
-    <div class="chips">
-      <span class="chip">${esc(me.email)}</span>
-      <button class="btn-logout" id="btn-logout">Odhlásit</button>
-    </div>
-  </header>
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Nastavení',cur:'nastaveni',user:esc(me.email),level:'Super Admin',logoutAttr:'id="btn-logout"'}) : '';
+  return `${uh}
   <main>
     <div class="panel"><h2>👥 Uživatelé <span class="right">${users.length} účtů</span></h2><div class="body">
       <div class="tblwrap"><table>
@@ -232,14 +209,6 @@ function renderToast(){
   const el=document.createElement('div'); el.className='toast '+toastKind; el.textContent=toastMsg; document.body.appendChild(el);
 }
 </script>
-<script>
-/* Přepínač modulů (☰) – nezávislý na aplikaci, přežije překreslení. */
-document.addEventListener('click',function(e){
-  var p=document.getElementById('mm-panel'); if(!p) return;
-  if(e.target.closest('#mm-btn')){ e.stopPropagation(); p.hidden=!p.hidden; return; }
-  if(!e.target.closest('#mm-panel')) p.hidden=true;
-});
-document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var p=document.getElementById('mm-panel'); if(p) p.hidden=true; } });
-</script>
+<script src="header.js"></script>
 </body>
 </html>

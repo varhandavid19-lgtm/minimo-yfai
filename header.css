@@ -1,0 +1,62 @@
+/* ============================================================
+   Jednotná hlavička minimo · YFAI — sdílená všemi moduly.
+   Používá vlastní třídy uh-* / mm-* (nekoliduje se styly modulů).
+   ============================================================ */
+.uhdr{background:linear-gradient(90deg,#0f2f5f,#1b4b8f);color:#fff;padding:9px 16px;
+  display:flex;align-items:center;gap:14px;min-height:66px;position:relative;z-index:60}
+.uh-menuwrap{position:relative;flex:none}
+.uh-menu{background:#e9edf3;color:#16233a;border:1px solid #cfd8e6;width:48px;height:48px;
+  border-radius:12px;font-size:22px;line-height:1;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+.uh-menu:hover{background:#dbe3ef}
+.uh-brand{background:#fff;border-radius:8px;padding:6px 11px;display:flex;align-items:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.22);flex:none}
+.uh-brand svg{display:block;height:42px;width:auto}
+.uh-title{line-height:1.15;flex:none}
+.uh-title b{font-size:18px;font-weight:800;display:block;letter-spacing:-.2px}
+.uh-title span{font-size:12px;opacity:.82}
+.uh-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.uh-clock{background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.18);border-radius:12px;
+  padding:6px 15px;text-align:center;flex:none;min-width:138px}
+.uh-clock .t{font-size:25px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1px;line-height:1.05}
+.uh-clock .d{font-size:11px;opacity:.82;margin-top:1px}
+.uh-user{text-align:right;line-height:1.25;flex:none;max-width:230px}
+.uh-user .n{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uh-user .l{font-size:11px;opacity:.85;white-space:nowrap}
+.uh-lang{display:flex;gap:5px;flex:none}
+.uh-lang button{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);border-radius:7px;
+  padding:3px;cursor:pointer;line-height:0;opacity:.6;filter:grayscale(.5)}
+.uh-lang button.on{opacity:1;filter:none;background:rgba(255,255,255,.32);border-color:#fff}
+.uh-lang svg{display:block;border-radius:2px}
+.uh-logout{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;
+  border-radius:20px;font-size:12px;padding:8px 15px;cursor:pointer;flex:none;font-weight:600}
+.uh-logout:hover{background:rgba(255,255,255,.26)}
+
+/* rozbalovací menu modulů (kotva u tlačítka ☰) */
+.mm-panel{position:absolute;top:56px;left:0;z-index:200;background:#fff;border:1px solid #dde4ec;border-radius:12px;
+  box-shadow:0 16px 40px rgba(0,0,0,.26);min-width:260px;padding:6px;color:#16233a}
+.mm-panel .mm-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:#6b7a90;font-weight:700;padding:8px 10px 5px}
+.mm-panel a{display:flex;gap:9px;align-items:center;padding:10px 10px;border-radius:8px;text-decoration:none;color:#16233a;font-size:13.5px;font-weight:600}
+.mm-panel a:hover{background:#eef3fb}
+.mm-panel a.cur{background:#eef3fb;color:#0f2f5f}
+.mm-panel .mm-sep{height:1px;background:#eef1f5;margin:6px 4px}
+.mm-panel .mm-view{width:100%;text-align:left;background:#f4f6f9;border:1px solid #dde4ec;border-radius:8px;
+  padding:9px 10px;font-size:12.5px;font-weight:700;color:#41506b;cursor:pointer}
+.mm-panel .mm-view:hover{background:#eaeef4}
+
+/* ---- mobil ---- */
+@media(max-width:700px){
+  .uhdr{padding:7px 10px;gap:8px;min-height:0;flex-wrap:wrap}
+  .uh-title{display:none}
+  .uh-brand{padding:5px 8px}
+  .uh-brand svg{height:32px}
+  .uh-menu{width:42px;height:42px;font-size:20px}
+  .uh-right{gap:8px}
+  .uh-clock{min-width:0;padding:4px 10px}
+  .uh-clock .t{font-size:17px;letter-spacing:.5px}
+  .uh-clock .d{display:none}
+  .uh-user{max-width:100px}
+  .uh-user .n{font-size:11px}
+  .uh-user .l{font-size:10px}
+  .uh-logout{padding:6px 10px;font-size:11px}
+  .mm-panel{top:52px}
+}

@@ -1,0 +1,97 @@
+/* ============================================================
+   Jednotná hlavička minimo · YFAI — jedno místo pro vzhled i logiku.
+   window.uheaderHTML(opts) vrací HTML hlavičky (totožné ve všech modulech).
+   Chování (hodiny, menu, jazyk, mobil/PC) je nezávislé na modulech
+   a funguje i po překreslení stránky.
+   ============================================================ */
+(function(){
+  var LOGO = '<svg viewBox="0 0 300 138" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YFAI minimo">'
+    + '<defs><pattern id="yfaihdr" patternUnits="userSpaceOnUse" x="0" y="8" width="10" height="9.8">'
+    + '<rect x="0" y="0" width="10" height="5.9" fill="#1f66b5"/></pattern></defs>'
+    + '<text x="150" y="86" text-anchor="middle" fill="url(#yfaihdr)" font-family="\'Arial Black\',Arial,sans-serif" '
+    + 'font-weight="900" font-size="108" textLength="244" lengthAdjust="spacingAndGlyphs">YFAI</text>'
+    + '<text x="150" y="128" text-anchor="middle" fill="#111418" font-family="Arial,Helvetica,sans-serif" '
+    + 'font-weight="700" font-size="42" letter-spacing="1" textLength="246" lengthAdjust="spacingAndGlyphs">minimo</text></svg>';
+  var CZ = '<svg viewBox="0 0 60 40" width="24" height="16"><rect width="60" height="20" fill="#fff"/>'
+    + '<rect y="20" width="60" height="20" fill="#d7141a"/><path d="M0 0 30 20 0 40Z" fill="#11457e"/></svg>';
+  var GB = '<svg viewBox="0 0 60 40" width="24" height="16"><rect width="60" height="40" fill="#012169"/>'
+    + '<path d="M0 0 60 40M60 0 0 40" stroke="#fff" stroke-width="8"/>'
+    + '<path d="M0 0 60 40M60 0 0 40" stroke="#c8102e" stroke-width="4"/>'
+    + '<path d="M30 0V40M0 20H60" stroke="#fff" stroke-width="12"/>'
+    + '<path d="M30 0V40M0 20H60" stroke="#c8102e" stroke-width="6"/></svg>';
+
+  window.uheaderHTML = function(o){
+    o = o || {};
+    function link(href, ico, label, key){
+      return '<a class="'+(o.cur===key?'cur':'')+'" href="'+href+'">'+ico+' '+label+'</a>';
+    }
+    return '<header class="uhdr">'
+      + '<div class="uh-menuwrap">'
+        + '<button class="uh-menu" id="mm-btn" aria-label="Menu modulů" title="Moduly">☰</button>'
+        + '<nav class="mm-panel" id="mm-panel" hidden>'
+          + '<div class="mm-h">Přepnout modul</div>'
+          + link('index.html','🏠','Portál','portal')
+          + link('nakup.html','🛒','Nákupní požadavky','nakup')
+          + link('dovolenky.html','🌴','Dovolenky','dovolenky')
+          + link('nastaveni.html','⚙️','Nastavení','nastaveni')
+          + '<div class="mm-sep"></div>'
+          + '<button class="mm-view">🖥️ Zobrazit jako na počítači</button>'
+        + '</nav>'
+      + '</div>'
+      + '<div class="uh-brand">'+LOGO+'</div>'
+      + '<div class="uh-title"><b>minimo · YFAI</b><span>'+(o.module||'')+'</span></div>'
+      + '<div class="uh-right">'
+        + '<div class="uh-clock" id="uh-clock"><div class="t">--:--:--</div><div class="d">—</div></div>'
+        + '<div class="uh-user"><div class="n">'+(o.user||'')+'</div><div class="l">'+(o.level||'')+'</div></div>'
+        + '<div class="uh-lang"><button data-lang="cs" title="Čeština">'+CZ+'</button>'
+          + '<button data-lang="en" title="English">'+GB+'</button></div>'
+        + '<button class="uh-logout" '+(o.logoutAttr||'id="btn-logout"')+'>Odhlásit</button>'
+      + '</div>'
+    + '</header>';
+  };
+
+  /* ---------- chování ---------- */
+  var vp = document.querySelector('meta[name="viewport"]');
+  function applyView(){
+    var v = localStorage.getItem('minimo-view') || 'auto';
+    if(vp) vp.setAttribute('content', v==='desktop' ? 'width=1200' : 'width=device-width, initial-scale=1');
+    document.querySelectorAll('.mm-view').forEach(function(b){
+      b.textContent = (v==='desktop') ? '📱 Přepnout na mobilní zobrazení' : '🖥️ Zobrazit jako na počítači';
+    });
+  }
+  function applyLang(){
+    var l = localStorage.getItem('minimo-lang') || 'cs';
+    document.querySelectorAll('.uh-lang button').forEach(function(b){
+      b.classList.toggle('on', b.getAttribute('data-lang')===l);
+    });
+  }
+  function tick(){
+    var el = document.getElementById('uh-clock'); if(!el) return;
+    var d = new Date(), p = function(n){ return (n<10?'0':'')+n; };
+    var t = el.querySelector('.t'), dd = el.querySelector('.d');
+    if(t) t.textContent = p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+    if(dd) dd.textContent = d.toLocaleDateString('cs-CZ',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'});
+  }
+  function refresh(){ tick(); applyLang(); }
+  setInterval(refresh, 1000);
+  // brzké obnovení, aby hodiny naskočily hned po vykreslení hlavičky (ne až po vteřině)
+  [150,350,650,1000,1600].forEach(function(ms){ setTimeout(refresh, ms); });
+
+  document.addEventListener('click', function(e){
+    var panel = document.getElementById('mm-panel');
+    if(e.target.closest('#mm-btn')){ e.stopPropagation(); if(panel){ applyView(); panel.hidden = !panel.hidden; } return; }
+    var lb = e.target.closest('.uh-lang button');
+    if(lb){ localStorage.setItem('minimo-lang', lb.getAttribute('data-lang')); applyLang(); return; }
+    if(e.target.closest('.mm-view')){
+      var cur = localStorage.getItem('minimo-view') || 'auto';
+      localStorage.setItem('minimo-view', cur==='desktop' ? 'auto' : 'desktop'); applyView(); return;
+    }
+    if(panel && !e.target.closest('#mm-panel')) panel.hidden = true;
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape'){ var p=document.getElementById('mm-panel'); if(p) p.hidden=true; }
+  });
+
+  applyView(); refresh();
+  document.addEventListener('DOMContentLoaded', function(){ applyView(); refresh(); });
+})();

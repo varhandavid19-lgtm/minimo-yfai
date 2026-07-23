@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>minimo · YFAI</title>
+<link rel="stylesheet" href="header.css">
 <style>
   :root{
     --navy-1:#0f2f5f; --navy-2:#1b4b8f;
@@ -178,14 +179,9 @@ function appView(){
          <span class="ds">${esc(m.ds)}</span>
          <span class="badge">Připravujeme</span>
        </div>`).join('');
-  return `<header>
-    <div class="brand">${logoSvg()}</div>
-    <div><h1>minimo · YFAI</h1><div class="sub">Firemní portál aplikací</div></div>
-    <div class="chips">
-      <span class="chip">${esc(me.email)}</span>
-      <button class="btn-logout" id="btn-logout">Odhlásit</button>
-    </div>
-  </header>
+  const LEVEL_LABEL={basic:'Basic',warehouse:'Warehouse',approver:'Approver',wadmin:'Warehouse Admin',superadmin:'Super Admin'};
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Portál',cur:'portal',user:esc(me.email),level:LEVEL_LABEL[myLevel]||'',logoutAttr:'id="btn-logout"'}) : '';
+  return `${uh}
   <main>
     <div class="intro"><h2>Vyberte aplikaci</h2><p>Přihlášení platí pro všechny moduly současně.</p></div>
     <div class="tiles">${tiles}</div>
@@ -213,5 +209,6 @@ function loginErrMsg(code){
   return m[code]||('Přihlášení se nezdařilo ('+code+').');
 }
 </script>
+<script src="header.js"></script>
 </body>
 </html>
