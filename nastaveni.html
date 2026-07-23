@@ -180,6 +180,10 @@ function view(){
   return `${uh}
   <main>
     <div class="panel"><h2>👥 Uživatelé <span class="right">${users.length} účtů</span></h2><div class="body">
+      <p style="margin:0 0 12px;font-size:12px;color:var(--muted);background:#eef3fb;border:1px solid #d6e2f3;border-radius:8px;padding:9px 11px">
+        ℹ️ Účet se tu objeví, až se jím člověk <b>poprvé přihlásí</b> do portálu (profil se vytvoří automaticky).
+        Účet vytvořený jen ve Firebase&nbsp;Authentication se zde nezobrazí, dokud se přes něj někdo nepřihlásí.
+      </p>
       <div class="tblwrap"><table>
         <thead><tr><th>Jméno</th><th>Úsek / tým</th><th>Aktuální level</th><th>Změnit level</th><th>Účet (uid)</th></tr></thead>
         <tbody>${rows}</tbody>
