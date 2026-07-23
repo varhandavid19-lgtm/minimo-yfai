@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dovolenky — YFAI</title>
+<title>Plánování směn a přítomnosti — YFAI</title>
 <link rel="stylesheet" href="header.css">
 <style>
   :root{
@@ -562,8 +562,8 @@ function positionTodayBand(){
 function loginView(){
   return `<div class="login-wrap"><form class="login" id="loginForm">
     <div class="brand">${logoSvg()}</div>
-    <h2>Dovolenky</h2>
-    <p class="s">Evidence nepřítomnosti · YFAI</p>
+    <h2>Plánování směn a přítomnosti</h2>
+    <p class="s">YFAI</p>
     ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
     <div class="f"><label>E-mail</label><input type="email" id="li-email" autocomplete="username" required></div>
     <div class="f"><label>Heslo</label><input type="password" id="li-pass" autocomplete="current-password" required></div>
@@ -600,7 +600,7 @@ function settingsView(){
 }
 
 function headerView(){
-  return window.uheaderHTML ? window.uheaderHTML({module:'Dovolenky',cur:'dovolenky',user:esc(me.email),level:'',logoutAttr:'id="btn-logout"'}) : '';
+  return window.uheaderHTML ? window.uheaderHTML({module:'Plánování směn a přítomnosti',cur:'dovolenky',user:esc(me.email),level:'',logoutAttr:'id="btn-logout"'}) : '';
 }
 
 function formPanel(){

@@ -32,7 +32,7 @@
           + '<div class="mm-h">Přepnout modul</div>'
           + link('index.html','🏠','Portál','portal')
           + link('nakup.html','🛒','Nákupní požadavky','nakup')
-          + link('dovolenky.html','🌴','Dovolenky','dovolenky')
+          + link('dovolenky.html','🗓️','Plánování směn','dovolenky')
           + link('nastaveni.html','⚙️','Nastavení','nastaveni')
           + '<div class="mm-sep"></div>'
           + '<button class="mm-view">🖥️ Zobrazit jako na počítači</button>'
