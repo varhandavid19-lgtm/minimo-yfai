@@ -51,6 +51,10 @@
   td.nm{font-weight:600;white-space:nowrap}
   td.uid{font-size:10.5px;color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace}
   .me-tag{font-size:10px;color:#2563a8;font-weight:700;margin-left:6px}
+  td.ta-c{text-align:center}
+  .udel{background:#fdecea;border:1px solid #f5cfca;color:var(--red);border-radius:8px;
+    font-size:14px;line-height:1;padding:5px 9px;cursor:pointer;font-weight:700}
+  .udel:hover{background:var(--red);color:#fff}
 
   .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;
     background:linear-gradient(160deg,#0f2f5f,#2a5ea3)}
@@ -69,7 +73,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, onSnapshot, updateDoc }
+import { getFirestore, collection, doc, getDoc, onSnapshot, updateDoc, deleteDoc }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -141,6 +145,14 @@ async function setLevel(uid, level){
     toast('Level uložen.','ok');
   }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
 }
+async function removeUser(uid, name){
+  if(uid===me.uid){ toast('Sebe nelze smazat.','err'); return; }
+  if(!confirm(`Smazat uživatele „${name}" ze seznamu?\n\nOdstraní se jeho profil a level. Přihlašovací účet ve Firebase Authentication tím NEZMIZÍ – když se znovu přihlásí, objeví se tu opět jako Basic. Pro úplné odebrání smaž účet i ve Firebase → Authentication.`)) return;
+  try{
+    await deleteDoc(doc(db,'users',uid));
+    toast('Uživatel smazán.','ok');
+  }catch(e){ toast('Nepodařilo se smazat: '+e.message,'err'); }
+}
 
 function render(){
   if(!ready){ return; }
@@ -162,14 +174,18 @@ function view(){
     const lvl=levelOf(u);
     const opts=LEVELS.map(l=>`<option value="${l.key}" ${lvl===l.key?'selected':''}>${esc(l.label)}</option>`).join('');
     const meMark = u.uid===me.uid ? '<span class="me-tag">(vy)</span>' : '';
+    const delBtn = u.uid===me.uid
+      ? `<span class="uid" title="Sebe nelze smazat">—</span>`
+      : `<button class="udel" data-del="${u.uid}" data-name="${esc(u.name||u.uid)}" title="Smazat uživatele">✕</button>`;
     return `<tr>
       <td class="nm">${esc(u.name||'—')}${meMark}</td>
       <td>${esc(u.team||'—')}</td>
       <td>${badge(lvl)}</td>
       <td><select data-uid="${u.uid}">${opts}</select></td>
       <td class="uid">${esc(u.uid)}</td>
+      <td class="ta-c">${delBtn}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:22px">Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.</td></tr>`;
+  }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:22px">Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.</td></tr>`;
 
   const legend = LEVELS.map(l=>`<div class="lvl">
     <span class="b">${badge(l.key)}</span>
@@ -185,7 +201,7 @@ function view(){
         Účet vytvořený jen ve Firebase&nbsp;Authentication se zde nezobrazí, dokud se přes něj někdo nepřihlásí.
       </p>
       <div class="tblwrap"><table>
-        <thead><tr><th>Jméno</th><th>Úsek / tým</th><th>Aktuální level</th><th>Změnit level</th><th>Účet (uid)</th></tr></thead>
+        <thead><tr><th>Jméno</th><th>Úsek / tým</th><th>Aktuální level</th><th>Změnit level</th><th>Účet (uid)</th><th>Smazat</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </div></div>
@@ -204,6 +220,8 @@ function wire(){
   document.getElementById('btn-logout')?.addEventListener('click',()=>signOut(auth));
   document.querySelectorAll('select[data-uid]').forEach(sel=>
     sel.addEventListener('change',()=>setLevel(sel.getAttribute('data-uid'), sel.value)));
+  document.querySelectorAll('button[data-del]').forEach(btn=>
+    btn.addEventListener('click',()=>removeUser(btn.getAttribute('data-del'), btn.getAttribute('data-name'))));
 }
 
 function toast(m,k=''){ toastMsg=m; toastKind=k; renderToast(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;renderToast();},3000); }
