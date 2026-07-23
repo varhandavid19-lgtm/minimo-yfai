@@ -313,14 +313,21 @@ const inSection = (u,key) => (u.positions||[]).some(p=>POS2SECTION[p]===key);
 const LEVEL_RANK = {basic:1,warehouse:2,approver:3,wadmin:4,superadmin:5};
 const ROLE2LEVEL = {zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
 const levelOf = d => (d && d.level && LEVEL_RANK[d.level]) ? d.level : ((d && ROLE2LEVEL[d.role]) || 'basic');
-const canEditAll = () => (LEVEL_RANK[myLevel]||1) >= 3;                 // Approver a výše mění všechny
-const canEditPerson = id => canEditAll() || id===(me&&me.uid);          // ostatní jen sebe
+/* Práva v Plánování – pro každou sekci 4 stavy. Nejsou-li u člověka nastavená,
+   odvodí se z jeho levelu (Approver a výše = vše, ostatní = jen sebe). Nastavují se v Nastavení. */
+const PERM_BY = {none:'Skryté', read:'Jen číst', self:'Zapisovat jen sebe', all:'Zapisovat všechny'};
+const defaultPerm = level => (LEVEL_RANK[level]||1) >= 3 ? 'all' : 'self';
+const resolvePerm = (u, sectionKey) => { const p=u&&u.perms&&u.perms[sectionKey];
+  return (p && PERM_BY[p]) ? p : defaultPerm(levelOf(u)); };
+const curPerm = () => resolvePerm(myDoc, section);            // právo přihlášeného v aktuální sekci
+const canEditAll = () => curPerm()==='all';                  // smí upravovat kohokoli v sekci
+const canEditPerson = id => { const pm=curPerm(); return pm==='all' || (pm==='self' && id===(me&&me.uid)); };
 
 /* ---------- stav aplikace ---------- */
 let me=null;               // přihlášený uživatel {email, uid}
 let allUsers=[];           // všichni lidé z centrálního Nastavení (users)
 let people=[];             // lidé zobrazení v aktuální sekci (počítá se v render)
-let myLevel='basic';       // level přihlášeného (kvůli právům)
+let myDoc=null;            // záznam přihlášeného (level + práva)
 let section='engineering'; // aktivní sekce
 let absences=[];           // nepřítomnosti
 const _now0=new Date();
@@ -409,14 +416,14 @@ onAuthStateChanged(auth, (user)=>{
 function teardown(){
   if(unsubPeople){unsubPeople();unsubPeople=null;}
   if(unsubAbs){unsubAbs();unsubAbs=null;}
-  allUsers=[]; people=[]; absences=[];
+  allUsers=[]; people=[]; absences=[]; myDoc=null;
 }
 function subscribe(){
   // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
   unsubPeople = onSnapshot(collection(db,'users'),
     s=>{ allUsers=s.docs.map(d=>{const x=d.data();
-           return {id:d.id, name:x.name||d.id, positions:x.positions||[], level:x.level, role:x.role};});
-         const my=allUsers.find(u=>u.id===me.uid); myLevel = my ? levelOf(my) : 'basic';
+           return {id:d.id, name:x.name||d.id, positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}};});
+         myDoc = allUsers.find(u=>u.id===me.uid) || null;
          render(); },
     e=>toast('Chyba načítání lidí: '+e.message,'err'));
   unsubAbs = onSnapshot(collection(db,'absences'),
@@ -533,6 +540,9 @@ function render(){
   const c=document.querySelector('.cal-wrap');
   if(c){ calScrollL=c.scrollLeft; calScrollT=c.scrollTop; }
   if(!me){ appEl.innerHTML=loginView(); wireLogin(); return; }
+  // sekce, které přihlášený vidí (bez těch se stavem „Skryté")
+  const visible = SECTIONS.filter(s=>resolvePerm(myDoc,s.key)!=='none');
+  if(visible.length && !visible.some(s=>s.key===section)) section=visible[0].key;
   // lidé aktuální sekce (podle přiřazených pozic v Nastavení)
   people = allUsers.filter(u=>inSection(u,section)).sort(bySurname);
   appEl.innerHTML = appView();
@@ -584,6 +594,11 @@ function loginView(){
 }
 
 function appView(){
+  const visible = SECTIONS.filter(s=>resolvePerm(myDoc,s.key)!=='none');
+  if(!visible.length){
+    return `${headerView()}<main><div class="empty-cal" style="margin-top:20px">
+      Nemáte přístup k žádné sekci plánování.<br>Obraťte se prosím na správce (modul ⚙️ Nastavení).</div></main>`;
+  }
   return `${headerView()}
   ${tabBar()}
   <main>
@@ -598,11 +613,13 @@ function appView(){
 }
 
 function tabBar(){
+  const visible = SECTIONS.filter(s=>resolvePerm(myDoc,s.key)!=='none');
   const t=(s)=>`<button class="tab ${section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
-  const permNote = canEditAll()
-    ? 'Můžete upravovat všechny.'
-    : 'Můžete upravovat jen svoji nepřítomnost (ostatní jen prohlížet).';
-  return `<div class="tabbar">${SECTIONS.map(t).join('')}<span class="tb-note">${permNote}</span></div>`;
+  const pm=curPerm();
+  const permNote = pm==='all' ? 'V této sekci můžete upravovat všechny.'
+    : pm==='self' ? 'Zde můžete upravovat jen svoji nepřítomnost (ostatní jen prohlížet).'
+    : 'Tuto sekci můžete jen prohlížet.';
+  return `<div class="tabbar">${visible.map(t).join('')}<span class="tb-note">${permNote}</span></div>`;
 }
 
 function headerView(){
@@ -610,8 +627,14 @@ function headerView(){
 }
 
 function formPanel(){
-  // koho smím zadávat: Approver+ všechny v sekci, ostatní jen sebe
-  const editable = canEditAll() ? people : people.filter(p=>p.id===(me&&me.uid));
+  const pm=curPerm();
+  if(pm==='read'){
+    return `<div class="panel"><h2>➕ Nová nepřítomnost</h2><div class="body">
+      <p style="margin:0;color:var(--muted)">V této sekci máte právo <b>jen prohlížet</b> – zadávat nepřítomnosti tu nemůžete.</p>
+    </div></div>`;
+  }
+  // koho smím zadávat: „Zapisovat všechny" → celá sekce, „jen sebe" → jen sebe
+  const editable = pm==='all' ? people : people.filter(p=>p.id===(me&&me.uid));
   if((!form.personId || !editable.some(p=>p.id===form.personId)) && editable.length) form.personId=editable[0].id;
   const opts=editable.map(p=>`<option value="${p.id}" ${form.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
   const tOpts=TYPES.map(t=>`<option value="${esc(t.k)}" ${form.type===t.k?'selected':''}>${esc(t.k)}</option>`).join('');

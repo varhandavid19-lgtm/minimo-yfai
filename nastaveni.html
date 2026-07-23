@@ -74,6 +74,10 @@
   .dlg .fld label{display:block;font-size:12px;font-weight:700;color:#41506b;margin-bottom:5px}
   .dlg .fld select{width:100%}
   .dlg .hintx{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .perms{display:flex;flex-direction:column;gap:7px}
+  .permrow{display:flex;align-items:center;gap:10px}
+  .permrow .permlbl{flex:0 0 118px;font-size:12.5px;font-weight:700;color:#41506b}
+  .permrow select{flex:1}
   .dlg .b{padding:12px 16px;border-top:1px solid var(--line);background:#fafbfd;display:flex;gap:8px;justify-content:flex-end}
   .btn-primary{background:var(--navy-2);color:#fff;font-weight:700;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer}
   .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
@@ -135,6 +139,18 @@ const LEVEL_BY = Object.fromEntries(LEVELS.map(l=>[l.key,l]));
 const ROLE2LEVEL = {zadavatel:'basic', skladnik:'warehouse', schvalovatel:'approver', admin:'superadmin'};
 const LEVEL2ROLE = {basic:'zadavatel', warehouse:'skladnik', approver:'schvalovatel', wadmin:'admin', superadmin:'admin'};
 const levelOf = d => (d && d.level && LEVEL_BY[d.level]) ? d.level : ((d && ROLE2LEVEL[d.role]) || 'basic');
+const rankOf = key => (LEVEL_BY[key]||LEVEL_BY.basic).rank;
+
+/* ===== Práva v modulu Plánování (pro každou sekci zvlášť) =====
+   4 stavy + „výchozí". Výchozí se odvodí z levelu (Approver a výše = vše, ostatní = jen sebe). */
+const PERM_STATES = [
+  {key:'none', label:'Skryté'},
+  {key:'read', label:'Jen číst'},
+  {key:'self', label:'Zapisovat jen sebe'},
+  {key:'all',  label:'Zapisovat všechny'},
+];
+const PERM_BY = Object.fromEntries(PERM_STATES.map(p=>[p.key,p]));
+const defaultPerm = level => rankOf(level) >= 3 ? 'all' : 'self';
 
 /* ===== Sekce a pozice (odpovědnosti) ===== */
 const SECTIONS = [
@@ -180,6 +196,15 @@ function editUserView(){
   const chips=u.positions.length
     ? u.positions.map(p=>`<span class="pchip rm">${esc(p)}<button data-rmpos="${esc(p)}" title="Odebrat">✕</button></span>`).join('')
     : '<span style="color:var(--muted);font-size:12px">Zatím žádné pozice</span>';
+  // Práva v Plánování – u každé sekce rozbalovací volba (výchozí + 4 stavy)
+  const dp = defaultPerm(u.level);
+  const permRows = SECTIONS.map(s=>{
+    const cur = u.perms[s.key] || '';   // '' = výchozí podle levelu
+    const opts = `<option value="" ${cur===''?'selected':''}>Výchozí (${esc(PERM_BY[dp].label)})</option>`
+      + PERM_STATES.map(p=>`<option value="${p.key}" ${cur===p.key?'selected':''}>${esc(p.label)}</option>`).join('');
+    return `<div class="permrow"><span class="permlbl">${esc(s.label)}</span>
+      <select class="ue-perm" data-sec="${s.key}">${opts}</select></div>`;
+  }).join('');
   return `<div class="dlg-wrap" id="ue-wrap"><div class="dlg dlg-lg">
     <div class="t">✏️ ${esc(u.name)}<button class="x" id="ue-x">✕</button></div>
     <div class="c">
@@ -188,6 +213,12 @@ function editUserView(){
         <div class="pchips">${chips}</div>
         <select id="ue-pos"><option value="">＋ přidat pozici…</option>${posOpts}</select>
         <div class="hintx">Vyber postupně všechny procesy/role, které člověk umí (klidně z více sekcí). Podle toho se pak hlídá zastupitelnost.</div>
+      </div>
+      <div class="fld" style="margin-top:14px"><label>Práva v Plánování směn a přítomnosti</label>
+        <div class="perms">${permRows}</div>
+        <div class="hintx"><b>Skryté</b> = sekci vůbec nevidí · <b>Jen číst</b> = vidí, needituje ·
+          <b>Zapisovat jen sebe</b> = vidí všechny, mění jen sebe · <b>Zapisovat všechny</b> = mění kohokoli v sekci.<br>
+          „Výchozí" se řídí levelem (Approver a výše = zapisovat všechny, ostatní = jen sebe).</div>
       </div>
     </div>
     <div class="b">
@@ -198,14 +229,15 @@ function editUserView(){
 }
 function openEdit(uid){
   const u=users.find(x=>x.uid===uid); if(!u) return;
-  uedit={uid, name:u.name||uid, level:levelOf(u), team:u.team||'', positions:(u.positions||[]).slice()};
+  uedit={uid, name:u.name||uid, level:levelOf(u), team:u.team||'',
+    positions:(u.positions||[]).slice(), perms:Object.assign({}, u.perms||{})};
   render();
 }
 async function saveUser(){
   const u=uedit;
   const sel=document.getElementById('ue-level'); if(sel) u.level=sel.value;
   try{
-    await updateDoc(doc(db,'users',u.uid), {level:u.level, role:LEVEL2ROLE[u.level], positions:u.positions});
+    await updateDoc(doc(db,'users',u.uid), {level:u.level, role:LEVEL2ROLE[u.level], positions:u.positions, perms:u.perms});
     uedit=null; toast('Uloženo.','ok'); render();
   }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
 }
@@ -290,7 +322,12 @@ function wire(){
     btn.addEventListener('click',()=>removeUser(btn.getAttribute('data-del'), btn.getAttribute('data-name'))));
 
   if(uedit){
-    document.getElementById('ue-level')?.addEventListener('change',e=>{uedit.level=e.target.value;});
+    // změna levelu překreslí okno, aby se přepsal text „Výchozí (…)" u práv
+    document.getElementById('ue-level')?.addEventListener('change',e=>{uedit.level=e.target.value;render();});
+    document.querySelectorAll('.ue-perm').forEach(sel=>sel.addEventListener('change',()=>{
+      const k=sel.getAttribute('data-sec');
+      if(sel.value) uedit.perms[k]=sel.value; else delete uedit.perms[k];   // '' = výchozí → klíč neukládáme
+    }));
     const psel=document.getElementById('ue-pos');
     psel?.addEventListener('change',()=>{
       const v=psel.value;
