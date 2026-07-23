@@ -162,6 +162,12 @@
   .today-band{position:absolute;top:0;bottom:0;z-index:2;pointer-events:none;
     box-shadow:inset 3px 0 0 #e8590c,inset -3px 0 0 #e8590c}
   .cal td.holmark{box-shadow:inset 0 3px 0 #9b6ff0}
+  /* nadpis úseku (skupiny pozic) v kalendáři */
+  .cal tr.grp td{background:#e7eefb;border-top:2px solid #c3d0e2;border-bottom:1px solid #c3d0e2;height:24px}
+  .cal tr.grp td.grp-name{position:sticky;left:0;z-index:3;text-align:left;padding:0 12px;font-size:11px;
+    font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy-2);white-space:nowrap;box-shadow:2px 0 0 #c3d0e2}
+  .cal tr.grp td.grp-name .grp-n{opacity:.6;font-weight:600}
+  .cal tr.grp:hover td.grp-name{background:#e7eefb}
 
   .empty-cal{padding:34px;text-align:center;color:var(--muted)}
 
@@ -359,9 +365,13 @@ let calScrollL=0, calScrollT=0;
 
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-/* Řazení lidí podle příjmení (poslední slovo jména), pak podle celého jména. */
+/* Příjmení = část e-mailu za tečkou (jan.novak@… → „novak"); bez tečky se vezme
+   poslední slovo jména. Podle něj se řadí lidé v tabulce i v seznamech. */
 const surname = n => {const p=String(n||'').trim().split(/\s+/);return p[p.length-1]||'';};
-const bySurname = (a,b)=> surname(a.name).localeCompare(surname(b.name),'cs') || String(a.name||'').localeCompare(String(b.name||''),'cs');
+const surnameKey = u => { const loc=String((u&&u.email)||'').split('@')[0];
+  if(loc.indexOf('.')>=0){ const parts=loc.split('.'); return parts[parts.length-1].toLowerCase(); }
+  return surname(u&&u.name).toLowerCase(); };
+const bySurname = (a,b)=> surnameKey(a).localeCompare(surnameKey(b),'cs') || String(a.name||'').localeCompare(String(b.name||''),'cs');
 function today(){const d=new Date();return iso(d.getFullYear(),d.getMonth(),d.getDate());}
 function iso(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 const dCz = ds => {const[y,m,d]=ds.split('-');return `${+d}. ${+m}. ${y}`;};
@@ -437,7 +447,7 @@ function subscribe(){
   // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
   unsubPeople = onSnapshot(collection(db,'users'),
     s=>{ allUsers=s.docs.map(d=>{const x=d.data();
-           return {id:d.id, name:x.name||d.id, positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}, modules:x.modules||{}};});
+           return {id:d.id, name:x.name||d.id, email:x.email||'', positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}, modules:x.modules||{}};});
          myDoc = allUsers.find(u=>u.id===me.uid) || null;
          render(); },
     e=>toast('Chyba načítání lidí: '+e.message,'err'));
@@ -764,7 +774,8 @@ function calendarView(){
       const tt=dd.holiday?`Svátek: ${dd.holiday}`:dCz(dd.ds);
       return `<th class="${cls}" title="${esc(tt)}"><span class="wd">${WD[dd.dow]}</span>${dd.d}</th>`;
     }).join('')}</tr>`;
-  const body=people.map(p=>{
+  // jeden řádek osoby (buňky dnů)
+  const personRow = p => {
     const pm=by[p.id]||{};
     const cells=allDays.map((dd,i)=>{
       const a=pm[dd.ds];
@@ -791,7 +802,17 @@ function calendarView(){
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
     return `<tr><td class="name" title="${esc(p.name)}">${esc(p.name)}</td>${cells}</tr>`;
-  }).join('');
+  };
+  // rozdělení tabulky po úsecích (pozicích) sekce: nadpis úseku + lidé abecedně pod ním
+  const secPositions=(SECTIONS.find(s=>s.key===section)||{}).positions||[];
+  const rowsHtml=[];
+  secPositions.forEach(pos=>{
+    const grp=people.filter(p=>(p.positions||[]).includes(pos)).sort(bySurname);
+    if(!grp.length) return;
+    rowsHtml.push(`<tr class="grp"><td class="name grp-name" title="${esc(pos)}">${esc(pos)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
+    grp.forEach(p=>rowsHtml.push(personRow(p)));
+  });
+  const body=rowsHtml.join('');
   return `<div class="cal-wrap"><div class="cal-inner"><table class="cal">${colgroup}<thead>${monthsRow}${daysRow}</thead><tbody>${body}</tbody></table><div class="today-band" style="display:none"></div></div></div>`;
 }
 
