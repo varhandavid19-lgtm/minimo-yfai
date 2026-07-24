@@ -44,6 +44,9 @@ service cloud.firestore {
     match /absences/{id} {
       allow read, write: if signedIn();
     }
+    match /shifts/{id} {
+      allow read, write: if signedIn();
+    }
 
   }
 }

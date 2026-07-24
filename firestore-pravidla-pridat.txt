@@ -1,23 +1,28 @@
 PRAVIDLA FIRESTORE — CO PŘIDAT DO PROJEKTU nakupni-pozadavky
 ============================================================
 
-Modul Dovolenky nově ukládá data do projektu nakupni-pozadavky, do kolekcí
-"people" a "absences". Do STÁVAJÍCÍCH pravidel Firestore je proto potřeba přidat
-tyto dva bloky (číst i zapisovat smí jen přihlášený uživatel):
+Modul Plánování směn a přítomnosti ukládá data do projektu nakupni-pozadavky,
+do kolekcí "absences" (nepřítomnosti) a nově "shifts" (naplánované směny).
+Do STÁVAJÍCÍCH pravidel Firestore je proto potřeba mít tyto bloky (číst i
+zapisovat smí jen přihlášený uživatel):
 
 Firebase konzole → projekt nakupni-pozadavky → Firestore Database → Rules.
-Dovnitř bloku  match /databases/{database}/documents { ... }  vlož:
+Dovnitř bloku  match /databases/{database}/documents { ... }  vlož (pokud tam
+už některý blok je, přidej jen ten, který chybí — typicky nově "shifts"):
 
-    // --- Dovolenky ---
+    // --- Plánování směn a přítomnosti ---
     match /people/{id} {
       allow read, write: if request.auth != null;
     }
     match /absences/{id} {
       allow read, write: if request.auth != null;
     }
+    match /shifts/{id} {
+      allow read, write: if request.auth != null;
+    }
 
 DŮLEŽITÉ:
-- Nemaž stávající pravidla pro requests / users / meta — jen přidej tyto dva
+- Nemaž stávající pravidla pro requests / users / meta — jen přidej chybějící
   bloky vedle nich, dovnitř stejného match /databases/{database}/documents { }.
 - Pokud tam máš na konci "catch-all" pravidlo, které vše ostatní zakazuje
   (match /{document=**} { allow read, write: if false; }), nech ho AŽ ÚPLNĚ

@@ -114,6 +114,11 @@
   .addperson input{flex:1}
 
   /* ---- legenda ---- */
+  .twoforms{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px}
+  @media(max-width:900px){.twoforms{grid-template-columns:1fr}}
+  .legend .lg-h{font-weight:800;color:#41506b;margin-right:2px}
+  .legend+.legend{margin-top:-6px}
+  .hintmini{font-size:11.5px;color:var(--muted);flex:1;min-width:180px}
   .legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:10px 14px;margin-bottom:12px;
     background:#fff;border:1px solid var(--line);border-radius:12px;font-size:12px;color:#41506b}
   .legend .item{display:flex;align-items:center;gap:7px;white-space:nowrap}
@@ -156,6 +161,9 @@
   .cal tr.days th.today{background:#f6821f;color:#fff;font-weight:800;border-radius:5px}
   .cal-inner{position:relative;width:max-content;min-width:100%}
   .cal td.d .lab{font-size:9px;font-weight:800;color:rgba(25,30,42,.34);pointer-events:none;letter-spacing:0}
+  .cal td.shift .lab.lab-sh{font-size:9px;color:rgba(20,32,50,.62);font-weight:800}
+  /* směna naplánovaná pod nepřítomností: jemná modrá linka dole */
+  .cal td.hasshift{box-shadow:inset 0 -3px 0 rgba(37,99,168,.4)}
   /* Dnešek: prázdná políčka lehce oranžová, políčka s nepřítomností nechají svou barvu vyniknout */
   .cal td.today:not(.has){background:#fde3c8}
   /* Pruh dneška = jen oranžové linky po stranách sloupce (nepřekrývá barvy nepřítomností) */
@@ -315,6 +323,26 @@ const SECTIONS = [
 ];
 const POS2SECTION = {}; SECTIONS.forEach(s=>s.positions.forEach(p=>{POS2SECTION[p]=s.key;}));
 const inSection = (u,key) => (u.positions||[]).some(p=>POS2SECTION[p]===key);
+
+/* ---- Směny (přítomnost) ---- barvy zeleno-modro-fialové, ať se nepletou s nepřítomnostmi. */
+const SHIFTS = [
+  {k:'DEN', name:'Denní',     hours:'Po–Pá', fill:'#e4ecc4'},
+  {k:'R',   name:'Ranní',     hours:'6–14',  fill:'#d3ecd0'},
+  {k:'O',   name:'Odpolední', hours:'14–22', fill:'#d2e3f6'},
+  {k:'N',   name:'Noční',     hours:'22–6',  fill:'#dcd2f3'},
+  {k:'D12', name:'Denní 12h', hours:'6–18',  fill:'#bfe6b6'},
+  {k:'N12', name:'Noční 12h', hours:'18–6',  fill:'#c8b9ee'},
+];
+const SHIFT_BY = Object.fromEntries(SHIFTS.map(s=>[s.k,s]));
+/* Které směny se v které sekci nabízejí. */
+const SECTION_SHIFTS = {
+  engineering: ['DEN'],
+  toolsetters: ['R','O','N','D12','N12'],
+  maintenance: ['D12','N12','R','O','N'],
+};
+const sectionShifts = key => (SECTION_SHIFTS[key]||[]).map(k=>SHIFT_BY[k]).filter(Boolean);
+/* Maintenance jede 24/7 → plánuje se i o víkendu a svátcích (i dovolená). */
+const is247 = u => ((u&&u.positions)||[]).some(p=>POS2SECTION[p]==='maintenance');
 /* Levely (kvůli právům – kdo může měnit koho). */
 const LEVEL_RANK = {basic:1,warehouse:2,approver:3,wadmin:4,superadmin:5};
 const ROLE2LEVEL = {zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
@@ -351,6 +379,7 @@ let people=[];             // lidé zobrazení v aktuální sekci (počítá se 
 let myDoc=null;            // záznam přihlášeného (level + práva)
 let section='engineering'; // aktivní sekce
 let absences=[];           // nepřítomnosti
+let shifts=[];             // naplánované směny (přítomnost)
 const _now0=new Date();
 let calYear=_now0.getFullYear();   // rok zobrazený v kalendáři (posouvá se do stran)
 let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
@@ -359,6 +388,9 @@ let form={personId:'',from:today(),to:today(),type:'Dovolená',note:'',days:1};
 let formMsg='', formMsgKind='';
 let dlg=null;              // {personName, dateStr, items:[...]}
 let edit=null, editMsg=''; // úprava existující nepřítomnosti (kliknutím v kalendáři)
+let sform={personId:'',from:today(),to:today(),shift:''};   // formulář „naplánovat směnu"
+let sformMsg='', sformMsgKind='';
+let editShift=null, editShiftMsg='';   // úprava naplánované směny (kliknutím v kalendáři)
 let collision=null;        // {list:[...], from, to} – upozornění na kolizi ve stejném úseku
 let toastMsg=null, toastKind='';
 let calScrollL=0, calScrollT=0;
@@ -418,6 +450,14 @@ function workingDays(from,to){
   let n=0; eachDay(from,to,ds=>{ if(isWorkday(ds)) n++; });
   return n;
 }
+/* Den, který se pro danou osobu plánuje: běžně jen pracovní den; u 24/7 (Maintenance) i víkend a svátek. */
+const isPlannable = (u,ds) => is247(u) ? true : isWorkday(ds);
+/* Počet plánovatelných dnů v rozsahu pro danou osobu. */
+function plannableDays(u,from,to){
+  if(!from||!to||to<from) return 0;
+  let n=0; eachDay(from,to,ds=>{ if(isPlannable(u,ds)) n++; });
+  return n;
+}
 /* Český popis počtu dnů. */
 function dayLabel(n){ n=Number(n);
   if(n===0.5) return '0,5 dne';
@@ -428,7 +468,7 @@ function dayLabel(n){ n=Number(n);
 /* ==========================================================
    FIREBASE — přihlášení a načítání dat
    ========================================================== */
-let unsubPeople=null, unsubAbs=null;
+let unsubPeople=null, unsubAbs=null, unsubShifts=null;
 
 onAuthStateChanged(auth, (user)=>{
   loginBusy=false;
@@ -441,7 +481,8 @@ onAuthStateChanged(auth, (user)=>{
 function teardown(){
   if(unsubPeople){unsubPeople();unsubPeople=null;}
   if(unsubAbs){unsubAbs();unsubAbs=null;}
-  allUsers=[]; people=[]; absences=[]; myDoc=null;
+  if(unsubShifts){unsubShifts();unsubShifts=null;}
+  allUsers=[]; people=[]; absences=[]; shifts=[]; myDoc=null;
 }
 function subscribe(){
   // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
@@ -454,6 +495,9 @@ function subscribe(){
   unsubAbs = onSnapshot(collection(db,'absences'),
     s=>{ absences=s.docs.map(d=>({id:d.id,...d.data()})); render(); },
     e=>toast('Chyba načítání nepřítomností: '+e.message,'err'));
+  unsubShifts = onSnapshot(collection(db,'shifts'),
+    s=>{ shifts=s.docs.map(d=>({id:d.id,...d.data()})); render(); },
+    e=>toast('Chyba načítání směn: '+e.message,'err'));
 }
 
 async function doLogin(email,pass){
@@ -491,11 +535,12 @@ async function addAbsence(bypass){
   if(!TYPE_BY[form.type]){ formMsg='Vyberte druh nepřítomnosti.'; formMsgKind='err'; render(); return; }
   if(!(form.days>0) || Math.round(form.days*2)!==form.days*2){
     formMsg='Počet dnů musí být násobek 0,5 (např. 0,5, 1, 2,5).'; formMsgKind='err'; render(); return; }
-  // Půlden = jeden den (diagonální políčko); celé dny = počet pracovních dnů v rozsahu
+  // Půlden = jeden den (diagonální políčko); celé dny = počet plánovatelných dnů v rozsahu
+  // (u Maintenance 24/7 se počítají i víkendy a svátky).
   let fromD=form.from, toD=form.to, days=form.days;
   if(days===0.5){ toD=fromD; }
-  else{ days=workingDays(fromD,toD);
-    if(days<=0){ formMsg='V zadaném rozsahu nejsou žádné pracovní dny.'; formMsgKind='err'; render(); return; } }
+  else{ days=plannableDays(p,fromD,toD);
+    if(days<=0){ formMsg='V zadaném rozsahu nejsou žádné plánovatelné dny.'; formMsgKind='err'; render(); return; } }
   // Kontrola kolize: dovolená s kolegou ze stejného úseku
   if(!bypass && form.type==='Dovolená'){
     const list=findCollisions(p, fromD, toD);
@@ -548,12 +593,56 @@ async function saveEdit(){
   if(!(e.days>0) || Math.round(e.days*2)!==e.days*2){ editMsg='Počet dnů musí být násobek 0,5.'; render(); return; }
   let fromD=e.from, toD=e.to, days=e.days;
   if(days===0.5){ toD=fromD; }
-  else{ days=workingDays(fromD,toD); if(days<=0){ editMsg='V zadaném rozsahu nejsou žádné pracovní dny.'; render(); return; } }
+  else{ days=plannableDays(p,fromD,toD); if(days<=0){ editMsg='V zadaném rozsahu nejsou žádné plánovatelné dny.'; render(); return; } }
   try{
     await updateDoc(doc(db,'absences',e.id),{
       personId:p.id, personName:p.name, type:e.type, from:fromD, to:toD, note:e.note.trim(), days });
     edit=null; toast('Změny uloženy.','ok'); render();
   }catch(err){ editMsg='Nepodařilo se uložit: '+err.message; render(); }
+}
+
+/* ---- Směny (přítomnost) ---- */
+async function addShift(){
+  sformMsg=''; sformMsgKind='';
+  const g=id=>document.getElementById(id);
+  if(g('fs-person')) sform.personId=g('fs-person').value;
+  if(g('fs-from')) sform.from=g('fs-from').value;
+  if(g('fs-to')) sform.to=g('fs-to').value;
+  if(g('fs-shift')) sform.shift=g('fs-shift').value;
+  const p=allUsers.find(x=>x.id===sform.personId);
+  if(!p){ sformMsg='Vyberte zaměstnance.'; sformMsgKind='err'; render(); return; }
+  if(!canEditPerson(p.id)){ sformMsg='Můžete plánovat jen svoje směny.'; sformMsgKind='err'; render(); return; }
+  if(!sform.from||!sform.to){ sformMsg='Vyplňte datum od i do.'; sformMsgKind='err'; render(); return; }
+  if(sform.to<sform.from){ sformMsg='Datum „do" nesmí být před „od".'; sformMsgKind='err'; render(); return; }
+  const allowed=SECTION_SHIFTS[section]||[];
+  if(!allowed.includes(sform.shift)){ sformMsg='Vyberte druh směny.'; sformMsgKind='err'; render(); return; }
+  const cnt=plannableDays(p,sform.from,sform.to);
+  if(cnt<=0){ sformMsg='V zadaném rozsahu nejsou žádné plánovatelné dny.'; sformMsgKind='err'; render(); return; }
+  try{
+    await addDoc(collection(db,'shifts'),{
+      personId:p.id, personName:p.name, shift:sform.shift,
+      from:sform.from, to:sform.to, createdBy:me.email, createdAt:serverTimestamp()
+    });
+    sform={personId:p.id, from:sform.from, to:sform.to, shift:sform.shift};
+    sformMsg='Směna naplánována.'; sformMsgKind='ok'; render();
+  }catch(e){ sformMsg='Nepodařilo se uložit: '+e.message; sformMsgKind='err'; render(); }
+}
+async function saveShift(){
+  editShiftMsg=''; const e=editShift; const g=id=>document.getElementById(id);
+  e.personId=g('es-person').value; e.from=g('es-from').value; e.to=g('es-to').value; e.shift=g('es-shift').value;
+  const p=allUsers.find(x=>x.id===e.personId);
+  if(!p){ editShiftMsg='Vyberte zaměstnance.'; render(); return; }
+  if(!canEditPerson(p.id)){ editShiftMsg='Můžete upravovat jen svoje směny.'; render(); return; }
+  if(!e.from||!e.to||e.to<e.from){ editShiftMsg='Zkontrolujte data od–do.'; render(); return; }
+  if(!SHIFT_BY[e.shift]){ editShiftMsg='Vyberte druh směny.'; render(); return; }
+  try{
+    await updateDoc(doc(db,'shifts',e.id),{ personId:p.id, personName:p.name, shift:e.shift, from:e.from, to:e.to });
+    editShift=null; toast('Směna uložena.','ok'); render();
+  }catch(err){ editShiftMsg='Nepodařilo se uložit: '+err.message; render(); }
+}
+async function removeShift(id){
+  try{ await deleteDoc(doc(db,'shifts',id)); toast('Směna smazána.','ok'); editShift=null; dlg=null; render(); }
+  catch(e){ toast('Nepodařilo se smazat: '+e.message,'err'); }
 }
 
 /* ==========================================================
@@ -627,13 +716,14 @@ function appView(){
   return `${headerView()}
   ${tabBar()}
   <main>
-    ${formPanel()}
+    <div class="twoforms">${formPanel()}${shiftPanel()}</div>
     ${legendView()}
     ${calBar()}
     ${calendarView()}
   </main>
   ${dlg?dialogView():''}
   ${edit?editView():''}
+  ${editShift?editShiftView():''}
   ${collision?collisionView():''}`;
 }
 
@@ -682,11 +772,42 @@ function formPanel(){
   </div></div>`;
 }
 
+function shiftPanel(){
+  const pm=curPerm();
+  const shiftsOfSec=sectionShifts(section);
+  if(!shiftsOfSec.length){ return ''; }   // sekce bez směn (nemělo by nastat)
+  if(pm==='read'){
+    return `<div class="panel"><h2>🕒 Naplánovat směnu</h2><div class="body">
+      <p style="margin:0;color:var(--muted)">V této sekci máte právo <b>jen prohlížet</b>.</p></div></div>`;
+  }
+  const editable = pm==='all' ? people : people.filter(p=>p.id===(me&&me.uid));
+  if((!sform.personId || !editable.some(p=>p.id===sform.personId)) && editable.length) sform.personId=editable[0].id;
+  if(!SECTION_SHIFTS[section].includes(sform.shift)) sform.shift=SECTION_SHIFTS[section][0];
+  const opts=editable.map(p=>`<option value="${p.id}" ${sform.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
+  const sOpts=shiftsOfSec.map(s=>`<option value="${s.k}" ${sform.shift===s.k?'selected':''}>${esc(s.name)}${s.hours?(' ('+s.hours+')'):''}</option>`).join('');
+  const noPeople=!editable.length;
+  const wkNote = section==='maintenance' ? ' Maintenance jde plánovat i o víkendu.' : '';
+  return `<div class="panel"><h2>🕒 Naplánovat směnu <span class="right">přítomnost</span></h2><div class="body">
+    <div class="formrow">
+      <div class="f grow"><label>Zaměstnanec <span class="req">*</span></label>
+        <select id="fs-person" ${!canEditAll()?'disabled':''}>${noPeople?'<option value="">— nemáte koho plánovat —</option>':''}${opts}</select></div>
+      <div class="f"><label>Od <span class="req">*</span></label><input type="date" id="fs-from" value="${sform.from}"></div>
+      <div class="f"><label>Do <span class="req">*</span></label><input type="date" id="fs-to" value="${sform.to}"></div>
+      <div class="f grow"><label>Směna <span class="req">*</span></label><select id="fs-shift">${sOpts}</select></div>
+      <div class="f addbtn"><button class="btn-primary" id="fs-add" ${noPeople?'disabled':''}>Naplánovat</button></div>
+    </div>
+    <div class="formfoot"><span class="hintmini">Vyplní směnu na všechny pracovní dny v rozsahu.${wkNote} Dovolená/nemoc pak směnu v kalendáři překryje.</span>
+      ${sformMsg?`<span class="msg ${sformMsgKind}">${esc(sformMsg)}</span>`:''}</div>
+  </div></div>`;
+}
+
 function legendView(){
   const items = TYPES.map(t=>`<span class="item"><span class="sw" style="background:${t.fill}"></span>${esc(t.k)}</span>`).join('')
     + `<span class="item"><span class="sw" style="background:${HOLIDAY_FILL}"></span>Svátek (státní)</span>`
     + `<span class="item"><span class="sw" style="background:#eef1f5"></span>Víkend</span>`;
-  return `<div class="legend">${items}</div>`;
+  const shItems = sectionShifts(section).map(s=>`<span class="item"><span class="sw" style="background:${s.fill}"></span>${esc(s.k)} · ${esc(s.name)}</span>`).join('');
+  return `<div class="legend"><span class="lg-h">Nepřítomnost:</span>${items}</div>
+    <div class="legend"><span class="lg-h">Směny:</span>${shItems}</div>`;
 }
 
 function calBar(){
@@ -732,8 +853,10 @@ function vacStats(personId, year){
   });
   return {planned, remaining: DEFAULT_VACATION - planned};
 }
+const personById = id => allUsers.find(u=>u.id===id) || null;
 /* Mapa nepřítomností pro rozsah dat: personId → { 'YYYY-MM-DD': absence }.
-   Víkendy a svátky se nevyplňují. Půlden (days===0.5) je jen jeden den. */
+   Vyplňují se plánovatelné dny osoby (u Maintenance 24/7 i víkend/svátek).
+   Půlden (days===0.5) je jen jeden den. */
 function absenceMap(startDs,endDs){
   const by={};
   absences.forEach(a=>{
@@ -745,9 +868,23 @@ function absenceMap(startDs,endDs){
       return;
     }
     if(a.to<startDs||a.from>endDs) return;
+    const pu=personById(a.personId);
     (by[a.personId]||(by[a.personId]={}));
     eachDay(a.from<startDs?startDs:a.from, a.to>endDs?endDs:a.to, ds=>{
-      if(isWorkday(ds)) by[a.personId][ds]=a;          // víkend ani svátek nevyplňujeme
+      if(isPlannable(pu,ds)) by[a.personId][ds]=a;
+    });
+  });
+  return by;
+}
+/* Mapa směn (přítomnosti): personId → { 'YYYY-MM-DD': shift }. */
+function shiftMap(startDs,endDs){
+  const by={};
+  shifts.forEach(s=>{
+    if(!s.from||!s.to || s.to<startDs || s.from>endDs) return;
+    const pu=personById(s.personId);
+    (by[s.personId]||(by[s.personId]={}));
+    eachDay(s.from<startDs?startDs:s.from, s.to>endDs?endDs:s.to, ds=>{
+      if(isPlannable(pu,ds)) by[s.personId][ds]=s;
     });
   });
   return by;
@@ -760,7 +897,7 @@ function calendarView(){
   }
   const mob=window.innerWidth<=680;
   const NC=mob?110:180, DC=mob?30:34;
-  const months=buildYear(calYear), by=absenceMap(iso(calYear,0,1),iso(calYear,11,31));
+  const months=buildYear(calYear), by=absenceMap(iso(calYear,0,1),iso(calYear,11,31)), sm=shiftMap(iso(calYear,0,1),iso(calYear,11,31));
   const allDays=months.flatMap(mo=>mo.days);
   const colgroup=`<colgroup><col style="width:${NC}px">${allDays.map(()=>`<col style="width:${DC}px">`).join('')}</colgroup>`;
   const monthsRow=`<tr class="months"><th class="corner">${calYear}</th>${
@@ -776,9 +913,9 @@ function calendarView(){
     }).join('')}</tr>`;
   // jeden řádek osoby (buňky dnů)
   const personRow = p => {
-    const pm=by[p.id]||{};
+    const pm=by[p.id]||{}, sp=sm[p.id]||{};
     const cells=allDays.map((dd,i)=>{
-      const a=pm[dd.ds];
+      const a=pm[dd.ds], s=sp[dd.ds];
       let cls='d', style='', tt=`${p.name} • ${dCz(dd.ds)}`, inner='';
       if(dd.holiday)cls+=' hol'; else if(dd.weekend)cls+=' we'; else if(dd.alt)cls+=' malt';
       if(dd.first)cls+=' mstart'; if(dd.mcur)cls+=' mcur';
@@ -798,6 +935,16 @@ function calendarView(){
         if(dd.holiday)cls+=' holmark';
         inner=`<span class="lab">${T.short}</span>`;   // slabé písmeno typu v každé buňce
         tt+=` • ${a.type}${a.days?(' ('+dayLabel(a.days)+')'):''}${a.note?(' — '+a.note):''}`;
+        if(s){ cls+=' hasshift'; tt+=` • plánovaná směna: ${SHIFT_BY[s.shift]?SHIFT_BY[s.shift].name:s.shift}`; }
+      }else if(s){                            // směna (přítomnost) – jen když tu není nepřítomnost
+        cls+=' has shift';
+        const S=SHIFT_BY[s.shift]||{fill:'#dfe6ee',k:'?',name:s.shift};
+        style=`background:${S.fill}`;
+        const nx=allDays[i+1];
+        if(nx && !nx.first && sp[nx.ds] && sp[nx.ds].id===s.id) style+=`;border-right-color:${S.fill}`;
+        if(dd.holiday)cls+=' holmark';
+        inner=`<span class="lab lab-sh">${esc(s.shift)}</span>`;
+        tt+=` • směna ${S.name}${S.hours?(' ('+S.hours+')'):''}`;
       }
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
@@ -868,6 +1015,36 @@ function editView(){
   </div></div>`;
 }
 
+function editShiftView(){
+  const e=editShift;
+  const selectable = canEditAll() ? allUsers : allUsers.filter(p=>p.id===(me&&me.uid)||p.id===e.personId);
+  const opts=selectable.map(p=>`<option value="${p.id}" ${e.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
+  // nabídni směny sekcí osoby (podle jejích pozic); fallback = všechny směny
+  const psec=(personById(e.personId)||{}).positions||[];
+  const secKeys=[...new Set(psec.map(p=>POS2SECTION[p]).filter(Boolean))];
+  let allowed=[]; secKeys.forEach(k=>(SECTION_SHIFTS[k]||[]).forEach(s=>{if(!allowed.includes(s))allowed.push(s);}));
+  if(!allowed.length) allowed=SHIFTS.map(s=>s.k);
+  const sOpts=allowed.map(k=>{const s=SHIFT_BY[k];return `<option value="${k}" ${e.shift===k?'selected':''}>${esc(s.name)}${s.hours?(' ('+s.hours+')'):''}</option>`;}).join('');
+  return `<div class="dlg-wrap" id="es-wrap"><div class="dlg dlg-lg">
+    <div class="t">🕒 Úprava směny<button class="x" id="es-x">✕</button></div>
+    <div class="c">
+      <div class="egrid">
+        <div class="f span3"><label>Zaměstnanec</label><select id="es-person">${opts}</select></div>
+        <div class="f"><label>Od</label><input type="date" id="es-from" value="${e.from}"></div>
+        <div class="f"><label>Do</label><input type="date" id="es-to" value="${e.to}"></div>
+        <div class="f"><label>Směna</label><select id="es-shift">${sOpts}</select></div>
+      </div>
+      ${editShiftMsg?`<div class="formfoot"><span class="msg err">${esc(editShiftMsg)}</span></div>`:''}
+    </div>
+    <div class="b">
+      <button class="btn-danger" id="es-del">Smazat</button>
+      <span class="grow1"></span>
+      <button class="btn-ghost" id="es-cancel">Zrušit</button>
+      <button class="btn-primary" id="es-save">Uložit změny</button>
+    </div>
+  </div></div>`;
+}
+
 function collisionView(){
   const items=collision.list.map(c=>{
     const T=TYPE_BY['Dovolená'];
@@ -928,6 +1105,13 @@ function wireApp(){
   daysEl?.addEventListener('input',()=>{ form.days=parseFloat(String(daysEl.value).replace(',','.'))||0; });
   document.getElementById('fa-add')?.addEventListener('click',()=>addAbsence());
 
+  // formulář směny
+  const sbind=(id,key,ev='input')=>{const el=document.getElementById(id);
+    if(el) el.addEventListener(ev,()=>{sform[key]=el.value;});};
+  sbind('fs-person','personId','change'); sbind('fs-shift','shift','change');
+  sbind('fs-from','from','change'); sbind('fs-to','to','change');
+  document.getElementById('fs-add')?.addEventListener('click',()=>addShift());
+
   // rok kalendáře + skok na dnešek
   document.getElementById('yr-prev')?.addEventListener('click',()=>{calYear--;alignedYear=null;calScrollL=0;render();});
   document.getElementById('yr-next')?.addEventListener('click',()=>{calYear++;alignedYear=null;calScrollL=0;render();});
@@ -972,6 +1156,17 @@ function wireApp(){
     document.getElementById('ed-x')?.addEventListener('click',()=>{edit=null;render();});
     document.getElementById('ed-wrap')?.addEventListener('click',e=>{if(e.target.id==='ed-wrap'){edit=null;render();}});
   }
+
+  // editační okno směny
+  if(editShift){
+    const sb=(id,key)=>{const el=document.getElementById(id); if(el) el.addEventListener('input',()=>{editShift[key]=el.value;});};
+    sb('es-person','personId'); sb('es-shift','shift'); sb('es-from','from'); sb('es-to','to');
+    document.getElementById('es-save')?.addEventListener('click',saveShift);
+    document.getElementById('es-del')?.addEventListener('click',()=>{ if(confirm('Opravdu smazat tuto naplánovanou směnu?')) removeShift(editShift.id); });
+    document.getElementById('es-cancel')?.addEventListener('click',()=>{editShift=null;render();});
+    document.getElementById('es-x')?.addEventListener('click',()=>{editShift=null;render();});
+    document.getElementById('es-wrap')?.addEventListener('click',e=>{if(e.target.id==='es-wrap'){editShift=null;render();}});
+  }
 }
 
 /* Klik na políčko dne:
@@ -994,12 +1189,21 @@ function openDay(personId,dateStr){
     edit={id:a.id, personId:a.personId, from:a.from, to:a.to, type:a.type,
       note:a.note||'', days:(a.days!=null?a.days:workingDays(a.from,a.to))};
     editMsg=''; render();
-  }else{
-    form={personId,from:dateStr,to:dateStr,type:form.type,note:'',days:1};
-    formMsg=''; formMsgKind=''; render();
-    document.getElementById('fa-person')?.scrollIntoView({behavior:'smooth',block:'center'});
-    toast('Formulář předvyplněn – doplňte druh a uložte.','');
+    return;
   }
+  // není nepřítomnost → je tam naplánovaná směna? (úprava směny)
+  const sh=shifts.filter(s=>s.personId===personId && s.from<=dateStr && s.to>=dateStr);
+  if(sh.length){
+    const s=sh[sh.length-1];
+    editShift={id:s.id, personId:s.personId, from:s.from, to:s.to, shift:s.shift};
+    editShiftMsg=''; render();
+    return;
+  }
+  // prázdno → předvyplní formulář nepřítomnosti na tento den
+  form={personId,from:dateStr,to:dateStr,type:form.type,note:'',days:1};
+  formMsg=''; formMsgKind=''; render();
+  document.getElementById('fa-person')?.scrollIntoView({behavior:'smooth',block:'center'});
+  toast('Formulář předvyplněn – doplňte druh a uložte.','');
 }
 
 /* Při změně velikosti okna překresli kalendář, ať se přizpůsobí (mobil ↔ monitor). */
