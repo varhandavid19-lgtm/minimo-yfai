@@ -803,11 +803,15 @@ function calendarView(){
     }).join('');
     return `<tr><td class="name" title="${esc(p.name)}">${esc(p.name)}</td>${cells}</tr>`;
   };
-  // rozdělení tabulky po úsecích (pozicích) sekce: nadpis úseku + lidé abecedně pod ním
+  // rozdělení tabulky po úsecích (pozicích) sekce: nadpis úseku + lidé abecedně pod ním.
+  // Kdo má v sekci víc úseků, zařadí se jen do PRVNÍHO ze svých úseků (objeví se jednou).
   const secPositions=(SECTIONS.find(s=>s.key===section)||{}).positions||[];
+  const primaryPos = p => (p.positions||[]).find(pos=>POS2SECTION[pos]===section);
+  const groupsByPos={};
+  people.forEach(p=>{ const pos=primaryPos(p); if(!pos) return; (groupsByPos[pos]||(groupsByPos[pos]=[])).push(p); });
   const rowsHtml=[];
   secPositions.forEach(pos=>{
-    const grp=people.filter(p=>(p.positions||[]).includes(pos)).sort(bySurname);
+    const grp=(groupsByPos[pos]||[]).sort(bySurname);
     if(!grp.length) return;
     rowsHtml.push(`<tr class="grp"><td class="name grp-name" title="${esc(pos)}">${esc(pos)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
     grp.forEach(p=>rowsHtml.push(personRow(p)));
