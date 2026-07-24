@@ -256,7 +256,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp }
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
 /* ====== FIREBASE KONFIGURACE (projekt dovolenky) ======
@@ -343,6 +343,36 @@ const SECTION_SHIFTS = {
 const sectionShifts = key => (SECTION_SHIFTS[key]||[]).map(k=>SHIFT_BY[k]).filter(Boolean);
 /* Maintenance jede 24/7 → plánuje se i o víkendu a svátcích (i dovolená). */
 const is247 = u => ((u&&u.positions)||[]).some(p=>POS2SECTION[p]==='maintenance');
+
+/* ---- Směnové rotace (automatické rozplánování celého roku jedním kliknutím) ----
+   Vytěženo z reálného rozpisu „Směny 2026".
+   - Údržba 12h: 4 týmy H1–H4, 28denní continental cyklus (krátký/dlouhý týden,
+     vždy 1 tým denní 12h, 1 noční 12h, 2 týmy volno = plné 24/7). Kotva = 1.1.2026.
+   - Údržba denní: týden ranní / týden odpolední (Po–Pá). Kotva = pondělí 5.1.2026.
+   - Toolsetteři: 3směnný týdenní rytmus R→N→O. Kotva = pondělí 5.1.2026.
+   Znak v cyklu: D/N/R/O = směna, V = volno. Mapuje se na kódy směn (map). */
+const ROT_PLANS = {
+  'H1':   {label:'Údržba 12h – tým H1', section:'maintenance', anchor:'2026-01-01', cycle:'VDDDVVNNVVVDDVVNNNVVDDVVVNNV', map:{D:'D12',N:'N12'}},
+  'H2':   {label:'Údržba 12h – tým H2', section:'maintenance', anchor:'2026-01-01', cycle:'DVVVNNVVDDDVVNNVVVDDVVNNNVVD', map:{D:'D12',N:'N12'}},
+  'H3':   {label:'Údržba 12h – tým H3', section:'maintenance', anchor:'2026-01-01', cycle:'VNNNVVDDVVVNNVVDDDVVNNVVVDDV', map:{D:'D12',N:'N12'}},
+  'H4':   {label:'Údržba 12h – tým H4', section:'maintenance', anchor:'2026-01-01', cycle:'NVVVDDVVNNNVVDDVVVNNVVDDDVVN', map:{D:'D12',N:'N12'}},
+  'DAY-R':{label:'Údržba denní – R/O (start ranní)',     section:'maintenance', anchor:'2026-01-05', cycle:'RRRRRVVOOOOOVV', map:{R:'R',O:'O'}},
+  'DAY-O':{label:'Údržba denní – R/O (start odpolední)', section:'maintenance', anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVV', map:{R:'R',O:'O'}},
+  'TS-R': {label:'Toolsetter 3 směny (start ranní)',     section:'toolsetters', anchor:'2026-01-05', cycle:'RRRRRVVNNNNNVVOOOOOVV', map:{R:'R',N:'N',O:'O'}},
+  'TS-N': {label:'Toolsetter 3 směny (start noční)',     section:'toolsetters', anchor:'2026-01-05', cycle:'NNNNNVVOOOOOVVRRRRRVV', map:{R:'R',N:'N',O:'O'}},
+  'TS-O': {label:'Toolsetter 3 směny (start odpolední)', section:'toolsetters', anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVVNNNNNVV', map:{R:'R',N:'N',O:'O'}},
+  'ENG':  {label:'Denní (Po–Pá)',                        section:'engineering', anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'DEN'}},
+};
+const SECTION_ROT = {maintenance:['H1','H2','H3','H4','DAY-R','DAY-O'], toolsetters:['TS-R','TS-N','TS-O'], engineering:['ENG']};
+const daysSince = (anchor,ds) => Math.round((Date.parse(ds+'T00:00:00Z')-Date.parse(anchor+'T00:00:00Z'))/86400000);
+/* Vrátí kód směny pro osobu a den z její rotace (nebo null pro volno / bez rotace). */
+function rotationCodeFor(personId, ds){
+  const rot=rotById[personId]; if(!rot) return null;
+  const plan=ROT_PLANS[rot.plan]; if(!plan) return null;
+  const L=plan.cycle.length, i=((daysSince(plan.anchor,ds)%L)+L)%L, tok=plan.cycle[i];
+  if(!tok || tok==='V') return null;
+  return plan.map[tok] || tok;
+}
 /* Levely (kvůli právům – kdo může měnit koho). */
 const LEVEL_RANK = {basic:1,warehouse:2,approver:3,wadmin:4,superadmin:5};
 const ROLE2LEVEL = {zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
@@ -379,7 +409,8 @@ let people=[];             // lidé zobrazení v aktuální sekci (počítá se 
 let myDoc=null;            // záznam přihlášeného (level + práva)
 let section='engineering'; // aktivní sekce
 let absences=[];           // nepřítomnosti
-let shifts=[];             // naplánované směny (přítomnost)
+let shifts=[];             // ručně naplánované směny (přítomnost)
+let rotById={};            // rotace (automatické směnové plány) podle personId
 const _now0=new Date();
 let calYear=_now0.getFullYear();   // rok zobrazený v kalendáři (posouvá se do stran)
 let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
@@ -390,6 +421,7 @@ let dlg=null;              // {personName, dateStr, items:[...]}
 let edit=null, editMsg=''; // úprava existující nepřítomnosti (kliknutím v kalendáři)
 let sform={personId:'',from:today(),to:today(),shift:''};   // formulář „naplánovat směnu"
 let sformMsg='', sformMsgKind='';
+let frPerson='', frPlan='';   // formulář rotace (automatické rozplánování)
 let editShift=null, editShiftMsg='';   // úprava naplánované směny (kliknutím v kalendáři)
 let collision=null;        // {list:[...], from, to} – upozornění na kolizi ve stejném úseku
 let toastMsg=null, toastKind='';
@@ -468,7 +500,7 @@ function dayLabel(n){ n=Number(n);
 /* ==========================================================
    FIREBASE — přihlášení a načítání dat
    ========================================================== */
-let unsubPeople=null, unsubAbs=null, unsubShifts=null;
+let unsubPeople=null, unsubAbs=null, unsubShifts=null, unsubRot=null;
 
 onAuthStateChanged(auth, (user)=>{
   loginBusy=false;
@@ -482,7 +514,8 @@ function teardown(){
   if(unsubPeople){unsubPeople();unsubPeople=null;}
   if(unsubAbs){unsubAbs();unsubAbs=null;}
   if(unsubShifts){unsubShifts();unsubShifts=null;}
-  allUsers=[]; people=[]; absences=[]; shifts=[]; myDoc=null;
+  if(unsubRot){unsubRot();unsubRot=null;}
+  allUsers=[]; people=[]; absences=[]; shifts=[]; rotById={}; myDoc=null;
 }
 function subscribe(){
   // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
@@ -498,6 +531,9 @@ function subscribe(){
   unsubShifts = onSnapshot(collection(db,'shifts'),
     s=>{ shifts=s.docs.map(d=>({id:d.id,...d.data()})); render(); },
     e=>toast('Chyba načítání směn: '+e.message,'err'));
+  unsubRot = onSnapshot(collection(db,'rotations'),
+    s=>{ rotById={}; s.docs.forEach(d=>{rotById[d.id]=d.data();}); render(); },
+    e=>toast('Chyba načítání rotací: '+e.message,'err'));
 }
 
 async function doLogin(email,pass){
@@ -645,6 +681,26 @@ async function removeShift(id){
   catch(e){ toast('Nepodařilo se smazat: '+e.message,'err'); }
 }
 
+/* ---- Rotace (automatické rozplánování celého roku) ---- */
+async function assignRotation(){
+  const g=id=>document.getElementById(id);
+  const personId=g('fr-person')?g('fr-person').value:'', plan=g('fr-plan')?g('fr-plan').value:'';
+  const p=allUsers.find(x=>x.id===personId);
+  if(!p){ toast('Vyberte zaměstnance.','err'); return; }
+  if(!canEditPerson(p.id)){ toast('Můžete plánovat jen sebe.','err'); return; }
+  if(!ROT_PLANS[plan]){ toast('Vyberte směnový rytmus.','err'); return; }
+  try{
+    await setDoc(doc(db,'rotations',p.id),{plan, personName:p.name, by:me.email, at:serverTimestamp()});
+    toast('Rozplánováno na celý rok podle rytmu '+plan+'.','ok'); render();
+  }catch(e){ toast('Nepodařilo se uložit rotaci: '+e.message,'err'); }
+}
+async function clearRotation(personId){
+  const p=allUsers.find(x=>x.id===personId);
+  if(p && !canEditPerson(p.id)){ toast('Můžete měnit jen sebe.','err'); return; }
+  try{ await deleteDoc(doc(db,'rotations',personId)); toast('Rotace zrušena.','ok'); render(); }
+  catch(e){ toast('Nepodařilo se zrušit: '+e.message,'err'); }
+}
+
 /* ==========================================================
    RENDER
    ========================================================== */
@@ -716,6 +772,7 @@ function appView(){
   return `${headerView()}
   ${tabBar()}
   <main>
+    ${rotationPanel()}
     <div class="twoforms">${formPanel()}${shiftPanel()}</div>
     ${legendView()}
     ${calBar()}
@@ -769,6 +826,33 @@ function formPanel(){
       <div class="f addbtn"><button class="btn-primary" id="fa-add" ${noPeople?'disabled':''}>Přidat</button></div>
     </div>
     ${formMsg?`<div class="formfoot"><span class="msg ${formMsgKind}">${esc(formMsg)}</span></div>`:''}
+  </div></div>`;
+}
+
+function rotationPanel(){
+  const pm=curPerm();
+  const plans=SECTION_ROT[section]||[];
+  if(!plans.length) return '';
+  if(pm==='read'){
+    return `<div class="panel"><h2>🔁 Automatické rozplánování směn</h2><div class="body">
+      <p style="margin:0;color:var(--muted)">V této sekci máte právo <b>jen prohlížet</b>.</p></div></div>`;
+  }
+  const editable = pm==='all' ? people : people.filter(p=>p.id===(me&&me.uid));
+  if((!frPerson || !editable.some(p=>p.id===frPerson)) && editable.length) frPerson=editable[0].id;
+  if(!plans.includes(frPlan)) frPlan=plans[0];
+  const opts=editable.map(p=>{const r=rotById[p.id]; return `<option value="${p.id}" ${frPerson===p.id?'selected':''}>${esc(p.name)}${r?(' — '+esc(r.plan)):''}</option>`;}).join('');
+  const pOpts=plans.map(k=>`<option value="${k}" ${frPlan===k?'selected':''}>${esc(ROT_PLANS[k].label)}</option>`).join('');
+  const cur=rotById[frPerson];
+  const noPeople=!editable.length;
+  return `<div class="panel rot"><h2>🔁 Automatické rozplánování směn <span class="right">celý rok na jedno kliknutí</span></h2><div class="body">
+    <div class="formrow">
+      <div class="f grow"><label>Zaměstnanec</label>
+        <select id="fr-person" ${!canEditAll()?'disabled':''}>${noPeople?'<option value="">— nemáte koho —</option>':''}${opts}</select></div>
+      <div class="f grow"><label>Směnový rytmus / tým</label><select id="fr-plan">${pOpts}</select></div>
+      <div class="f addbtn"><button class="btn-primary" id="fr-add" ${noPeople?'disabled':''}>Rozplánovat rok</button></div>
+      ${cur?'<div class="f addbtn"><button class="btn-ghost" id="fr-clear">Zrušit rotaci</button></div>':''}
+    </div>
+    <div class="formfoot"><span class="hintmini">Rytmus se sám vyplní na celý rok i roky dopředu (krátký/dlouhý týden). Ruční směny a dovolené ho v kalendáři přebijí.${cur?(' Nyní: <b>'+esc(ROT_PLANS[cur.plan]?ROT_PLANS[cur.plan].label:cur.plan)+'</b>.'):''}</span></div>
   </div></div>`;
 }
 
@@ -914,8 +998,11 @@ function calendarView(){
   // jeden řádek osoby (buňky dnů)
   const personRow = p => {
     const pm=by[p.id]||{}, sp=sm[p.id]||{};
+    // efektivní směna dne: ručně zadaná směna má přednost před rotací
+    const eff = ds2 => { const mm=sp[ds2]; if(mm) return {code:mm.shift, id:mm.id};
+      const rc=rotationCodeFor(p.id,ds2); return rc?{code:rc, rot:true}:null; };
     const cells=allDays.map((dd,i)=>{
-      const a=pm[dd.ds], s=sp[dd.ds];
+      const a=pm[dd.ds], s=eff(dd.ds);
       let cls='d', style='', tt=`${p.name} • ${dCz(dd.ds)}`, inner='';
       if(dd.holiday)cls+=' hol'; else if(dd.weekend)cls+=' we'; else if(dd.alt)cls+=' malt';
       if(dd.first)cls+=' mstart'; if(dd.mcur)cls+=' mcur';
@@ -935,16 +1022,16 @@ function calendarView(){
         if(dd.holiday)cls+=' holmark';
         inner=`<span class="lab">${T.short}</span>`;   // slabé písmeno typu v každé buňce
         tt+=` • ${a.type}${a.days?(' ('+dayLabel(a.days)+')'):''}${a.note?(' — '+a.note):''}`;
-        if(s){ cls+=' hasshift'; tt+=` • plánovaná směna: ${SHIFT_BY[s.shift]?SHIFT_BY[s.shift].name:s.shift}`; }
+        if(s){ cls+=' hasshift'; tt+=` • plánovaná směna: ${SHIFT_BY[s.code]?SHIFT_BY[s.code].name:s.code}`; }
       }else if(s){                            // směna (přítomnost) – jen když tu není nepřítomnost
-        cls+=' has shift';
-        const S=SHIFT_BY[s.shift]||{fill:'#dfe6ee',k:'?',name:s.shift};
+        cls+=' has shift'+(s.rot?' shift-rot':'');
+        const S=SHIFT_BY[s.code]||{fill:'#dfe6ee',name:s.code};
         style=`background:${S.fill}`;
-        const nx=allDays[i+1];
-        if(nx && !nx.first && sp[nx.ds] && sp[nx.ds].id===s.id) style+=`;border-right-color:${S.fill}`;
+        const nx=allDays[i+1], ns=(nx && !nx.first)?eff(nx.ds):null;   // souvislý pruh stejné směny
+        if(ns && ns.code===s.code) style+=`;border-right-color:${S.fill}`;
         if(dd.holiday)cls+=' holmark';
-        inner=`<span class="lab lab-sh">${esc(s.shift)}</span>`;
-        tt+=` • směna ${S.name}${S.hours?(' ('+S.hours+')'):''}`;
+        inner=`<span class="lab lab-sh">${esc(s.code)}</span>`;
+        tt+=` • směna ${S.name}${S.hours?(' ('+S.hours+')'):''}${s.rot?' (rotace)':''}`;
       }
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
@@ -1111,6 +1198,12 @@ function wireApp(){
   sbind('fs-person','personId','change'); sbind('fs-shift','shift','change');
   sbind('fs-from','from','change'); sbind('fs-to','to','change');
   document.getElementById('fs-add')?.addEventListener('click',()=>addShift());
+
+  // rotace (automatické rozplánování)
+  document.getElementById('fr-person')?.addEventListener('change',e=>{frPerson=e.target.value;render();});
+  document.getElementById('fr-plan')?.addEventListener('change',e=>{frPlan=e.target.value;});
+  document.getElementById('fr-add')?.addEventListener('click',()=>assignRotation());
+  document.getElementById('fr-clear')?.addEventListener('click',()=>clearRotation(document.getElementById('fr-person').value));
 
   // rok kalendáře + skok na dnešek
   document.getElementById('yr-prev')?.addEventListener('click',()=>{calYear--;alignedYear=null;calScrollL=0;render();});
