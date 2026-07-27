@@ -522,23 +522,34 @@ function teardown(){
   if(unsubRot){unsubRot();unsubRot=null;}
   allUsers=[]; people=[]; absences=[]; shifts=[]; rotById={}; myDoc=null;
 }
+/* Když se některé živé načítání „zasekne" (např. čerstvě publikovaná pravidla
+   Firestore, výpadek sítě), po chvíli znovu nahodíme všechny posluchače –
+   aby uživatel nemusel ručně načítat stránku. */
+let subRetry=0, subRetryTimer=null;
+function subErr(label,e){
+  toast('Chyba načítání ('+label+'): '+e.message+' – zkouším znovu…','err');
+  if(me && subRetry<5 && !subRetryTimer){
+    subRetry++;
+    subRetryTimer=setTimeout(()=>{ subRetryTimer=null; if(me){ teardown(); subscribe(); } }, 3000);
+  }
+}
 function subscribe(){
   // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
   unsubPeople = onSnapshot(collection(db,'users'),
-    s=>{ allUsers=s.docs.map(d=>{const x=d.data();
+    s=>{ subRetry=0; allUsers=s.docs.map(d=>{const x=d.data();
            return {id:d.id, name:x.name||d.id, email:x.email||'', positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}, modules:x.modules||{}};});
          myDoc = allUsers.find(u=>u.id===me.uid) || null;
          render(); },
-    e=>toast('Chyba načítání lidí: '+e.message,'err'));
+    e=>subErr('lidé',e));
   unsubAbs = onSnapshot(collection(db,'absences'),
     s=>{ absences=s.docs.map(d=>({id:d.id,...d.data()})); render(); },
-    e=>toast('Chyba načítání nepřítomností: '+e.message,'err'));
+    e=>subErr('nepřítomnosti',e));
   unsubShifts = onSnapshot(collection(db,'shifts'),
     s=>{ shifts=s.docs.map(d=>({id:d.id,...d.data()})); render(); },
-    e=>toast('Chyba načítání směn: '+e.message,'err'));
+    e=>subErr('směny',e));
   unsubRot = onSnapshot(collection(db,'rotations'),
     s=>{ rotById={}; s.docs.forEach(d=>{rotById[d.id]=d.data();}); render(); },
-    e=>toast('Chyba načítání rotací: '+e.message,'err'));
+    e=>subErr('rotace',e));
 }
 
 async function doLogin(email,pass){
