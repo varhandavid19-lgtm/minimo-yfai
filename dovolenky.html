@@ -332,13 +332,14 @@ const SHIFTS = [
   {k:'N',   name:'Noční',     hours:'22–6',  fill:'#dcd2f3'},
   {k:'D12', name:'Denní 12h', hours:'6–18',  fill:'#bfe6b6'},
   {k:'N12', name:'Noční 12h', hours:'18–6',  fill:'#c8b9ee'},
+  {k:'SAL', name:'Salaried',  hours:'kancelář Po–Pá', fill:'#e8e0c6'},
 ];
 const SHIFT_BY = Object.fromEntries(SHIFTS.map(s=>[s.k,s]));
 /* Které směny se v které sekci nabízejí. */
 const SECTION_SHIFTS = {
   engineering: ['DEN'],
   toolsetters: ['R','O','N','D12','N12'],
-  maintenance: ['D12','N12','R','O','N'],
+  maintenance: ['D12','N12','R','O','N','SAL'],
 };
 const sectionShifts = key => (SECTION_SHIFTS[key]||[]).map(k=>SHIFT_BY[k]).filter(Boolean);
 /* Maintenance jede 24/7 → plánuje se i o víkendu a svátcích (i dovolená). */
@@ -358,12 +359,16 @@ const ROT_PLANS = {
   'H4':   {label:'Údržba 12h – tým H4', section:'maintenance', anchor:'2026-01-01', cycle:'NVVVDDVVNNNVVDDVVVNNVVDDDVVN', map:{D:'D12',N:'N12'}},
   'DAY-R':{label:'Údržba denní – R/O (start ranní)',     section:'maintenance', anchor:'2026-01-05', cycle:'RRRRRVVOOOOOVV', map:{R:'R',O:'O'}},
   'DAY-O':{label:'Údržba denní – R/O (start odpolední)', section:'maintenance', anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVV', map:{R:'R',O:'O'}},
+  '3SM-R':{label:'Klasický 3směnný (start ranní)',       section:'maintenance', anchor:'2026-01-05', cycle:'RRRRRVVOOOOOVVNNNNNVV', map:{R:'R',O:'O',N:'N'}},
+  '3SM-O':{label:'Klasický 3směnný (start odpolední)',   section:'maintenance', anchor:'2026-01-05', cycle:'OOOOOVVNNNNNVVRRRRRVV', map:{R:'R',O:'O',N:'N'}},
+  '3SM-N':{label:'Klasický 3směnný (start noční)',       section:'maintenance', anchor:'2026-01-05', cycle:'NNNNNVVRRRRRVVOOOOOVV', map:{R:'R',O:'O',N:'N'}},
+  'SAL':  {label:'Salaried (kancelář, Po–Pá)',           section:'maintenance', anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'SAL'}},
   'TS-R': {label:'Toolsetter 3 směny (start ranní)',     section:'toolsetters', anchor:'2026-01-05', cycle:'RRRRRVVNNNNNVVOOOOOVV', map:{R:'R',N:'N',O:'O'}},
   'TS-N': {label:'Toolsetter 3 směny (start noční)',     section:'toolsetters', anchor:'2026-01-05', cycle:'NNNNNVVOOOOOVVRRRRRVV', map:{R:'R',N:'N',O:'O'}},
   'TS-O': {label:'Toolsetter 3 směny (start odpolední)', section:'toolsetters', anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVVNNNNNVV', map:{R:'R',N:'N',O:'O'}},
   'ENG':  {label:'Denní (Po–Pá)',                        section:'engineering', anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'DEN'}},
 };
-const SECTION_ROT = {maintenance:['H1','H2','H3','H4','DAY-R','DAY-O'], toolsetters:['TS-R','TS-N','TS-O'], engineering:['ENG']};
+const SECTION_ROT = {maintenance:['H1','H2','H3','H4','DAY-R','DAY-O','3SM-R','3SM-O','3SM-N','SAL'], toolsetters:['TS-R','TS-N','TS-O'], engineering:['ENG']};
 const daysSince = (anchor,ds) => Math.round((Date.parse(ds+'T00:00:00Z')-Date.parse(anchor+'T00:00:00Z'))/86400000);
 /* Vrátí kód směny pro osobu a den z její rotace (nebo null pro volno / bez rotace). */
 function rotationCodeFor(personId, ds){
