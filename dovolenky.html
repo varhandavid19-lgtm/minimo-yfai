@@ -373,6 +373,7 @@ const daysSince = (anchor,ds) => Math.round((Date.parse(ds+'T00:00:00Z')-Date.pa
 /* Vrátí kód směny pro osobu a den z její rotace (nebo null pro volno / bez rotace). */
 function rotationCodeFor(personId, ds){
   const rot=rotById[personId]; if(!rot) return null;
+  if(rot.from && ds<rot.from) return null;       // rotace platí až od data založení (minulost se nevyplňuje)
   const plan=ROT_PLANS[rot.plan]; if(!plan) return null;
   const L=plan.cycle.length, i=((daysSince(plan.anchor,ds)%L)+L)%L, tok=plan.cycle[i];
   if(!tok || tok==='V') return null;
@@ -706,8 +707,9 @@ async function assignRotation(){
   if(!canEditPerson(p.id)){ toast('Můžete plánovat jen sebe.','err'); return; }
   if(!ROT_PLANS[plan]){ toast('Vyberte směnový rytmus.','err'); return; }
   try{
-    await setDoc(doc(db,'rotations',p.id),{plan, personName:p.name, by:me.email, at:serverTimestamp()});
-    toast('Rozplánováno na celý rok podle rytmu '+plan+'.','ok'); render();
+    const from=today();
+    await setDoc(doc(db,'rotations',p.id),{plan, from, personName:p.name, by:me.email, at:serverTimestamp()});
+    toast('Rozplánováno od '+dCz(from)+' dál podle rytmu '+plan+'.','ok'); render();
   }catch(e){ toast('Nepodařilo se uložit rotaci: '+e.message,'err'); }
 }
 async function clearRotation(personId){
@@ -868,7 +870,7 @@ function rotationPanel(){
       <div class="f addbtn"><button class="btn-primary" id="fr-add" ${noPeople?'disabled':''}>Rozplánovat rok</button></div>
       ${cur?'<div class="f addbtn"><button class="btn-ghost" id="fr-clear">Zrušit rotaci</button></div>':''}
     </div>
-    <div class="formfoot"><span class="hintmini">Rytmus se sám vyplní na celý rok i roky dopředu (krátký/dlouhý týden). Ruční směny a dovolené ho v kalendáři přebijí.${cur?(' Nyní: <b>'+esc(ROT_PLANS[cur.plan]?ROT_PLANS[cur.plan].label:cur.plan)+'</b>.'):''}</span></div>
+    <div class="formfoot"><span class="hintmini">Rytmus se vyplní <b>ode dneška dál</b> (minulost zůstane nedotčená) na celý rok i roky dopředu. Ruční směny a dovolené ho v kalendáři přebijí.${cur?(' Nyní: <b>'+esc(ROT_PLANS[cur.plan]?ROT_PLANS[cur.plan].label:cur.plan)+'</b>'+(cur.from?(' od '+dCz(cur.from)):'')+'.'):''}</span></div>
   </div></div>`;
 }
 
