@@ -395,6 +395,12 @@ const total = r => (Number(r.cena)||0)*(Number(r.mnozstvi)||0);
 const totalEur = r => r.mena==='EUR'?total(r):total(r)/((cfg?.rates?.[r.mena])||1);
 const fld = id => (cfg?.fields||[]).find(f=>f.id===id)||{label:id,req:false};
 const today = () => new Date().toISOString().slice(0,10);
+/* Filtry a volby jsou POUZE tvoje – ukládají se jen do tvého prohlížeče (localStorage),
+   nejdou do databáze, takže ostatní uživatele nijak neovlivní a mají svoje vlastní. */
+function saveView(){ try{ localStorage.setItem('minimo-nakup-view', JSON.stringify({filters,sort,dashRange})); }catch(e){} }
+function loadView(){ try{ const v=JSON.parse(localStorage.getItem('minimo-nakup-view')||'null');
+  if(v){ if(v.filters) filters=Object.assign(filters,v.filters); if(v.sort) sort=v.sort; if(v.dashRange) dashRange=Object.assign(dashRange,v.dashRange); } }catch(e){} }
+loadView();
 function monthRange(){const n=new Date(),y=n.getFullYear(),m=n.getMonth(),p=x=>String(x).padStart(2,'0'),last=new Date(y,m+1,0).getDate();return {od:`${y}-${p(m+1)}-01`,do:`${y}-${p(m+1)}-${p(last)}`};}
 function yearRange(){const y=new Date().getFullYear();return {od:y+'-01-01',do:y+'-12-31'};}
 function dashPreset(){ if(!dashRange.od&&!dashRange.do) return 'all';
@@ -509,6 +515,7 @@ function render(){
   if(!me){ app.innerHTML=loginView()+dlgView()+`<div id="toast-node">${toastView()}</div>`; bind(); return; }
   if(nakupBlocked()){ app.innerHTML=noAccessView(); bind(); return; }
   if(!dataReady){ app.innerHTML=splash('Načítám požadavky…'); return; }
+  saveView();   // zapamatuj si tvoje filtry jen v tomto prohlížeči
   app.innerHTML = shell()+dlgView()+(qrOpen?qrScanView():'')+`<div id="toast-node">${toastView()}</div>`;
   bind();
   const di=document.getElementById('dlg-input'); if(di){di.focus();di.select();}
