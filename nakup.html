@@ -50,6 +50,13 @@
   .notice{background:var(--blue-bg);border:1px solid #cbdff5;border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:12px;color:#28456e}
   .notice.warn{background:var(--amber-bg);border-color:#f2dfb8;color:#7a5410}
 
+  .dashbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px;padding:8px 12px;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+  .dashbar .dl{font-size:12px;font-weight:700;color:#41506b}
+  .dchip{background:#fff;border:1px solid var(--line);border-radius:16px;padding:4px 12px;font-size:12px;font-weight:600;color:#41506b;cursor:pointer}
+  .dchip:hover{border-color:#9db4d4;background:#f5f8fd}
+  .dchip.on{border-color:#16355f;box-shadow:0 0 0 1px #16355f inset;background:#eef3fb;color:#16355f}
+  .dashbar .dnote{font-size:11.5px;color:var(--muted);margin-left:auto}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px}
   .kcard{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--grey);border-radius:var(--radius);padding:11px 13px}
   .kcard .lbl{font-size:10px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);font-weight:700}
@@ -374,6 +381,7 @@ let usersList=[];      // users (jen pro admina)
 let tab='pozadavky', authReady=false, dataReady=false, fatalErr='';
 let sort={col:'created',dir:-1};
 let filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false};
+let dashRange={od:'',do:''};   // období pro ukazatele na dashboardu (podle data vytvoření)
 let editing=null, errs={}, footMsg='';
 let dlg=null, toastMsg=null, toastKind='', drafts={};
 let loginBusy=false, loginErr='';
@@ -387,6 +395,13 @@ const total = r => (Number(r.cena)||0)*(Number(r.mnozstvi)||0);
 const totalEur = r => r.mena==='EUR'?total(r):total(r)/((cfg?.rates?.[r.mena])||1);
 const fld = id => (cfg?.fields||[]).find(f=>f.id===id)||{label:id,req:false};
 const today = () => new Date().toISOString().slice(0,10);
+function monthRange(){const n=new Date(),y=n.getFullYear(),m=n.getMonth(),p=x=>String(x).padStart(2,'0'),last=new Date(y,m+1,0).getDate();return {od:`${y}-${p(m+1)}-01`,do:`${y}-${p(m+1)}-${p(last)}`};}
+function yearRange(){const y=new Date().getFullYear();return {od:y+'-01-01',do:y+'-12-31'};}
+function dashPreset(){ if(!dashRange.od&&!dashRange.do) return 'all';
+  const m=monthRange(),y=yearRange();
+  if(dashRange.od===m.od&&dashRange.do===m.do) return 'month';
+  if(dashRange.od===y.od&&dashRange.do===y.do) return 'year';
+  return ''; }
 const dateCz = d => d ? String(d).slice(0,10).split('-').reverse().map(x=>String(Number(x))).join('. ')+'.' : '—';
 const acc = c => (cfg?.accounts||[]).find(a=>a.code===c);
 const accName = c => (acc(c)||{}).name || '';
@@ -575,12 +590,15 @@ function roleNotice(){
 }
 function listView(){
   const rr=visibleRows();
-  const open=rows.filter(r=>['nový','ve schvalování','poptáno'].includes(r.status)).length;
-  const waiting=rows.filter(r=>!r.approvedBy && !['zamítnuto','doručeno'].includes(r.status)).length;
-  const toAsk=rows.filter(needsPoptat).length;
-  const crit=rows.filter(r=>r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status)).length;
-  const critRows=rows.filter(r=>r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status)).sort((a,b)=>String(a.created).localeCompare(String(b.created)));
-  const sumEur=rows.filter(r=>r.status!=='zamítnuto').reduce((a,r)=>a+totalEur(r),0);
+  // ukazatele (dashboard) se počítají za zvolené období podle data vytvoření
+  const inDash = r => (!dashRange.od||(r.created||'')>=dashRange.od) && (!dashRange.do||(r.created||'')<=dashRange.do);
+  const dashRows=rows.filter(inDash);
+  const open=dashRows.filter(r=>['nový','ve schvalování','poptáno'].includes(r.status)).length;
+  const waiting=dashRows.filter(r=>!r.approvedBy && !['zamítnuto','doručeno'].includes(r.status)).length;
+  const toAsk=dashRows.filter(needsPoptat).length;
+  const crit=dashRows.filter(r=>r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status)).length;
+  const critRows=dashRows.filter(r=>r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status)).sort((a,b)=>String(a.created).localeCompare(String(b.created)));
+  const sumEur=dashRows.filter(r=>r.status!=='zamítnuto').reduce((a,r)=>a+totalEur(r),0);
   const card=(l,v,n,c)=>`<div class="kcard" style="border-left-color:${c}"><div class="lbl">${l}</div><div class="val" style="color:${c}">${v}</div><div class="note">${n}</div></div>`;
   const th=(c,l)=>`<th data-a="sort" data-v="${c}">${l}${sort.col===c?(sort.dir===1?' ▲':' ▼'):''}</th>`;
   const shorten=(t,n=42)=>t&&t.length>n?t.slice(0,n-1).trim()+'…':t;
@@ -595,12 +613,22 @@ function listView(){
   const openCount=rows.filter(r=>!closedStatuses.includes(r.status)).length;
   const closedCount=rows.filter(r=>closedStatuses.includes(r.status)).length;
   const anyFilter = filters.q||filters.grp||filters.status||filters.priorita||filters.ucet||filters.usek||filters.od||filters.do||filters.mine;
+  const dashActive = k => (dashPreset()===k?'on':'');
+  const periodTxt = (dashRange.od||dashRange.do) ? `${dashRange.od?dateCz(dashRange.od):'…'} – ${dashRange.do?dateCz(dashRange.do):'…'}` : 'celá historie';
   return `
+  <div class="dashbar">
+    <span class="dl">Ukazatele za období:</span>
+    <button class="dchip ${dashActive('all')}" data-a="dash-all">Vše</button>
+    <button class="dchip ${dashActive('month')}" data-a="dash-month">Tento měsíc</button>
+    <button class="dchip ${dashActive('year')}" data-a="dash-year">Tento rok</button>
+    <span class="datefilter">Od <input type="date" id="d-od" value="${esc(dashRange.od)}">–<input type="date" id="d-do" value="${esc(dashRange.do)}"></span>
+    <span class="dnote">${dashRows.length} z ${rows.length} požadavků · ${esc(periodTxt)}</span>
+  </div>
   <div class="cards">
     ${card('Otevřené požadavky',open,'poptáno · nový · ve schvalování','#16355f')}
     ${card('K poptání u dodavatele',toAsk,'nové požadavky bez ceny',toAsk?'#b7791f':'#6b7a90')}
     ${critCard}
-    ${card('Hodnota požadavků',num(sumEur,0)+' €','bez zamítnutých · kurz '+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
+    ${card('Hodnota požadavků',num(sumEur,0)+' €','za období, bez zamítnutých · kurz '+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
   </div>
   ${roleNotice()}
   ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':'<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button></div>'}
@@ -1006,6 +1034,7 @@ function bind(){
   const q=document.getElementById('f-q');
   if(q) q.oninput=()=>{filters.q=q.value;const p=q.selectionStart;render();const n=document.getElementById('f-q');n.focus();n.setSelectionRange(p,p);};
   ['status','priorita','ucet','usek','od','do'].forEach(k=>{const el=document.getElementById('f-'+k);if(el)el.onchange=()=>{filters[k]=el.value;render();};});
+  ['od','do'].forEach(k=>{const el=document.getElementById('d-'+k);if(el)el.onchange=()=>{dashRange[k]=el.value;render();};});
   const m=document.getElementById('f-mine');if(m)m.onchange=()=>{filters.mine=m.checked;render();};
   ['e-cena','e-mnozstvi'].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=recalc;el.onchange=recalc;}});
   const mena=document.getElementById('e-mena');if(mena)mena.onchange=()=>{collect();render();};  // změna měny překreslí (přepočet EUR)
@@ -1038,6 +1067,9 @@ async function act(a,v,el,ev){
     case 'tab': tab=v; break;
     case 'sort': sort=(sort.col===v)?{col:v,dir:-sort.dir}:{col:v,dir:1}; break;
     case 'clear-filters': filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false}; break;
+    case 'dash-all': dashRange={od:'',do:''}; break;
+    case 'dash-month': dashRange=monthRange(); break;
+    case 'dash-year': dashRange=yearRange(); break;
     case 'flt-all': filters.grp=''; filters.status=''; break;
     case 'flt-grp': filters.grp=(filters.grp===v?'':v); filters.status=''; break;
     case 'flt-status': filters.status=(filters.status===v?'':v); filters.grp=''; break;
