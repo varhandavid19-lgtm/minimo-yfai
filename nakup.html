@@ -608,6 +608,7 @@ function listView(){
     <h2>Přehled požadavků <span class="right">${rr.length} z ${rows.length} záznamů</span></h2>
     <div class="legend">
       <span class="lg-h">Filtr stavu:</span>
+      <button class="stchip grp ${(!filters.grp&&!filters.status)?'on':''}" data-a="flt-all" title="Zobrazit všechny">Vše (${rows.length})</button>
       <button class="stchip grp ${filters.grp==='open'?'on':''}" data-a="flt-grp" data-v="open"><i style="background:#e7eefb"></i>Otevřené požadavky (${openCount})</button>
       <button class="stchip grp ${filters.grp==='closed'?'on':''}" data-a="flt-grp" data-v="closed"><i style="background:#eef1f5"></i>Uzavřené požadavky (${closedCount})</button>
       <span class="lg-sep"></span>
@@ -1037,6 +1038,7 @@ async function act(a,v,el,ev){
     case 'tab': tab=v; break;
     case 'sort': sort=(sort.col===v)?{col:v,dir:-sort.dir}:{col:v,dir:1}; break;
     case 'clear-filters': filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false}; break;
+    case 'flt-all': filters.grp=''; filters.status=''; break;
     case 'flt-grp': filters.grp=(filters.grp===v?'':v); filters.status=''; break;
     case 'flt-status': filters.status=(filters.status===v?'':v); filters.grp=''; break;
     case 'dlg-yes':{const d=dlg;dlg=null;const val=d.kind==='prompt'?(document.getElementById('dlg-input')||{}).value||'':true;
