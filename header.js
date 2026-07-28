@@ -67,12 +67,20 @@
       b.classList.toggle('on', b.getAttribute('data-lang')===l);
     });
   }
+  function isoWeek(d){
+    var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    var day = t.getUTCDay() || 7;                 // Po=1 … Ne=7
+    t.setUTCDate(t.getUTCDate() + 4 - day);        // čtvrtek téhož ISO týdne
+    var ys = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return Math.ceil((((t - ys) / 86400000) + 1) / 7);
+  }
   function tick(){
     var el = document.getElementById('uh-clock'); if(!el) return;
     var d = new Date(), p = function(n){ return (n<10?'0':'')+n; };
     var t = el.querySelector('.t'), dd = el.querySelector('.d');
     if(t) t.textContent = p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
-    if(dd) dd.textContent = d.toLocaleDateString('cs-CZ',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'});
+    if(dd) dd.textContent = d.toLocaleDateString('cs-CZ',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})
+      + ' · týden ' + isoWeek(d);
   }
   function refresh(){ tick(); applyLang(); }
   setInterval(refresh, 1000);
