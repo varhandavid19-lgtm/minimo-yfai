@@ -457,13 +457,15 @@ async function loadProfile(user){
     const role = forced ? 'admin' : (d.role||'zadavatel');
     // účet ze seznamu "vždy admin", ale v databázi admina nemá → doplníme ho
     if(forced && d.role!=='admin'){ try{ await updateDoc(ref,{role:'admin'}); }catch(e){} }
+    // doplň/oprav e-mail v profilu podle přihlašovacího e-mailu (dřív se u některých neuložil)
+    if(user.email && d.email!==user.email){ try{ await updateDoc(ref,{email:user.email}); }catch(e){} }
     const level = (d.level && LEVEL_RANK[d.level]) ? d.level : (ROLE2LEVEL[role]||'basic');
     return {uid:user.uid, email:user.email, name:d.name||user.email, role, team:d.team||'—', level, modules:d.modules||{}};
   }
   // první uživatel v systému = admin; účty ze seznamu taky; ostatní zadavatelé
   const anyUsers = await getDocs(collection(db,'users'));
   const role = (forced || anyUsers.empty) ? 'admin' : 'zadavatel';
-  const prof = {name:user.email.split('@')[0], role, team: role==='admin'?'Administrátor':'—'};
+  const prof = {name:user.email.split('@')[0], email:user.email, role, team: role==='admin'?'Administrátor':'—'};
   await setDoc(ref, prof);
   return Object.assign({uid:user.uid, email:user.email, level:ROLE2LEVEL[role]||'basic', modules:{}}, prof);
 }
@@ -820,7 +822,7 @@ function adminView(){
       <div class="tblwrap"><table><thead><tr><th class="no-sort">Jméno</th><th class="no-sort">E-mail</th><th class="no-sort">Role</th><th class="no-sort">Útvar</th></tr></thead>
         <tbody>${usersList.length?usersList.map(u=>`<tr>
           <td><input value="${esc(u.name||'')}" data-a="user-name" data-v="${u.uid}" ${u.uid===me.uid?'disabled':''}></td>
-          <td class="muted">${esc(u.email||u.uid)}</td>
+          <td><input type="email" value="${esc(u.email||'')}" data-a="user-email" data-v="${u.uid}" placeholder="e-mail@…" title="${u.uid===me.uid?'Váš e-mail se řídí přihlášením':'Doplní/opraví se sám, až se člověk přihlásí'}" ${u.uid===me.uid?'disabled':''}></td>
           <td><select data-a="user-role" data-v="${u.uid}" ${u.uid===me.uid?'disabled':''}>${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v.lvl}. ${v.label}</option>`).join('')}</select></td>
           <td><input value="${esc(u.team||'')}" data-a="user-team" data-v="${u.uid}"></td></tr>`).join('')
           :'<tr><td colspan="4" class="muted" style="padding:12px">Zatím jen ty. Další lidé se objeví, jakmile se poprvé přihlásí nebo je založíš níže.</td></tr>'}</tbody></table></div>
@@ -1034,7 +1036,7 @@ function bind(){
   document.querySelectorAll('[data-a]').forEach(el=>{
     const a=el.dataset.a,v=el.dataset.v;
     const isInput = (el.tagName==='SELECT'||el.type==='checkbox'||el.type==='file'||
-      (el.tagName==='INPUT'&&['acc-name','user-name','user-team','user-role'].includes(a)));
+      (el.tagName==='INPUT'&&['acc-name','user-name','user-email','user-team','user-role'].includes(a)));
     if(isInput) el.onchange=ev=>act(a,v,el,ev);
     else el.onclick=ev=>{ev.stopPropagation();act(a,v,el,ev);};
   });
@@ -1055,7 +1057,7 @@ function bind(){
 
 const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject',
   'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','save-rates','req',
-  'user-role','user-name','user-team']);
+  'user-role','user-name','user-email','user-team']);
 async function act(a,v,el,ev){
   // Pojistka: v režimu „jen pro čtení" neprojde žádná zapisovací akce (i kdyby zbylo tlačítko).
   if(isNakupRO() && WRITE_ACTIONS.has(a)){ toast('Tento modul máte jen pro čtení.','err'); return; }
@@ -1215,7 +1217,7 @@ async function act(a,v,el,ev){
       if(pass.length<6){toast('Heslo musí mít aspoň 6 znaků.','err');return;}
       try{
         const uid=await createUserAccount(email,pass);
-        await setDoc(doc(db,'users',uid),{name,role,team});
+        await setDoc(doc(db,'users',uid),{name,email,role,team});
         ['nu-name','nu-email','nu-pass','nu-role','nu-team'].forEach(k=>delete drafts[k]);
         toast('Uživatel '+name+' založen. Předej mu heslo.','ok');
       }catch(e){ toast('Založení selhalo: '+authMsg(e.code),'err'); return; }
@@ -1223,6 +1225,7 @@ async function act(a,v,el,ev){
     }
     case 'user-role':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{role:el.value});}catch(e){toast(e.message,'err');} return; }
     case 'user-name':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{name:el.value.trim()});}catch(e){toast(e.message,'err');} return; }
+    case 'user-email':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{email:el.value.trim()});}catch(e){toast(e.message,'err');} return; }
     case 'user-team':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{team:el.value.trim()});}catch(e){toast(e.message,'err');} return; }
   }
   render();
