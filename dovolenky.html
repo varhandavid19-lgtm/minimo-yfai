@@ -161,7 +161,7 @@
   .cal tr.days th.today{background:#f6821f;color:#fff;font-weight:800;border-radius:5px}
   .cal-inner{position:relative;width:max-content;min-width:100%}
   .cal td.d .lab{font-size:9px;font-weight:800;color:rgba(25,30,42,.34);pointer-events:none;letter-spacing:0}
-  .cal td.shift .lab.lab-sh{font-size:9px;color:rgba(20,32,50,.62);font-weight:800}
+  .cal td.shift .lab.lab-sh{font-size:8px;color:rgba(20,32,50,.4);font-weight:600;letter-spacing:0}
   /* směna naplánovaná pod nepřítomností: jemná modrá linka dole */
   .cal td.hasshift{box-shadow:inset 0 -3px 0 rgba(37,99,168,.4)}
   /* Dnešek: prázdná políčka lehce oranžová, políčka s nepřítomností nechají svou barvu vyniknout */
@@ -324,57 +324,83 @@ const SECTIONS = [
 const POS2SECTION = {}; SECTIONS.forEach(s=>s.positions.forEach(p=>{POS2SECTION[p]=s.key;}));
 const inSection = (u,key) => (u.positions||[]).some(p=>POS2SECTION[p]===key);
 
-/* ---- Směny (přítomnost) ---- barvy zeleno-modro-fialové, ať se nepletou s nepřítomnostmi. */
+/* ---- Směny (přítomnost) ---- barvy zeleno-modro-fialové, ať se nepletou s nepřítomnostmi.
+   Časy: ranní 6–14, odpolední 14–22, noční 22–6. 12h: ranní 6–18, noční 18–6.
+   Salaried = kancelář, pružná ~7:00–15:30, v kalendáři bez písmene (jen zeleně). */
 const SHIFTS = [
-  {k:'DEN', name:'Denní',     hours:'Po–Pá', fill:'#e4ecc4'},
-  {k:'R',   name:'Ranní',     hours:'6–14',  fill:'#d3ecd0'},
-  {k:'O',   name:'Odpolední', hours:'14–22', fill:'#d2e3f6'},
-  {k:'N',   name:'Noční',     hours:'22–6',  fill:'#dcd2f3'},
-  {k:'D12', name:'Denní 12h', hours:'6–18',  fill:'#bfe6b6'},
-  {k:'N12', name:'Noční 12h', hours:'18–6',  fill:'#c8b9ee'},
-  {k:'SAL', name:'Salaried',  hours:'kancelář Po–Pá', fill:'#e8e0c6'},
+  {k:'R',   name:'Ranní',         hours:'6:00–14:00',  fill:'#d3ecd0'},
+  {k:'O',   name:'Odpolední',     hours:'14:00–22:00', fill:'#cfe0f5'},
+  {k:'N',   name:'Noční',         hours:'22:00–6:00',  fill:'#dcd2f3'},
+  {k:'D12', name:'Ranní 12h',     hours:'6:00–18:00',  fill:'#bfe6b6'},
+  {k:'O12', name:'Odpolední 12h', hours:'14:00–2:00',  fill:'#f3d79c'},
+  {k:'N12', name:'Noční 12h',     hours:'18:00–6:00',  fill:'#c8b9ee'},
+  {k:'DEN', name:'Denní',         hours:'Po–Pá',       fill:'#e4ecc4'},
+  {k:'SAL', name:'Salaried',      hours:'cca 7:00–15:30', fill:'#7ec47e', noLabel:true},
 ];
 const SHIFT_BY = Object.fromEntries(SHIFTS.map(s=>[s.k,s]));
-/* Které směny se v které sekci nabízejí. */
+/* Které směny se ručně nabízejí v které sekci (rotační plány jsou naopak jednotné). */
 const SECTION_SHIFTS = {
-  engineering: ['DEN'],
+  engineering: ['DEN','R','SAL'],
   toolsetters: ['R','O','N','D12','N12'],
-  maintenance: ['D12','N12','R','O','N','SAL'],
+  maintenance: ['D12','O12','N12','R','O','N','SAL'],
 };
 const sectionShifts = key => (SECTION_SHIFTS[key]||[]).map(k=>SHIFT_BY[k]).filter(Boolean);
 /* Maintenance jede 24/7 → plánuje se i o víkendu a svátcích (i dovolená). */
 const is247 = u => ((u&&u.positions)||[]).some(p=>POS2SECTION[p]==='maintenance');
 
 /* ---- Směnové rotace (automatické rozplánování celého roku jedním kliknutím) ----
-   Vytěženo z reálného rozpisu „Směny 2026".
-   - Údržba 12h: 4 týmy H1–H4, 28denní continental cyklus (krátký/dlouhý týden,
-     vždy 1 tým denní 12h, 1 noční 12h, 2 týmy volno = plné 24/7). Kotva = 1.1.2026.
-   - Údržba denní: týden ranní / týden odpolední (Po–Pá). Kotva = pondělí 5.1.2026.
-   - Toolsetteři: 3směnný týdenní rytmus R→N→O. Kotva = pondělí 5.1.2026.
-   Znak v cyklu: D/N/R/O = směna, V = volno. Mapuje se na kódy směn (map). */
+   4směnný 12h (týmy H1–H4) je vytěžený z reálného rozpisu „Směny 2026" (28denní
+   continental cyklus, kotva 1.1.2026). Ostatní rytmy jsou týdenní, kotva pondělí 5.1.2026.
+   Znak v cyklu: D/N/R/O = směna, V = volno. Mapuje se na kódy směn (map).
+   Rytmy jsou jednotné pro všechny sekce (Engineering, Maintenance i Toolsetters). */
 const ROT_PLANS = {
-  'H1':   {label:'Údržba 12h – tým H1', section:'maintenance', anchor:'2026-01-01', cycle:'VDDDVVNNVVVDDVVNNNVVDDVVVNNV', map:{D:'D12',N:'N12'}},
-  'H2':   {label:'Údržba 12h – tým H2', section:'maintenance', anchor:'2026-01-01', cycle:'DVVVNNVVDDDVVNNVVVDDVVNNNVVD', map:{D:'D12',N:'N12'}},
-  'H3':   {label:'Údržba 12h – tým H3', section:'maintenance', anchor:'2026-01-01', cycle:'VNNNVVDDVVVNNVVDDDVVNNVVVDDV', map:{D:'D12',N:'N12'}},
-  'H4':   {label:'Údržba 12h – tým H4', section:'maintenance', anchor:'2026-01-01', cycle:'NVVVDDVVNNNVVDDVVVNNVVDDDVVN', map:{D:'D12',N:'N12'}},
-  'DAY-R':{label:'Údržba denní – R/O (start ranní)',     section:'maintenance', anchor:'2026-01-05', cycle:'RRRRRVVOOOOOVV', map:{R:'R',O:'O'}},
-  'DAY-O':{label:'Údržba denní – R/O (start odpolední)', section:'maintenance', anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVV', map:{R:'R',O:'O'}},
-  '3SM-R':{label:'Klasický 3směnný (start ranní)',       section:'maintenance', anchor:'2026-01-05', cycle:'RRRRRVVOOOOOVVNNNNNVV', map:{R:'R',O:'O',N:'N'}},
-  '3SM-O':{label:'Klasický 3směnný (start odpolední)',   section:'maintenance', anchor:'2026-01-05', cycle:'OOOOOVVNNNNNVVRRRRRVV', map:{R:'R',O:'O',N:'N'}},
-  '3SM-N':{label:'Klasický 3směnný (start noční)',       section:'maintenance', anchor:'2026-01-05', cycle:'NNNNNVVRRRRRVVOOOOOVV', map:{R:'R',O:'O',N:'N'}},
-  'SAL':  {label:'Salaried (kancelář, Po–Pá)',           section:'maintenance', anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'SAL'}},
-  'TS-R': {label:'Toolsetter 3 směny (start ranní)',     section:'toolsetters', anchor:'2026-01-05', cycle:'RRRRRVVNNNNNVVOOOOOVV', map:{R:'R',N:'N',O:'O'}},
-  'TS-N': {label:'Toolsetter 3 směny (start noční)',     section:'toolsetters', anchor:'2026-01-05', cycle:'NNNNNVVOOOOOVVRRRRRVV', map:{R:'R',N:'N',O:'O'}},
-  'TS-O': {label:'Toolsetter 3 směny (start odpolední)', section:'toolsetters', anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVVNNNNNVV', map:{R:'R',N:'N',O:'O'}},
-  'ENG':  {label:'Denní (Po–Pá)',                        section:'engineering', anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'DEN'}},
+  'SAL':   {label:'Salaried (cca 7:00–15:30)',       anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'SAL'}},
+  '3SM-R': {label:'Start ranní (R→O→N)',             anchor:'2026-01-05', cycle:'RRRRRVVOOOOOVVNNNNNVV', map:{R:'R',O:'O',N:'N'}},
+  '3SM-O': {label:'Start odpolední (O→N→R)',         anchor:'2026-01-05', cycle:'OOOOOVVNNNNNVVRRRRRVV', map:{R:'R',O:'O',N:'N'}},
+  '3SM-N': {label:'Start noční (N→R→O)',             anchor:'2026-01-05', cycle:'NNNNNVVRRRRRVVOOOOOVV', map:{R:'R',O:'O',N:'N'}},
+  'H1':    {label:'Tým H1',                          anchor:'2026-01-01', cycle:'VDDDVVNNVVVDDVVNNNVVDDVVVNNV', map:{D:'D12',N:'N12'}},
+  'H2':    {label:'Tým H2',                          anchor:'2026-01-01', cycle:'DVVVNNVVDDDVVNNVVVDDVVNNNVVD', map:{D:'D12',N:'N12'}},
+  'H3':    {label:'Tým H3',                          anchor:'2026-01-01', cycle:'VNNNVVDDVVVNNVVDDDVVNNVVVDDV', map:{D:'D12',N:'N12'}},
+  'H4':    {label:'Tým H4',                          anchor:'2026-01-01', cycle:'NVVVDDVVNNNVVDDVVVNNVVDDDVVN', map:{D:'D12',N:'N12'}},
+  'DAY-R': {label:'Start ranní (R/O)',               anchor:'2026-01-05', cycle:'RRRRRVVOOOOOVV', map:{R:'R',O:'O'}},
+  'DAY-O': {label:'Start odpolední (O/R)',           anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVV', map:{R:'R',O:'O'}},
+  'FIXD12':{label:'Ranní 12h (6:00–18:00)',          anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'D12'}},
+  'FIXO12':{label:'Odpolední 12h (14:00–2:00)',      anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'O12'}},
+  'FIXN12':{label:'Noční 12h (18:00–6:00)',          anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'N12'}},
+  'FIXR':  {label:'Ranní (6:00–14:00)',              anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'R'}},
+  // starší klíče (kvůli již uloženým rotacím) – nejsou v nabídce, ale počítají se dál:
+  'TS-R':  {label:'Toolsetter – start ranní',        anchor:'2026-01-05', cycle:'RRRRRVVNNNNNVVOOOOOVV', map:{R:'R',N:'N',O:'O'}},
+  'TS-N':  {label:'Toolsetter – start noční',        anchor:'2026-01-05', cycle:'NNNNNVVOOOOOVVRRRRRVV', map:{R:'R',N:'N',O:'O'}},
+  'TS-O':  {label:'Toolsetter – start odpolední',    anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVVNNNNNVV', map:{R:'R',N:'N',O:'O'}},
+  'ENG':   {label:'Denní (Po–Pá)',                   anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'DEN'}},
 };
-const SECTION_ROT = {maintenance:['H1','H2','H3','H4','DAY-R','DAY-O','3SM-R','3SM-O','3SM-N','SAL'], toolsetters:['TS-R','TS-N','TS-O'], engineering:['ENG']};
+/* Nabídka rytmů v rozbalovacím seznamu (jednotná pro všechny sekce), s nadpisy skupin. */
+const ROT_GROUPS = [
+  {label:'Kancelář',                                plans:['SAL']},
+  {label:'3směnný provoz (8h, týdenní rotace)',     plans:['3SM-R','3SM-O','3SM-N']},
+  {label:'4směnný provoz (12h, 24/7 – dle týmu)',   plans:['H1','H2','H3','H4']},
+  {label:'2směnný provoz (8h, ranní/odpolední)',    plans:['DAY-R','DAY-O']},
+  {label:'Pevná 12h směna',                         plans:['FIXD12','FIXO12','FIXN12']},
+  {label:'1směnný provoz (8h)',                     plans:['FIXR']},
+];
 const daysSince = (anchor,ds) => Math.round((Date.parse(ds+'T00:00:00Z')-Date.parse(anchor+'T00:00:00Z'))/86400000);
-/* Vrátí kód směny pro osobu a den z její rotace (nebo null pro volno / bez rotace). */
+/* Historie rotací osoby jako segmenty {plan, from} seřazené vzestupně.
+   Podporuje i starý formát {plan, from} (jeden segment). */
+function rotSegments(personId){
+  const rot=rotById[personId]; if(!rot) return [];
+  let segs = Array.isArray(rot.segments) ? rot.segments.slice()
+           : (rot.plan!==undefined ? [{plan:rot.plan, from:rot.from||'0000-01-01'}] : []);
+  return segs.filter(s=>s && s.from!=null).sort((a,b)=>String(a.from).localeCompare(String(b.from)));
+}
+/* Segment platný pro daný den (poslední, jehož „from" je ≤ ds). */
+function activeSeg(personId, ds){
+  let cur=null; for(const s of rotSegments(personId)){ if(s.from<=ds) cur=s; else break; } return cur;
+}
+/* Vrátí kód směny pro osobu a den z její rotace (nebo null pro volno / bez rotace).
+   Minulost před „from" segmentu se nevyplňuje; starší segmenty zůstávají beze změny. */
 function rotationCodeFor(personId, ds){
-  const rot=rotById[personId]; if(!rot) return null;
-  if(rot.from && ds<rot.from) return null;       // rotace platí až od data založení (minulost se nevyplňuje)
-  const plan=ROT_PLANS[rot.plan]; if(!plan) return null;
+  const seg=activeSeg(personId, ds); if(!seg || !seg.plan) return null;
+  const plan=ROT_PLANS[seg.plan]; if(!plan) return null;
   const L=plan.cycle.length, i=((daysSince(plan.anchor,ds)%L)+L)%L, tok=plan.cycle[i];
   if(!tok || tok==='V') return null;
   return plan.map[tok] || tok;
@@ -708,15 +734,26 @@ async function assignRotation(){
   if(!ROT_PLANS[plan]){ toast('Vyberte směnový rytmus.','err'); return; }
   try{
     const from=today();
-    await setDoc(doc(db,'rotations',p.id),{plan, from, personName:p.name, by:me.email, at:serverTimestamp()});
-    toast('Rozplánováno od '+dCz(from)+' dál podle rytmu '+plan+'.','ok'); render();
+    // minulost (segmenty starší než dnešek) zachováme, od dneška nastavíme nový rytmus
+    const past=rotSegments(p.id).filter(s=>s.from<from);
+    const segments=past.concat([{plan, from}]);
+    await setDoc(doc(db,'rotations',p.id),{segments, personName:p.name, by:me.email, at:serverTimestamp()});
+    toast('Rozplánováno od '+dCz(from)+' dál. Minulost zůstala beze změny.','ok'); render();
   }catch(e){ toast('Nepodařilo se uložit rotaci: '+e.message,'err'); }
 }
 async function clearRotation(personId){
   const p=allUsers.find(x=>x.id===personId);
   if(p && !canEditPerson(p.id)){ toast('Můžete měnit jen sebe.','err'); return; }
-  try{ await deleteDoc(doc(db,'rotations',personId)); toast('Rotace zrušena.','ok'); render(); }
-  catch(e){ toast('Nepodařilo se zrušit: '+e.message,'err'); }
+  try{
+    const from=today();
+    const past=rotSegments(personId).filter(s=>s.from<from);
+    if(past.length){   // ponech minulost, od dneška ukonči rytmus
+      await setDoc(doc(db,'rotations',personId),{segments:past.concat([{plan:'',from}]), by:me.email, at:serverTimestamp()});
+    }else{
+      await deleteDoc(doc(db,'rotations',personId));
+    }
+    toast('Rytmus ukončen od dneška. Minulost zůstala beze změny.','ok'); render();
+  }catch(e){ toast('Nepodařilo se zrušit: '+e.message,'err'); }
 }
 
 /* ==========================================================
@@ -849,18 +886,19 @@ function formPanel(){
 
 function rotationPanel(){
   const pm=curPerm();
-  const plans=SECTION_ROT[section]||[];
-  if(!plans.length) return '';
   if(pm==='read'){
     return `<div class="panel"><h2>🔁 Automatické rozplánování směn</h2><div class="body">
       <p style="margin:0;color:var(--muted)">V této sekci máte právo <b>jen prohlížet</b>.</p></div></div>`;
   }
   const editable = pm==='all' ? people : people.filter(p=>p.id===(me&&me.uid));
   if((!frPerson || !editable.some(p=>p.id===frPerson)) && editable.length) frPerson=editable[0].id;
-  if(!plans.includes(frPlan)) frPlan=plans[0];
-  const opts=editable.map(p=>{const r=rotById[p.id]; return `<option value="${p.id}" ${frPerson===p.id?'selected':''}>${esc(p.name)}${r?(' — '+esc(r.plan)):''}</option>`;}).join('');
-  const pOpts=plans.map(k=>`<option value="${k}" ${frPlan===k?'selected':''}>${esc(ROT_PLANS[k].label)}</option>`).join('');
-  const cur=rotById[frPerson];
+  const allPlanKeys=ROT_GROUPS.flatMap(g=>g.plans);
+  if(!allPlanKeys.includes(frPlan)) frPlan=allPlanKeys[0];
+  // u osoby ukaž rytmus platný dnes
+  const opts=editable.map(p=>{const s=activeSeg(p.id,today()); const lbl=s&&s.plan&&ROT_PLANS[s.plan]?ROT_PLANS[s.plan].label:''; return `<option value="${p.id}" ${frPerson===p.id?'selected':''}>${esc(p.name)}${lbl?(' — '+esc(lbl)):''}</option>`;}).join('');
+  const pOpts=ROT_GROUPS.map(g=>`<optgroup label="${esc(g.label)}">${g.plans.map(k=>`<option value="${k}" ${frPlan===k?'selected':''}>${esc(ROT_PLANS[k].label)}</option>`).join('')}</optgroup>`).join('');
+  const curSeg=activeSeg(frPerson, today());
+  const hasRot=rotSegments(frPerson).length>0;
   const noPeople=!editable.length;
   return `<div class="panel rot"><h2>🔁 Automatické rozplánování směn <span class="right">celý rok na jedno kliknutí</span></h2><div class="body">
     <div class="formrow">
@@ -868,9 +906,9 @@ function rotationPanel(){
         <select id="fr-person" ${!canEditAll()?'disabled':''}>${noPeople?'<option value="">— nemáte koho —</option>':''}${opts}</select></div>
       <div class="f grow"><label>Směnový rytmus / tým</label><select id="fr-plan">${pOpts}</select></div>
       <div class="f addbtn"><button class="btn-primary" id="fr-add" ${noPeople?'disabled':''}>Rozplánovat rok</button></div>
-      ${cur?'<div class="f addbtn"><button class="btn-ghost" id="fr-clear">Zrušit rotaci</button></div>':''}
+      ${hasRot?'<div class="f addbtn"><button class="btn-ghost" id="fr-clear">Ukončit rytmus</button></div>':''}
     </div>
-    <div class="formfoot"><span class="hintmini">Rytmus se vyplní <b>ode dneška dál</b> (minulost zůstane nedotčená) na celý rok i roky dopředu. Ruční směny a dovolené ho v kalendáři přebijí.${cur?(' Nyní: <b>'+esc(ROT_PLANS[cur.plan]?ROT_PLANS[cur.plan].label:cur.plan)+'</b>'+(cur.from?(' od '+dCz(cur.from)):'')+'.'):''}</span></div>
+    <div class="formfoot"><span class="hintmini">Rytmus se nastaví <b>ode dneška dál</b> – <b>minulost se nemění</b> (dřívější plán zůstane). Platí ve všech záložkách. Ruční směny a dovolené rotaci v kalendáři přebijí.${curSeg&&curSeg.plan?(' Nyní: <b>'+esc(ROT_PLANS[curSeg.plan]?ROT_PLANS[curSeg.plan].label:curSeg.plan)+'</b> od '+dCz(curSeg.from)+'.'):''}</span></div>
   </div></div>`;
 }
 
@@ -907,7 +945,7 @@ function legendView(){
   const items = TYPES.map(t=>`<span class="item"><span class="sw" style="background:${t.fill}"></span>${esc(t.k)}</span>`).join('')
     + `<span class="item"><span class="sw" style="background:${HOLIDAY_FILL}"></span>Svátek (státní)</span>`
     + `<span class="item"><span class="sw" style="background:#eef1f5"></span>Víkend</span>`;
-  const shItems = sectionShifts(section).map(s=>`<span class="item"><span class="sw" style="background:${s.fill}"></span>${esc(s.k)} · ${esc(s.name)}</span>`).join('');
+  const shItems = SHIFTS.map(s=>`<span class="item"><span class="sw" style="background:${s.fill}"></span>${s.noLabel?esc(s.name):(esc(s.k)+' · '+esc(s.name))}${s.hours?(' ('+esc(s.hours)+')'):''}</span>`).join('');
   return `<div class="legend"><span class="lg-h">Nepřítomnost:</span>${items}</div>
     <div class="legend"><span class="lg-h">Směny:</span>${shItems}</div>`;
 }
@@ -1048,7 +1086,7 @@ function calendarView(){
         const nx=allDays[i+1], ns=(nx && !nx.first)?eff(nx.ds):null;   // souvislý pruh stejné směny
         if(ns && ns.code===s.code) style+=`;border-right-color:${S.fill}`;
         if(dd.holiday)cls+=' holmark';
-        inner=`<span class="lab lab-sh">${esc(s.code)}</span>`;
+        inner = S.noLabel ? '' : `<span class="lab lab-sh">${esc(s.code)}</span>`;   // Salaried = jen barva, bez písmene
         tt+=` • směna ${S.name}${S.hours?(' ('+S.hours+')'):''}${s.rot?' (rotace)':''}`;
       }
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
