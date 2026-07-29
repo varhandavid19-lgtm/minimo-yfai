@@ -475,7 +475,11 @@ function subscribeRows(){
   const q1 = query(collection(db,'requests'), orderBy('createdTs','desc'));
   unsubRows = onSnapshot(q1, snap=>{
     rows = snap.docs.map(d=>Object.assign({_id:d.id}, d.data()));
-    dataReady=true; if(!qrOpen) render();
+    dataReady=true;
+    // Nepřekresluj na pozadí, když je otevřený rozepsaný požadavek (nebo skener) –
+    // překreslení by zahodilo hodnoty, které uživatel ještě nestihl uložit (dodavatel,
+    // e-mail o naskladnění, poznámka…). Data se tiše aktualizují a projeví se po zavření/uložení.
+    if(!qrOpen && !editing) render();
   }, err=>{ fatalErr='Nemám přístup k datům: '+err.message; render(); });
 }
 function subscribeUsers(){
