@@ -685,7 +685,7 @@ function listView(){
           <td class="num" data-label="Celkem EUR">${(Number(r.cena)||0)?`<b>${num(totalEur(r))} €</b>`:'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Dodavatel">${r.dodavatel?esc(r.dodavatel):'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Výrobce">${r.vyrobce?esc(r.vyrobce):'<span class="muted">—</span>'}</td>
-          <td class="hide-mobile" data-label="Účet">${r.ucet?`<b>${esc(r.ucet)}</b>${accName(r.ucet)?`<div class="muted" style="font-size:10.5px;white-space:normal;max-width:130px">${esc(accName(r.ucet))}</div>`:''}`:'<span class="muted">—</span>'}</td>
+          <td class="hide-mobile" data-label="Účet">${r.ucet?`<b>${esc(r.ucet)}</b>`:'<span class="muted">—</span>'}</td>
           <td data-label="Linka / stroj">${r.usek?`<b>${esc(r.usek)}</b>${r.stroj?`<div class="muted" style="font-size:10.5px">${esc(r.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="${late?'late':''}" data-label="Dodání">${r.datum?esc(dateCz(r.datum))+(late?' ⚠':''):'<span class="muted">—</span>'}</td>
           <td class="num hide-mobile ${(Number(r.min)||0)>0&&(Number(r.mnozstvi)||0)<Number(r.min)?'stock-warn':''}" data-label="MIN/MAX">${(r.min||r.max)?`${r.min||0} / ${r.max||0}`:'<span class="muted">—</span>'}</td>
