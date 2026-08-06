@@ -737,7 +737,7 @@ function modalView(){
           <label class="txtchk" title="Položka nemá skladové číslo"><input type="checkbox" id="e-txt" ${isTxt?'checked':''}>TXT</label>
         </div>${errs.sklad?`<span class="err">${esc(errs.sklad)}</span>`:''}</div>
       ${statusLocked
-        ? `<div class="f span2"><label>Stav schvalování</label><div class="ro">${esc(r.status||'nový')}</div><div id="auto-hint" class="autohint ${(Number(r.cena)||0)>0?'':'grey'}">${(Number(r.cena)||0)>0?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.'}</div></div>`
+        ? `<div class="f span2"><label>Stav schvalování</label><div class="ro">${esc(isNew?'nový':(r.status||'nový'))}</div><div id="auto-hint" class="autohint ${(isNew||(Number(r.cena)||0)===0)?'grey':''}">${isNew?'Nový požadavek se vždy založí ve stavu „nový" — bez ohledu na cenu. Do schvalování ho posune až sklad/schvalovatel.':((Number(r.cena)||0)>0?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.')}</div></div>`
         : wrap('status',`<select id="e-status">${STATUSES.map(s=>`<option ${r.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>`)}
       ${wrapL('typ','Druh požadavku',`<select id="e-typ">${TYPES.map(t=>`<option ${(r.typ||'Nový požadavek')===t?'selected':''}>${esc(t)}</option>`).join('')}</select>`,'span2')}
       <div class="f"><label>Pořadové číslo</label><div class="ro">${isNew?'<span class="muted">přidělí se po uložení</span>':esc(r.poradove)}</div></div>
@@ -971,8 +971,9 @@ function recalc(){
   if(t)t.textContent=num(total(editing))+' '+editing.mena;
   if(e)e.textContent=num(totalEur(editing))+' €';
   const h=document.getElementById('auto-hint');
-  if(h){const has=(Number(editing.cena)||0)>0;h.className='autohint '+(has?'':'grey');
-    h.textContent=has?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.';}
+  if(h){const isNew=!editing._id; const has=(Number(editing.cena)||0)>0;
+    h.className='autohint '+((isNew||!has)?'grey':'');
+    h.textContent=isNew?'Nový požadavek se vždy založí ve stavu „nový" — bez ohledu na cenu. Do schvalování ho posune až sklad/schvalovatel.':(has?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.');}
 }
 function validate(){
   errs={};
@@ -1010,11 +1011,11 @@ async function nextNumber(){
 async function createRequest(){
   const poradove=await nextNumber();
   const rec=Object.assign({},editing,{
-    poradove, author:me.uid, authorName:me.name, authorEmail:me.email, created:today(), createdTs:serverTimestamp(),
+    poradove, status:'nový', author:me.uid, authorName:me.name, authorEmail:me.email, created:today(), createdTs:serverTimestamp(),
     approvedBy:null, approvedAt:null, hist:[`${today()} · ${me.name} · založil požadavek`]
   });
-  const auto=applyAutoStatus(rec,'nový',false);
-  if(auto) rec.hist.push(`${today()} · systém · ${auto}`);
+  // Nově založený požadavek je VŽDY ve stavu „nový" — nezáleží na ceně ani ostatních polích.
+  // Do „ve schvalování" ho posune až sklad/schvalovatel (nebo se cena doplní později u existujícího požadavku).
   delete rec._id;
   await addDoc(collection(db,'requests'),rec);
   return poradove;
