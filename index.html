@@ -533,7 +533,7 @@ function visibleRows(){
 }
 function roleNotice(){
   if(P().admin) return `<div class="notice">Máš plná práva. Povinná pole, uživatele a účty spravuješ v záložce Administrace.</div>`;
-  if(me.role==='skladnik') return `<div class="notice">Jako skladník měníš stav požadavků, datum dodání, účet i ostatní údaje. ${toAskGlobal()?`<b>${toAskGlobal()} nových požadavků nemá cenu — poptej je u dodavatele</b> tlačítkem Poptat.`:'Stav požadavku měň ručně podle potřeby.'}</div>`;
+  if(me.role==='skladnik') return `<div class="notice">Jako skladník měníš stav požadavků, datum dodání, účet i ostatní údaje. ${toAskGlobal()?`<b>${toAskGlobal()} nových požadavků nemá cenu — poptej je u dodavatele</b> tlačítkem Poptat.`:'Doplníš-li cenu, požadavek se sám posune ke schválení.'}</div>`;
   if(me.role==='schvalovatel') return `<div class="notice">Otevři požadavek a odklikni <b>Schválit</b> nebo <b>Zamítnout</b>. Stačí schválení jednoho ze schvalovatelů — schválit můžeš i požadavek bez ceny. Ostatní údaje upravuje sklad.</div>`;
   return `<div class="notice">Zakládáš požadavky a sleduješ jejich stav. Cenu vyplň, jen když ji znáš. Odeslaný požadavek už neupravíš — změnu napiš skladu.</div>`;
 }
@@ -640,7 +640,7 @@ function modalView(){
   const statusLocked = isNew && !P().edit;
   const body = ed ? `
       ${statusLocked
-        ? `<div class="f"><label>Stav schvalování</label><div class="ro">nový</div><div id="auto-hint" class="autohint grey">Požadavek se založí ve stavu „nový". O dalším stavu rozhodne sklad nebo schvalovatel.</div></div>`
+        ? `<div class="f"><label>Stav schvalování</label><div class="ro">nový</div><div id="auto-hint" class="autohint ${(Number(r.cena)||0)>0?'':'grey'}">${(Number(r.cena)||0)>0?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.'}</div></div>`
         : wrap('status',`<select id="e-status">${STATUSES.map(s=>`<option ${r.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>`)}
       ${wrapL('typ','Druh požadavku',`<select id="e-typ">${TYPES.map(t=>`<option ${(r.typ||'Nový požadavek')===t?'selected':''}>${esc(t)}</option>`).join('')}</select>`,'span2')}
       <div class="f"><label>Pořadové číslo</label><div class="ro">${isNew?'<span class="muted">přidělí se po uložení</span>':esc(r.poradove)}</div></div>
@@ -871,8 +871,8 @@ function recalc(){
   if(t)t.textContent=num(total(editing))+' '+editing.mena;
   if(e)e.textContent=num(totalEur(editing))+' €';
   const h=document.getElementById('auto-hint');
-  if(h){h.className='autohint grey';
-    h.textContent='Požadavek se založí ve stavu „nový". O dalším stavu rozhodne sklad nebo schvalovatel.';}
+  if(h){const has=(Number(editing.cena)||0)>0;h.className='autohint '+(has?'':'grey');
+    h.textContent=has?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.';}
 }
 function validate(){
   errs={};
@@ -882,6 +882,12 @@ function validate(){
   if(editing.url&&!/^https?:\/\//i.test(editing.url))errs.url='Odkaz musí začínat http:// nebo https://';
   if(editing.min&&editing.max&&Number(editing.min)>Number(editing.max))errs.max='MAX musí být ≥ MIN';
   return Object.keys(errs).length===0;
+}
+const AUTO_FROM=['nový','poptáno'];
+function applyAutoStatus(row,oldStatus,touched){
+  if(row.approvedBy||touched) return null;
+  if((Number(row.cena)||0)>0 && AUTO_FROM.includes(row.status)){ row.status='ve schvalování'; return `stav ${oldStatus} → ve schvalování (automaticky po doplnění ceny)`; }
+  return null;
 }
 
 /* pořadové číslo: bezpečně přes transakci nad meta/config.seq */
@@ -903,7 +909,8 @@ async function createRequest(){
     poradove, author:me.uid, authorName:me.name, authorEmail:me.email, created:today(), createdTs:serverTimestamp(),
     approvedBy:null, approvedAt:null, hist:[`${today()} · ${me.name} · založil požadavek`]
   });
-  rec.status='nový';   // každý nový požadavek se zakládá vždy jako „nový" (i s cenou)
+  const auto=applyAutoStatus(rec,'nový',false);
+  if(auto) rec.hist.push(`${today()} · systém · ${auto}`);
   delete rec._id;
   await addDoc(collection(db,'requests'),rec);
   return poradove;
@@ -914,6 +921,10 @@ async function updateRequest(){
   const hist=(editing.hist||[]).slice();
   if(touched) hist.push(`${today()} · ${me.name} · stav ${old.status} → ${editing.status}`);
   else hist.push(`${today()} · ${me.name} · upravil požadavek`);
+  if(!touched && (Number(old.cena)||0)===0 && (Number(editing.cena)||0)>0){
+    const auto=applyAutoStatus(editing,old.status,false);
+    if(auto) hist.push(`${today()} · ${me.name} · ${auto}`);
+  }
   const {_id,...data}=editing; data.hist=hist;
   await updateDoc(doc(db,'requests',id),data);
 }
