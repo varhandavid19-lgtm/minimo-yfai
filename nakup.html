@@ -410,7 +410,7 @@ let loginBusy=false, loginErr='';
 let qrOpen=false, qr=null;   // stav QR skeneru
 let manage={on:false};                                        // režim „Správa požadavků" (jen skladník/admin)
 let mgrSel=new Set();                                          // vybrané řádky (_id)
-let mgr={reqNo:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
+let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
 
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -741,7 +741,10 @@ function mgrPanel(){
     <h2>⚙ Správa požadavků <span class="right">vybráno: ${n}</span></h2>
     <div class="mgrhint">Vyplň jen políčka, která chceš změnit — <b>prázdná se ignorují</b> a u vybraných řádků zůstanou beze změny. Zaškrtni řádky v tabulce a dej <b>Použít na vybrané</b>.</div>
     <div class="mgrgrid">
-      <label>Číslo requestu<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="např. 4500012345"></label>
+      <label>Req no.<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="číslo requestu"></label>
+      <label>RFQ no.<input id="m-rfqno" data-mg="rfqNo" value="${esc(mgr.rfqNo)}" placeholder="číslo poptávky"></label>
+      <label>Order no.<input id="m-orderno" data-mg="orderNo" value="${esc(mgr.orderNo)}" placeholder="číslo objednávky"></label>
+      <label>DSSI item<input id="m-dssi" data-mg="dssiItem" value="${esc(mgr.dssiItem)}" placeholder="DSSI item"></label>
       <label>Doklad<div class="inline">
         <select id="m-doctype" data-mg="docType"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${mgr.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
         <input id="m-docno" data-mg="docNo" value="${esc(mgr.docNo)}" placeholder="číslo dokladu"></div></label>
@@ -764,7 +767,7 @@ async function mgrApply(receiveComplete){
   const sel=rows.filter(r=>mgrSel.has(r._id));
   if(!sel.length){ toast('Nejdřív zaškrtni aspoň jeden požadavek.','err'); return; }
   if(!receiveComplete){
-    const anyField = mgr.reqNo!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!=='';
+    const anyField = mgr.reqNo!==''||mgr.rfqNo!==''||mgr.orderNo!==''||mgr.dssiItem!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!=='';
     if(!anyField){ toast('Vyplň aspoň jedno políčko, které se má změnit.','err'); return; }
   }
   let ok=0, fail=0;
@@ -774,7 +777,10 @@ async function mgrApply(receiveComplete){
       patch.receivedQty=Number(r.mnozstvi)||0; patch.receivedDate=today(); patch.status='doručeno';
       ch.push(`přijato kompletně (${patch.receivedQty} ks) → doručeno`);
     } else {
-      if(mgr.reqNo!==''){ patch.reqNo=mgr.reqNo.trim(); ch.push('č. requestu '+patch.reqNo); }
+      if(mgr.reqNo!==''){ patch.reqNo=mgr.reqNo.trim(); ch.push('Req no. '+patch.reqNo); }
+      if(mgr.rfqNo!==''){ patch.rfqNo=mgr.rfqNo.trim(); ch.push('RFQ no. '+patch.rfqNo); }
+      if(mgr.orderNo!==''){ patch.orderNo=mgr.orderNo.trim(); ch.push('Order no. '+patch.orderNo); }
+      if(mgr.dssiItem!==''){ patch.dssiItem=mgr.dssiItem.trim(); ch.push('DSSI item '+patch.dssiItem); }
       if(mgr.recvQty!==''){ patch.receivedQty=Number(mgr.recvQty)||0; ch.push('přijato '+patch.receivedQty+' ks'); }
       if(mgr.recvDate!==''){ patch.receivedDate=mgr.recvDate; ch.push('datum přijetí '+dateCz(mgr.recvDate)); }
       if(mgr.docType!==''||mgr.docNo!==''){ patch.docType=mgr.docType; patch.docNo=mgr.docNo.trim(); ch.push('doklad '+((mgr.docType||'')+' '+(mgr.docNo||'')).trim()); }
@@ -877,9 +883,12 @@ function modalView(){
       : (me.role==='schvalovatel'
       ? `<div class="robar">Jako schvalovatel požadavek neupravuješ — rozhoduješ o něm tlačítky dole. Změny údajů zadej skladu.</div>`
       : `<div class="robar">Požadavek je jen ke čtení. Změnu domluv se skladem.</div>`);
-  const hasRecv = !isNew && (r.reqNo||r.receivedDate||r.docType||r.docNo||r.skladComment||(r.receivedQty!==undefined&&r.receivedQty!==''));
+  const hasRecv = !isNew && (r.reqNo||r.rfqNo||r.orderNo||r.dssiItem||r.receivedDate||r.docType||r.docNo||r.skladComment||(r.receivedQty!==undefined&&r.receivedQty!==''));
   const receiveInfo = hasRecv ? `<div class="recvbox"><div class="recvh">📦 Příjem / sklad</div><div class="recvgrid">
-      <div><span>Číslo requestu</span><b>${esc(r.reqNo||'—')}</b></div>
+      <div><span>Req no.</span><b>${esc(r.reqNo||'—')}</b></div>
+      <div><span>RFQ no.</span><b>${esc(r.rfqNo||'—')}</b></div>
+      <div><span>Order no.</span><b>${esc(r.orderNo||'—')}</b></div>
+      <div><span>DSSI item</span><b>${esc(r.dssiItem||'—')}</b></div>
       <div><span>Přijaté množství</span><b>${(r.receivedQty!==undefined&&r.receivedQty!=='')?esc(r.receivedQty)+' / '+esc(r.mnozstvi||0)+' ks':'—'}</b></div>
       <div><span>Datum přijetí</span><b>${r.receivedDate?esc(dateCz(r.receivedDate)):'—'}</b></div>
       <div><span>Doklad</span><b>${(r.docType||r.docNo)?esc(((r.docType||'')+' '+(r.docNo||'')).trim()):'—'}</b></div>
@@ -1190,7 +1199,7 @@ async function act(a,v,el,ev){
     case 'toggle-manage': if(!P().edit)return; manage.on=!manage.on; if(!manage.on) mgrSel.clear(); break;
     case 'mgr-selrow': if(el.checked) mgrSel.add(v); else mgrSel.delete(v); break;
     case 'mgr-selall':{ const vis=visibleRows(); if(el.checked) vis.forEach(r=>mgrSel.add(r._id)); else vis.forEach(r=>mgrSel.delete(r._id)); break; }
-    case 'mgr-clear': mgr={reqNo:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''}; break;
+    case 'mgr-clear': mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''}; break;
     case 'mgr-apply': await mgrApply(false); return;
     case 'mgr-receive': await mgrApply(true); return;
     case 'dlg-yes':{const d=dlg;dlg=null;const val=d.kind==='prompt'?(document.getElementById('dlg-input')||{}).value||'':true;
