@@ -105,10 +105,28 @@
   .b-green-dark{background:#157347;color:#fff;border-color:#0f5c37}
   .b-purple{background:var(--purple-bg);color:var(--purple);border-color:#ddd2f5}
   .b-red{background:var(--red-bg);color:var(--red);border-color:#f5cfca}
-  .newbar{margin-bottom:12px}
+  .newbar{margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .btn-new{background:linear-gradient(180deg,#f6821f,#e8590c);color:#fff;font-size:18px;font-weight:800;padding:16px 36px;border-radius:10px;
     box-shadow:0 4px 14px rgba(232,89,12,.4);letter-spacing:.4px;text-transform:uppercase}
   .btn-new:hover{background:linear-gradient(180deg,#e8590c,#c94f0a);box-shadow:0 6px 18px rgba(232,89,12,.5)}
+  .btn-manage{background:#fff;border:1px solid var(--navy-2);color:var(--navy-2);font-size:14px;font-weight:700;padding:14px 22px;border-radius:10px}
+  .btn-manage:hover{background:#eef3fb}
+  .btn-manage.on{background:var(--navy-2);color:#fff}
+  .mgrbox{border:1px solid #cddaf0;box-shadow:0 3px 12px rgba(27,75,143,.12)}
+  .mgrbox > h2{background:#eef3fb}
+  .mgrhint{padding:9px 14px;font-size:12px;color:#41506b;background:#f8fafd;border-bottom:1px solid var(--line)}
+  .mgrgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px;padding:14px}
+  .mgrgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#41506b}
+  .mgrgrid .inline{display:flex;gap:6px}
+  .mgrbtns{display:flex;gap:10px;align-items:center;padding:0 14px 14px;flex-wrap:wrap}
+  .selcol{width:34px;text-align:center;cursor:default}
+  .selcol input{width:17px;height:17px;cursor:pointer;margin:0}
+  .recvbox{margin:0 0 12px;border:1px solid #cddaf0;border-radius:8px;overflow:hidden}
+  .recvh{background:#eef3fb;padding:8px 12px;font-weight:700;font-size:12.5px;color:var(--navy-2)}
+  .recvgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 16px;padding:12px}
+  .recvgrid > div{display:flex;flex-direction:column;gap:2px}
+  .recvgrid span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+  .recvgrid .span2{grid-column:span 2}
   .critlist{margin-top:5px;display:flex;flex-direction:column;gap:2px}
   .critline{display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 4px;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden}
   .critline:hover{background:var(--red-bg)}
@@ -210,7 +228,10 @@
     header h1{font-size:19px}
     .chips{gap:6px}
     main{padding:12px 10px 34px}
+    .newbar{flex-direction:column;align-items:stretch}
     .newbar .btn-new{width:100%;font-size:17px;padding:15px 20px}
+    .newbar .btn-manage{width:100%}
+    .mgrgrid{grid-template-columns:1fr}
 
     /* filtry pod sebe */
     .filters{flex-direction:column;align-items:stretch;gap:9px}
@@ -311,6 +332,7 @@ const PRIORITIES = [
   {k:'kritická',cls:'b-red'},{k:'vysoká',cls:'b-amber'},{k:'běžná',cls:'b-blue'},{k:'nízká',cls:'b-grey'}
 ];
 const TYPES = ['Nový požadavek','Doplnění skladu'];
+const DOCTYPES = ['Objednávka','Dodací list','Faktura'];
 const ROLES = {
   zadavatel:   {label:'Zadavatel',    lvl:1, edit:false, approve:false, del:false, admin:false,
                 popis:'Zakládá požadavky, hledá a sleduje jejich stav. Po odeslání už požadavek needituje.'},
@@ -386,6 +408,9 @@ let editing=null, errs={}, footMsg='';
 let dlg=null, toastMsg=null, toastKind='', drafts={};
 let loginBusy=false, loginErr='';
 let qrOpen=false, qr=null;   // stav QR skeneru
+let manage={on:false};                                        // režim „Správa požadavků" (jen skladník/admin)
+let mgrSel=new Set();                                          // vybrané řádky (_id)
+let mgr={reqNo:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
 
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -603,6 +628,7 @@ function roleNotice(){
 }
 function listView(){
   const rr=visibleRows();
+  const allSelected = rr.length>0 && rr.every(r=>mgrSel.has(r._id));   // „vybrat vše" dle aktuálního filtru
   // ukazatele (dashboard) se počítají za zvolené období podle data vytvoření
   const inDash = r => (!dashRange.od||(r.created||'')>=dashRange.od) && (!dashRange.do||(r.created||'')<=dashRange.do);
   const dashRows=rows.filter(inDash);
@@ -644,7 +670,8 @@ function listView(){
     ${card('Hodnota požadavků',num(sumEur,0)+' €','za období, bez zamítnutých · kurz '+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
   </div>
   ${roleNotice()}
-  ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':'<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button></div>'}
+  ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':`<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button>${P().edit?`<button class="btn-manage ${manage.on?'on':''}" data-a="toggle-manage" title="Hromadné doplňování údajů a změna stavu">⚙ Správa požadavků</button>`:''}</div>`}
+  ${(manage.on&&P().edit)?mgrPanel():''}
   <div class="panel">
     <h2>Přehled požadavků <span class="right">${rr.length} z ${rows.length} záznamů</span></h2>
     <div class="legend">
@@ -666,17 +693,19 @@ function listView(){
     </div>
     <div class="tblwrap"><table>
       <thead><tr>
+        ${manage.on?`<th class="no-sort selcol" onclick="event.stopPropagation()" title="Vybrat vše (dle filtru)"><input type="checkbox" data-a="mgr-selall" ${allSelected?'checked':''}></th>`:''}
         ${th('status','Stav')}${th('poradove','Č. požadavku')}${th('created','Vytvořeno')}${th('sklad','Skladové č.')}${th('popis','Popis')}
         ${th('priorita','Priorita')}${th('mnozstvi','Množ.')}${th('cena','Cena / ks')}
         ${th('total','Cena celkem')}${th('celkem','Celkem EUR')}${th('dodavatel','Dodavatel')}${th('vyrobce','Výrobce')}${th('ucet','Účet')}${th('usek','Linka / stroj')}
-        ${th('datum','Dodání')}<th class="no-sort">MIN/MAX</th><th class="no-sort">Odkaz</th>
+        ${th('datum','Dodání')}<th class="no-sort">Přijato</th><th class="no-sort">MIN/MAX</th><th class="no-sort">Odkaz</th>
         ${th('authorName','Zadal')}${th('approvedBy','Schválil')}<th class="no-sort">Výmaz řádku</th>
       </tr></thead>
       <tbody>
       ${rr.length?rr.map(r=>{
         const late=r.datum&&r.datum<today()&&!['doručeno','zamítnuto'].includes(r.status);
         const crit=r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status);
-        return `<tr class="${crit?'crit':''}" style="--row:${ROW_TINT[r.status]||'#fff'};cursor:pointer" data-a="open" data-v="${r._id}" title="Otevřít detail">
+        return `<tr class="${crit?'crit':''} ${manage.on&&mgrSel.has(r._id)?'rowsel':''}" style="--row:${ROW_TINT[r.status]||'#fff'};cursor:pointer" data-a="open" data-v="${r._id}" title="Otevřít detail">
+          ${manage.on?`<td class="selcol" data-label="Vybrat" onclick="event.stopPropagation()"><input type="checkbox" data-a="mgr-selrow" data-v="${r._id}" ${mgrSel.has(r._id)?'checked':''}></td>`:''}
           <td data-label="Stav">${badge(r.status,STATUSES)}</td>
           <td data-label="Č. požadavku"><b>${esc(r.poradove||'—')}</b></td>
           <td class="hide-mobile" data-label="Vytvořeno">${esc(dateCz(r.created))}</td>
@@ -692,16 +721,74 @@ function listView(){
           <td class="hide-mobile" data-label="Účet">${r.ucet?`<b>${esc(r.ucet)}</b>`:'<span class="muted">—</span>'}</td>
           <td data-label="Linka / stroj">${r.usek?`<b>${esc(r.usek)}</b>${r.stroj?`<div class="muted" style="font-size:10.5px">${esc(r.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="${late?'late':''}" data-label="Dodání">${r.datum?esc(dateCz(r.datum))+(late?' ⚠':''):'<span class="muted">—</span>'}</td>
+          <td class="num hide-mobile" data-label="Přijato">${(r.receivedQty!==undefined&&r.receivedQty!=='')?`<b>${esc(r.receivedQty)}</b> / ${esc(r.mnozstvi||0)}${r.receivedDate?`<div class="muted" style="font-size:10px">${esc(dateCz(r.receivedDate))}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="num hide-mobile ${(Number(r.min)||0)>0&&(Number(r.mnozstvi)||0)<Number(r.min)?'stock-warn':''}" data-label="MIN/MAX">${(r.min||r.max)?`${r.min||0} / ${r.max||0}`:'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Odkaz">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ odkaz</a>`:'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Zadal">${esc(r.authorName||'—')}</td>
           <td class="hide-mobile" data-label="Schválil">${r.approvedBy?`<span class="badge b-green">✔ ${esc(r.approvedBy)}</span><div class="muted" style="font-size:10px">${esc(dateCz(r.approvedAt)||'')}</div>`:'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Výmaz řádku"><button class="rowbtn no" data-a="del" data-v="${r._id}" ${P().del?'':'disabled title="Mazat požadavky může jen skladník/admin"'}>Smazat</button></td>
         </tr>`;}).join('')
-      :`<tr><td colspan="20" class="empty">Žádné požadavky neodpovídají filtru.</td></tr>`}
+      :`<tr><td colspan="${manage.on?22:21}" class="empty">Žádné požadavky neodpovídají filtru.</td></tr>`}
       </tbody>
     </table></div>
   </div>`;
+}
+
+/* ---------- Správa požadavků (hromadné doplňování) ---------- */
+function mgrPanel(){
+  const n=mgrSel.size;
+  return `<div class="panel mgrbox">
+    <h2>⚙ Správa požadavků <span class="right">vybráno: ${n}</span></h2>
+    <div class="mgrhint">Vyplň jen políčka, která chceš změnit — <b>prázdná se ignorují</b> a u vybraných řádků zůstanou beze změny. Zaškrtni řádky v tabulce a dej <b>Použít na vybrané</b>.</div>
+    <div class="mgrgrid">
+      <label>Číslo requestu<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="např. 4500012345"></label>
+      <label>Doklad<div class="inline">
+        <select id="m-doctype" data-mg="docType"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${mgr.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
+        <input id="m-docno" data-mg="docNo" value="${esc(mgr.docNo)}" placeholder="číslo dokladu"></div></label>
+      <label>Přijaté množství<input id="m-qty" type="number" min="0" step="1" data-mg="recvQty" value="${esc(mgr.recvQty)}" placeholder="ks"></label>
+      <label>Komentář<input id="m-comment" data-mg="comment" value="${esc(mgr.comment)}" placeholder="komentář skladu (nepřepíše Poznámku)"></label>
+      <label>Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label>
+      <label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option ${mgr.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select></label>
+    </div>
+    <div class="mgrbtns">
+      <button class="btn-ok" data-a="mgr-apply">Použít na vybrané</button>
+      <button class="btn-primary" data-a="mgr-receive" title="U vybraných nastaví přijaté množství = objednané, datum přijetí = dnes a stav → doručeno">Přijmout kompletně</button>
+      <button class="btn-ghost" data-a="mgr-clear">Vyčistit</button>
+      <button class="btn-ghost" data-a="toggle-manage" style="margin-left:auto">Zavřít správu</button>
+    </div>
+  </div>`;
+}
+const czCount = n => `${n} požadavk${n===1?'':(n>=2&&n<=4?'y':'ů')}`;
+async function mgrApply(receiveComplete){
+  if(!P().edit){ toast('Na hromadné úpravy nemáš právo.','err'); return; }
+  const sel=rows.filter(r=>mgrSel.has(r._id));
+  if(!sel.length){ toast('Nejdřív zaškrtni aspoň jeden požadavek.','err'); return; }
+  if(!receiveComplete){
+    const anyField = mgr.reqNo!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!=='';
+    if(!anyField){ toast('Vyplň aspoň jedno políčko, které se má změnit.','err'); return; }
+  }
+  let ok=0, fail=0;
+  for(const r of sel){
+    const patch={}, ch=[];
+    if(receiveComplete){
+      patch.receivedQty=Number(r.mnozstvi)||0; patch.receivedDate=today(); patch.status='doručeno';
+      ch.push(`přijato kompletně (${patch.receivedQty} ks) → doručeno`);
+    } else {
+      if(mgr.reqNo!==''){ patch.reqNo=mgr.reqNo.trim(); ch.push('č. requestu '+patch.reqNo); }
+      if(mgr.recvQty!==''){ patch.receivedQty=Number(mgr.recvQty)||0; ch.push('přijato '+patch.receivedQty+' ks'); }
+      if(mgr.recvDate!==''){ patch.receivedDate=mgr.recvDate; ch.push('datum přijetí '+dateCz(mgr.recvDate)); }
+      if(mgr.docType!==''||mgr.docNo!==''){ patch.docType=mgr.docType; patch.docNo=mgr.docNo.trim(); ch.push('doklad '+((mgr.docType||'')+' '+(mgr.docNo||'')).trim()); }
+      if(mgr.comment!==''){ patch.skladComment=mgr.comment.trim(); ch.push('komentář skladu'); }
+      if(mgr.status!==''){ patch.status=mgr.status; ch.push('stav → '+mgr.status); }
+    }
+    if(!Object.keys(patch).length) continue;
+    patch.hist=(r.hist||[]).concat(`${today()} · ${me.name} · hromadná úprava: ${ch.join(', ')}`);
+    try{ await updateDoc(doc(db,'requests',r._id),patch); ok++; }
+    catch(e){ fail++; }
+  }
+  mgrSel.clear();
+  toast(`Upraveno ${czCount(ok)}.`+(fail?` (${fail} se nepovedlo — zkus to znovu)`:''), fail?'err':'ok');
+  render();
 }
 
 /* ---------- modal ---------- */
@@ -790,10 +877,19 @@ function modalView(){
       : (me.role==='schvalovatel'
       ? `<div class="robar">Jako schvalovatel požadavek neupravuješ — rozhoduješ o něm tlačítky dole. Změny údajů zadej skladu.</div>`
       : `<div class="robar">Požadavek je jen ke čtení. Změnu domluv se skladem.</div>`);
+  const hasRecv = !isNew && (r.reqNo||r.receivedDate||r.docType||r.docNo||r.skladComment||(r.receivedQty!==undefined&&r.receivedQty!==''));
+  const receiveInfo = hasRecv ? `<div class="recvbox"><div class="recvh">📦 Příjem / sklad</div><div class="recvgrid">
+      <div><span>Číslo requestu</span><b>${esc(r.reqNo||'—')}</b></div>
+      <div><span>Přijaté množství</span><b>${(r.receivedQty!==undefined&&r.receivedQty!=='')?esc(r.receivedQty)+' / '+esc(r.mnozstvi||0)+' ks':'—'}</b></div>
+      <div><span>Datum přijetí</span><b>${r.receivedDate?esc(dateCz(r.receivedDate)):'—'}</b></div>
+      <div><span>Doklad</span><b>${(r.docType||r.docNo)?esc(((r.docType||'')+' '+(r.docNo||'')).trim()):'—'}</b></div>
+      <div class="span2"><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>
+    </div></div>` : '';
   return `<div class="overlay"><div class="modal">
     <h3>${isNew?'Nový nákupní požadavek':esc(r.poradove)}${!isNew?` <span style="font-weight:400;opacity:.8;font-size:12px">${esc(r.authorName||'')}</span>`:''}<button class="x" data-a="close">✕</button></h3>
     ${roleBar}
     <div class="form">${body}</div>
+    ${receiveInfo}
     ${(!isNew&&r.hist&&r.hist.length)?`<div class="hist"><b>Historie</b>${r.hist.slice(-8).reverse().map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
     <div class="foot">
       ${footMsg?`<span class="msg">${esc(footMsg)}</span>`:(ed?`<span class="muted">Pole s <span style="color:#c0392b">*</span> jsou povinná.</span>`:'')}
@@ -1054,13 +1150,15 @@ function bind(){
   const mena=document.getElementById('e-mena');if(mena)mena.onchange=()=>{collect();render();};  // změna měny překreslí (přepočet EUR)
   const tx=document.getElementById('e-txt');if(tx)tx.onchange=()=>{collect();editing.sklad=tx.checked?'TXT':(editing.sklad==='TXT'?'':editing.sklad);render();};
   document.querySelectorAll('[data-draft]').forEach(el=>{const h=()=>{drafts[el.dataset.draft]=el.value;};el.oninput=h;el.onchange=h;});
+  // políčka panelu Správa požadavků — drží se ve stavu, aby přežila překreslení (živá data z Firestore)
+  document.querySelectorAll('[data-mg]').forEach(el=>{const h=()=>{mgr[el.dataset.mg]=el.value;};el.oninput=h;el.onchange=h;});
   const us=document.getElementById('e-usek');if(us)us.onchange=()=>{collect();editing.stroj='';render();};
   const ns=document.getElementById('e-newstock');if(ns)ns.onchange=()=>{collect();render();};
   const lp=document.getElementById('lg-pass');if(lp)lp.onkeydown=e=>{if(e.key==='Enter')act('login');};
   if(qrOpen) startQr();
 }
 
-const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject',
+const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive',
   'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','save-rates','req',
   'user-role','user-name','user-email','user-team']);
 async function act(a,v,el,ev){
@@ -1087,6 +1185,14 @@ async function act(a,v,el,ev){
     case 'flt-all': filters.grp=''; filters.status=''; break;
     case 'flt-grp': filters.grp=(filters.grp===v?'':v); filters.status=''; break;
     case 'flt-status': filters.status=(filters.status===v?'':v); filters.grp=''; break;
+
+    /* --- Správa požadavků (hromadné doplňování; jen skladník/admin) --- */
+    case 'toggle-manage': if(!P().edit)return; manage.on=!manage.on; if(!manage.on) mgrSel.clear(); break;
+    case 'mgr-selrow': if(el.checked) mgrSel.add(v); else mgrSel.delete(v); break;
+    case 'mgr-selall':{ const vis=visibleRows(); if(el.checked) vis.forEach(r=>mgrSel.add(r._id)); else vis.forEach(r=>mgrSel.delete(r._id)); break; }
+    case 'mgr-clear': mgr={reqNo:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''}; break;
+    case 'mgr-apply': await mgrApply(false); return;
+    case 'mgr-receive': await mgrApply(true); return;
     case 'dlg-yes':{const d=dlg;dlg=null;const val=d.kind==='prompt'?(document.getElementById('dlg-input')||{}).value||'':true;
       if(d.mailto){const a2=document.createElement('a');a2.href=d.mailto;a2.rel='noopener';document.body.appendChild(a2);a2.click();a2.remove();}
       render();d.resolve(d.kind==='prompt'?val:true);return;}
