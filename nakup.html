@@ -105,6 +105,12 @@
   .b-green-dark{background:#157347;color:#fff;border-color:#0f5c37}
   .b-purple{background:var(--purple-bg);color:var(--purple);border-color:#ddd2f5}
   .b-red{background:var(--red-bg);color:var(--red);border-color:#f5cfca}
+  .b-white{background:#fff;color:#41506b;border-color:#d5deea}
+  .b-yellow{background:#fdf4c8;color:#7a5b06;border-color:#efe1a0}
+  .b-orange{background:#ffe3c2;color:#9a4f0e;border-color:#f6cfa5}
+  .b-navy{background:#1b4b8f;color:#fff;border-color:#143a70}
+  .ordcell{font-size:10.5px;line-height:1.4;white-space:nowrap;color:#41506b}
+  .ordcell div{padding:1px 0}
   .newbar{margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .btn-new{background:linear-gradient(180deg,#f6821f,#e8590c);color:#fff;font-size:18px;font-weight:800;padding:16px 36px;border-radius:10px;
     box-shadow:0 4px 14px rgba(232,89,12,.4);letter-spacing:.4px;text-transform:uppercase}
@@ -324,10 +330,18 @@ function logoSvg(){
      meta/config — účty, úseky, povinná pole, kurzy, čítač čísel
    ========================================================== */
 
+/* Pořadí a barvy dle přání Davida. `k` = vnitřní klíč (NEMĚNIT – je uložený v datech),
+   `label` = co se zobrazuje uživateli. */
 const STATUSES = [
-  {k:'poptáno',cls:'b-grey'},{k:'nový',cls:'b-blue'},{k:'ve schvalování',cls:'b-amber'},
-  {k:'schváleno',cls:'b-green'},{k:'odesláno',cls:'b-purple'},{k:'doručeno',cls:'b-green-dark'},{k:'zamítnuto',cls:'b-red'}
+  {k:'nový',           label:'nový',              cls:'b-white'},
+  {k:'poptáno',        label:'poptáno',           cls:'b-yellow'},
+  {k:'schváleno',      label:'schváleno',         cls:'b-orange'},
+  {k:'ve schvalování', label:'PO ve schvalování', cls:'b-blue'},
+  {k:'odesláno',       label:'PO odesláno',       cls:'b-navy'},
+  {k:'doručeno',       label:'doručeno',          cls:'b-green'},
+  {k:'zamítnuto',      label:'zamítnuto',         cls:'b-grey'}
 ];
+const statusLabel = k => { const d=STATUSES.find(s=>s.k===k); return d?(d.label||d.k):(k||''); };
 const PRIORITIES = [
   {k:'kritická',cls:'b-red'},{k:'vysoká',cls:'b-amber'},{k:'běžná',cls:'b-blue'},{k:'nízká',cls:'b-grey'}
 ];
@@ -415,7 +429,7 @@ let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v,d=2)=>(isFinite(v)?Number(v):0).toLocaleString('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
-const badge = (v,defs)=>{const d=defs.find(x=>x.k===v);return `<span class="badge ${d?d.cls:'b-grey'}">${esc(v||'—')}</span>`;};
+const badge = (v,defs)=>{const d=defs.find(x=>x.k===v);const txt=(d&&d.label)?d.label:v;return `<span class="badge ${d?d.cls:'b-grey'}">${esc(txt||'—')}</span>`;};
 const total = r => (Number(r.cena)||0)*(Number(r.mnozstvi)||0);
 const totalEur = r => r.mena==='EUR'?total(r):total(r)/((cfg?.rates?.[r.mena])||1);
 const fld = id => (cfg?.fields||[]).find(f=>f.id===id)||{label:id,req:false};
@@ -437,7 +451,10 @@ const dateCz = d => d ? String(d).slice(0,10).split('-').reverse().map(x=>String
 const acc = c => (cfg?.accounts||[]).find(a=>a.code===c);
 const accName = c => (acc(c)||{}).name || '';
 const accLabel = c => c ? (accName(c)?c+' — '+accName(c):c) : '';
-const ROW_TINT = {'poptáno':'#f6f7f9','nový':'#ffffff','ve schvalování':'#fdf6e9','schváleno':'#eefaf2','odesláno':'#f5f1fd','doručeno':'#bfe6cb','zamítnuto':'#fdf1ef'};
+/* Podbarvení řádků dle stavu (klíče stavů zůstávají): nový=bílá, poptáno=žlutá,
+   schváleno=oranžová, PO ve schvalování=světle modrá, PO odesláno=tmavší modrá,
+   doručeno=zelená, zamítnuto=šedá. */
+const ROW_TINT = {'nový':'#ffffff','poptáno':'#fdf7d6','schváleno':'#ffe9d1','ve schvalování':'#e7eefb','odesláno':'#c2d6f5','doručeno':'#d3f1dc','zamítnuto':'#eef1f5'};
 const needsPoptat = r => (Number(r.cena)||0)===0 && r.status==='nový' && !r.approvedBy;
 const toAskGlobal = () => rows.filter(needsPoptat).length;
 
@@ -646,7 +663,7 @@ function listView(){
     ${crit?`<div class="critlist">${critRows.slice(0,4).map(r=>`<div class="critline" data-a="open" data-v="${r._id}" title="${esc(r.popis||r.duvod)}">
         <span class="cno">${esc((r.poradove||'—').replace('NP-2026-','#'))}</span><span class="cwhat">${esc(shorten(r.popis||r.duvod))}</span>
         <span class="cwhere">${esc(r.stroj||r.usek||'—')}</span>
-        <span class="badge ${(STATUSES.find(s=>s.k===r.status)||{}).cls}" style="font-size:9px">${esc(r.status)}</span></div>`).join('')}${crit>4?`<div class="note" style="margin-top:4px">…a další ${crit-4}</div>`:''}</div>`:`<div class="note">nevyřízené</div>`}
+        <span class="badge ${(STATUSES.find(s=>s.k===r.status)||{}).cls}" style="font-size:9px">${esc(statusLabel(r.status))}</span></div>`).join('')}${crit>4?`<div class="note" style="margin-top:4px">…a další ${crit-4}</div>`:''}</div>`:`<div class="note">nevyřízené</div>`}
   </div>`;
   const closedStatuses=['doručeno','zamítnuto'];
   const openCount=rows.filter(r=>!closedStatuses.includes(r.status)).length;
@@ -680,7 +697,7 @@ function listView(){
       <button class="stchip grp ${filters.grp==='open'?'on':''}" data-a="flt-grp" data-v="open"><i style="background:#e7eefb"></i>Otevřené požadavky (${openCount})</button>
       <button class="stchip grp ${filters.grp==='closed'?'on':''}" data-a="flt-grp" data-v="closed"><i style="background:#eef1f5"></i>Uzavřené požadavky (${closedCount})</button>
       <span class="lg-sep"></span>
-      ${STATUSES.map(x=>`<button class="stchip ${filters.status===x.k?'on':''}" data-a="flt-status" data-v="${x.k}" title="Filtrovat stav ${x.k}"><i style="background:${ROW_TINT[x.k]}"></i>${x.k}</button>`).join('')}
+      ${STATUSES.map(x=>`<button class="stchip ${filters.status===x.k?'on':''}" data-a="flt-status" data-v="${x.k}" title="Filtrovat stav ${esc(x.label||x.k)}"><i style="background:${ROW_TINT[x.k]}"></i>${esc(x.label||x.k)}</button>`).join('')}
     </div>
     <div class="filters">
       <input class="grow" id="f-q" placeholder="Hledat v popisu, skladovém čísle, výrobci…" value="${esc(filters.q)}">
@@ -697,7 +714,7 @@ function listView(){
         ${th('status','Stav')}${th('poradove','Č. požadavku')}${th('created','Vytvořeno')}${th('sklad','Skladové č.')}${th('popis','Popis')}
         ${th('priorita','Priorita')}${th('mnozstvi','Množ.')}${th('cena','Cena / ks')}
         ${th('total','Cena celkem')}${th('celkem','Celkem EUR')}${th('dodavatel','Dodavatel')}${th('vyrobce','Výrobce')}${th('ucet','Účet')}${th('usek','Linka / stroj')}
-        ${th('datum','Dodání')}<th class="no-sort">Přijato</th><th class="no-sort">MIN/MAX</th><th class="no-sort">Odkaz</th>
+        ${th('datum','Dodání')}<th class="no-sort">Objednávka</th><th class="no-sort">Přijato</th><th class="no-sort">MIN/MAX</th><th class="no-sort">Odkaz</th>
         ${th('authorName','Zadal')}${th('approvedBy','Schválil')}<th class="no-sort">Výmaz řádku</th>
       </tr></thead>
       <tbody>
@@ -721,6 +738,7 @@ function listView(){
           <td class="hide-mobile" data-label="Účet">${r.ucet?`<b>${esc(r.ucet)}</b>`:'<span class="muted">—</span>'}</td>
           <td data-label="Linka / stroj">${r.usek?`<b>${esc(r.usek)}</b>${r.stroj?`<div class="muted" style="font-size:10.5px">${esc(r.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="${late?'late':''}" data-label="Dodání">${r.datum?esc(dateCz(r.datum))+(late?' ⚠':''):'<span class="muted">—</span>'}</td>
+          <td class="hide-mobile ordcell" data-label="Objednávka">${(r.rfqNo||r.dssiItem||r.reqNo||r.orderNo)?`${r.rfqNo?`<div>RFQ: ${esc(r.rfqNo)}</div>`:''}${r.dssiItem?`<div>DSSI Item: ${esc(r.dssiItem)}</div>`:''}${r.reqNo?`<div>Req. ${esc(r.reqNo)}</div>`:''}${r.orderNo?`<div>Order: ${esc(r.orderNo)}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="num hide-mobile" data-label="Přijato">${(r.receivedQty!==undefined&&r.receivedQty!=='')?`<b>${esc(r.receivedQty)}</b> / ${esc(r.mnozstvi||0)}${r.receivedDate?`<div class="muted" style="font-size:10px">${esc(dateCz(r.receivedDate))}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="num hide-mobile ${(Number(r.min)||0)>0&&(Number(r.mnozstvi)||0)<Number(r.min)?'stock-warn':''}" data-label="MIN/MAX">${(r.min||r.max)?`${r.min||0} / ${r.max||0}`:'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Odkaz">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ odkaz</a>`:'<span class="muted">—</span>'}</td>
@@ -728,7 +746,7 @@ function listView(){
           <td class="hide-mobile" data-label="Schválil">${r.approvedBy?`<span class="badge b-green">✔ ${esc(r.approvedBy)}</span><div class="muted" style="font-size:10px">${esc(dateCz(r.approvedAt)||'')}</div>`:'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Výmaz řádku"><button class="rowbtn no" data-a="del" data-v="${r._id}" ${P().del?'':'disabled title="Mazat požadavky může jen skladník/admin"'}>Smazat</button></td>
         </tr>`;}).join('')
-      :`<tr><td colspan="${manage.on?22:21}" class="empty">Žádné požadavky neodpovídají filtru.</td></tr>`}
+      :`<tr><td colspan="${manage.on?23:22}" class="empty">Žádné požadavky neodpovídají filtru.</td></tr>`}
       </tbody>
     </table></div>
   </div>`;
@@ -751,7 +769,7 @@ function mgrPanel(){
       <label>Přijaté množství<input id="m-qty" type="number" min="0" step="1" data-mg="recvQty" value="${esc(mgr.recvQty)}" placeholder="ks"></label>
       <label>Komentář<input id="m-comment" data-mg="comment" value="${esc(mgr.comment)}" placeholder="komentář skladu (nepřepíše Poznámku)"></label>
       <label>Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label>
-      <label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option ${mgr.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select></label>
+      <label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${mgr.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></label>
     </div>
     <div class="mgrbtns">
       <button class="btn-ok" data-a="mgr-apply">Použít na vybrané</button>
@@ -830,8 +848,8 @@ function modalView(){
           <label class="txtchk" title="Položka nemá skladové číslo"><input type="checkbox" id="e-txt" ${isTxt?'checked':''}>TXT</label>
         </div>${errs.sklad?`<span class="err">${esc(errs.sklad)}</span>`:''}</div>
       ${statusLocked
-        ? `<div class="f span2"><label>Stav schvalování</label><div class="ro">${esc(isNew?'nový':(r.status||'nový'))}</div><div id="auto-hint" class="autohint ${(isNew||(Number(r.cena)||0)===0)?'grey':''}">${isNew?'Nový požadavek se vždy založí ve stavu „nový" — bez ohledu na cenu. Do schvalování ho posune až sklad/schvalovatel.':((Number(r.cena)||0)>0?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.')}</div></div>`
-        : wrap('status',`<select id="e-status">${STATUSES.map(s=>`<option ${r.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>`)}
+        ? `<div class="f span2"><label>Stav schvalování</label><div class="ro">${esc(isNew?'nový':statusLabel(r.status||'nový'))}</div><div id="auto-hint" class="autohint ${(isNew||(Number(r.cena)||0)===0)?'grey':''}">${isNew?'Nový požadavek se vždy založí ve stavu „nový" — bez ohledu na cenu. Do schvalování ho posune až sklad/schvalovatel.':((Number(r.cena)||0)>0?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.')}</div></div>`
+        : wrap('status',`<select id="e-status">${STATUSES.map(s=>`<option value="${esc(s.k)}" ${r.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select>`)}
       ${wrapL('typ','Druh požadavku',`<select id="e-typ">${TYPES.map(t=>`<option ${(r.typ||'Nový požadavek')===t?'selected':''}>${esc(t)}</option>`).join('')}</select>`,'span2')}
       <div class="f"><label>Pořadové číslo</label><div class="ro">${isNew?'<span class="muted">přidělí se po uložení</span>':esc(r.poradove)}</div></div>
       ${wrap('priorita',`<select id="e-priorita">${PRIORITIES.map(p=>`<option ${r.priorita===p.k?'selected':''}>${p.k}</option>`).join('')}</select>`)}
