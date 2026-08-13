@@ -70,6 +70,7 @@
 
   .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);background:#fafbfd}
   .filters input,.filters select{width:auto;min-width:130px}
+  .filters .fnum{min-width:0;width:120px;flex:none}
   .filters .grow{flex:1;min-width:200px}
   label.check{display:inline-flex;gap:5px;align-items:center;justify-content:flex-start;font-size:12px;color:#41506b;white-space:nowrap;cursor:pointer;font-weight:600}
   label.check input{width:auto;margin:0;flex:none}
@@ -416,7 +417,7 @@ let rows=[];           // requests (živě z Firestore)
 let usersList=[];      // users (jen pro admina)
 let tab='pozadavky', authReady=false, dataReady=false, fatalErr='';
 let sort={col:'created',dir:-1};
-let filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false};
+let filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:''};
 let dashRange={od:'',do:''};   // období pro ukazatele na dashboardu (podle data vytvoření)
 let editing=null, errs={}, footMsg='';
 let dlg=null, toastMsg=null, toastKind='', drafts={};
@@ -627,8 +628,12 @@ function visibleRows(){
   if(filters.usek) r=r.filter(x=>x.usek===filters.usek);
   if(filters.od) r=r.filter(x=>(x.created||'')>=filters.od);
   if(filters.do) r=r.filter(x=>(x.created||'')<=filters.do);
+  const has=(v,q)=>String(v||'').toLowerCase().includes(q.toLowerCase());
+  if(filters.reqNo) r=r.filter(x=>has(x.reqNo,filters.reqNo));
+  if(filters.rfqNo) r=r.filter(x=>has(x.rfqNo,filters.rfqNo));
+  if(filters.orderNo) r=r.filter(x=>has(x.orderNo,filters.orderNo));
   if(filters.q){const q=filters.q.toLowerCase();
-    r=r.filter(x=>[x.poradove,x.sklad,x.popis,x.duvod,x.vyrobce,x.poznamka].join(' ').toLowerCase().includes(q));}
+    r=r.filter(x=>[x.poradove,x.sklad,x.popis,x.duvod,x.vyrobce,x.poznamka,x.reqNo,x.rfqNo,x.orderNo,x.dssiItem].join(' ').toLowerCase().includes(q));}
   const c=sort.col;
   r.sort((a,b)=>{
     let x=(c==='celkem'||c==='total')?totalEur(a):a[c], y=(c==='celkem'||c==='total')?totalEur(b):b[c];
@@ -668,7 +673,7 @@ function listView(){
   const closedStatuses=['doručeno','zamítnuto'];
   const openCount=rows.filter(r=>!closedStatuses.includes(r.status)).length;
   const closedCount=rows.filter(r=>closedStatuses.includes(r.status)).length;
-  const anyFilter = filters.q||filters.grp||filters.status||filters.priorita||filters.ucet||filters.usek||filters.od||filters.do||filters.mine;
+  const anyFilter = filters.q||filters.grp||filters.status||filters.priorita||filters.ucet||filters.usek||filters.od||filters.do||filters.mine||filters.reqNo||filters.rfqNo||filters.orderNo;
   const dashActive = k => (dashPreset()===k?'on':'');
   const periodTxt = (dashRange.od||dashRange.do) ? `${dashRange.od?dateCz(dashRange.od):'…'} – ${dashRange.do?dateCz(dashRange.do):'…'}` : 'celá historie';
   return `
@@ -701,6 +706,9 @@ function listView(){
     </div>
     <div class="filters">
       <input class="grow" id="f-q" placeholder="Hledat v popisu, skladovém čísle, výrobci…" value="${esc(filters.q)}">
+      <input class="fnum" id="f-reqno" placeholder="Req no." value="${esc(filters.reqNo)}">
+      <input class="fnum" id="f-rfqno" placeholder="RFQ no." value="${esc(filters.rfqNo)}">
+      <input class="fnum" id="f-orderno" placeholder="Order no." value="${esc(filters.orderNo)}">
       <span class="datefilter">Vytvořeno <input type="date" id="f-od" value="${esc(filters.od)}">–<input type="date" id="f-do" value="${esc(filters.do)}"></span>
       <select id="f-priorita"><option value="">Všechny priority</option>${PRIORITIES.map(p=>`<option ${filters.priorita===p.k?'selected':''}>${p.k}</option>`).join('')}</select>
       <select id="f-ucet"><option value="">Všechny účty</option>${cfg.accounts.map(a=>`<option value="${esc(a.code)}" ${filters.ucet===a.code?'selected':''}>${esc(accLabel(a.code))}</option>`).join('')}</select>
@@ -811,6 +819,7 @@ async function mgrApply(receiveComplete){
     catch(e){ fail++; }
   }
   mgrSel.clear();
+  mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // po použití vyprázdnit políčka, ať se nepřenesou na další dávku
   toast(`Upraveno ${czCount(ok)}.`+(fail?` (${fail} se nepovedlo — zkus to znovu)`:''), fail?'err':'ok');
   render();
 }
@@ -1170,6 +1179,8 @@ function bind(){
   });
   const q=document.getElementById('f-q');
   if(q) q.oninput=()=>{filters.q=q.value;const p=q.selectionStart;render();const n=document.getElementById('f-q');n.focus();n.setSelectionRange(p,p);};
+  [['f-reqno','reqNo'],['f-rfqno','rfqNo'],['f-orderno','orderNo']].forEach(([id,key])=>{const el=document.getElementById(id);
+    if(el) el.oninput=()=>{filters[key]=el.value;const p=el.selectionStart;render();const n=document.getElementById(id);if(n){n.focus();n.setSelectionRange(p,p);}};});
   ['status','priorita','ucet','usek','od','do'].forEach(k=>{const el=document.getElementById('f-'+k);if(el)el.onchange=()=>{filters[k]=el.value;render();};});
   ['od','do'].forEach(k=>{const el=document.getElementById('d-'+k);if(el)el.onchange=()=>{dashRange[k]=el.value;render();};});
   const m=document.getElementById('f-mine');if(m)m.onchange=()=>{filters.mine=m.checked;render();};
@@ -1205,7 +1216,7 @@ async function act(a,v,el,ev){
     case 'logout': await signOut(auth); return;
     case 'tab': tab=v; break;
     case 'sort': sort=(sort.col===v)?{col:v,dir:-sort.dir}:{col:v,dir:1}; break;
-    case 'clear-filters': filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false}; break;
+    case 'clear-filters': filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:''}; break;
     case 'dash-all': dashRange={od:'',do:''}; break;
     case 'dash-month': dashRange=monthRange(); break;
     case 'dash-year': dashRange=yearRange(); break;
