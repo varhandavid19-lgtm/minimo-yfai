@@ -76,6 +76,10 @@
   label.check input{width:auto;margin:0;flex:none}
 
   .tblwrap{overflow-x:auto}
+  /* Druhý vodorovný posuvník NAHOŘE (nad popisky sloupců) – pro menší monitory,
+     ať se k rolování do strany nemusí scrollovat až pod všechny řádky. */
+  .tbltop{overflow-x:auto;overflow-y:hidden}
+  .tbltop>div{height:1px}
   table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
   thead th{background:#16355f;color:#fff;text-align:left;padding:8px 10px;font-size:10px;letter-spacing:.6px;text-transform:uppercase;cursor:pointer;user-select:none}
   thead th.no-sort{cursor:default}
@@ -255,6 +259,7 @@
 
     /* tabulka jako karty */
     .tblwrap{overflow-x:visible}
+    .tbltop{display:none}
     table{white-space:normal}
     thead{display:none}
     tbody tr{display:block;border:1px solid var(--line);border-left:5px solid var(--line);
@@ -723,7 +728,8 @@ function listView(){
       <label class="check"><input type="checkbox" id="f-mine" ${filters.mine?'checked':''}>Mé požadavky</label>
       ${anyFilter?`<button class="btn-ghost" data-a="clear-filters">Zrušit filtry</button>`:''}
     </div>
-    <div class="tblwrap"><table>
+    <div class="tbltop" id="tbltop"><div id="tbltop-inner"></div></div>
+    <div class="tblwrap" id="tblwrap"><table>
       <thead><tr>
         ${manage.on?`<th class="no-sort selcol" onclick="event.stopPropagation()" title="Vybrat vše (dle filtru)"><input type="checkbox" data-a="mgr-selall" ${allSelected?'checked':''}></th>`:''}
         ${th('status','Stav')}${th('poradove','Č. požadavku')}${th('created','Vytvořeno')}${th('sklad','Skladové č.')}${th('popis','Popis')}
@@ -1220,6 +1226,20 @@ function bind(){
   const ns=document.getElementById('e-newstock');if(ns)ns.onchange=()=>{collect();render();};
   const lp=document.getElementById('lg-pass');if(lp)lp.onkeydown=e=>{if(e.key==='Enter')act('login');};
   if(qrOpen) startQr();
+  syncTopScroll();
+}
+/* Napojí horní vodorovný posuvník na tabulku požadavků (obousměrná synchronizace). */
+function syncTopScroll(){
+  const top=document.getElementById('tbltop'), wrap=document.getElementById('tblwrap'), inner=document.getElementById('tbltop-inner');
+  if(!top||!wrap||!inner) return;
+  const tbl=wrap.querySelector('table');
+  const measure=()=>{ if(tbl) inner.style.width=tbl.scrollWidth+'px'; };
+  measure();
+  let lock=false;
+  top.onscroll=()=>{ if(lock)return; lock=true; wrap.scrollLeft=top.scrollLeft; lock=false; };
+  wrap.onscroll=()=>{ if(lock)return; lock=true; top.scrollLeft=wrap.scrollLeft; lock=false; };
+  if(!window.__topScrollResize){ window.__topScrollResize=true;
+    window.addEventListener('resize',()=>{ const t=document.getElementById('tbltop-inner'), w=document.getElementById('tblwrap'); const tb=w&&w.querySelector('table'); if(t&&tb) t.style.width=tb.scrollWidth+'px'; }); }
 }
 
 const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save',
