@@ -759,7 +759,7 @@ function listView(){
           <td class="hide-mobile" data-label="Odkaz">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ odkaz</a>`:'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Zadal">${esc(r.authorName||'—')}</td>
           <td class="hide-mobile" data-label="Schválil">${r.approvedBy?`<span class="badge b-green">✔ ${esc(r.approvedBy)}</span><div class="muted" style="font-size:10px">${esc(dateCz(r.approvedAt)||'')}</div>`:'<span class="muted">—</span>'}</td>
-          <td class="hide-mobile" data-label="Výmaz řádku"><button class="rowbtn no" data-a="del" data-v="${r._id}" ${P().del?'':'disabled title="Mazat požadavky může jen skladník/admin"'}>Smazat</button></td>
+          <td class="hide-mobile" data-label="Výmaz řádku"><button class="rowbtn no" data-a="del" data-v="${r._id}" ${r.status==='doručeno'?'disabled title="Doručený požadavek nelze smazat (ochrana proti omylu)"':(P().del?'':'disabled title="Mazat požadavky může jen skladník/admin"')}>Smazat</button></td>
         </tr>`;}).join('')
       :`<tr><td colspan="${manage.on?23:22}" class="empty">Žádné požadavky neodpovídají filtru.</td></tr>`}
       </tbody>
@@ -955,7 +955,7 @@ function modalView(){
         ${(!isNew&&P().edit&&needsPoptat(r))?`<button class="btn-ghost" data-a="poptat" data-v="${r._id}">Poptat</button>`:''}
         ${(!isNew&&P().approve&&!r.approvedBy&&r.status!=='zamítnuto')?`<button class="btn-danger" data-a="reject" data-v="${r._id}">✕ Zamítnout</button><button class="btn-ok" data-a="approve" data-v="${r._id}">✔ Schválit za sebe</button>`:''}
         ${(!isNew&&!isNakupRO())?`<button class="btn-ghost" data-a="dup" data-v="${r._id}">Kopie</button>`:''}
-        ${(!isNew&&P().del)?`<button class="btn-danger" data-a="del" data-v="${r._id}">Smazat</button>`:''}
+        ${(!isNew&&P().del&&r.status!=='doručeno')?`<button class="btn-danger" data-a="del" data-v="${r._id}">Smazat</button>`:''}
         <button class="btn-ghost" data-a="close">${ed?'Zrušit':'Zavřít'}</button>
         ${ed?`<button class="btn-primary" data-a="save">${isNew?'Založit požadavek':'Uložit změny'}</button>`:''}
       </div>
@@ -1294,6 +1294,7 @@ async function act(a,v,el,ev){
     }
     case 'del':{
       if(!P().del)return; const r=rows.find(x=>x._id===v);
+      if(r.status==='doručeno'){ toast('Doručený požadavek nelze smazat.','err'); return; }
       if(await askYes(`Smazat požadavek ${r.poradove}? Tohle nejde vrátit.`,{title:'Smazání',ok:'Smazat',danger:true})){
         try{await deleteDoc(doc(db,'requests',v));editing=null;toast('Požadavek smazán.','ok');}catch(e){toast('Nešlo smazat: '+e.message,'err');}
       }break;
