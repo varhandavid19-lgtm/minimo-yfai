@@ -129,7 +129,13 @@
   .selcol{width:34px;text-align:center;cursor:default}
   .selcol input{width:17px;height:17px;cursor:pointer;margin:0}
   .recvbox{margin:0 0 12px;border:1px solid #cddaf0;border-radius:8px;overflow:hidden}
-  .recvh{background:#eef3fb;padding:8px 12px;font-weight:700;font-size:12.5px;color:var(--navy-2)}
+  .recvh{background:#eef3fb;padding:8px 12px;font-weight:700;font-size:12.5px;color:var(--navy-2);display:flex;align-items:center;gap:10px}
+  .recv-editbtn{margin-left:auto;background:#fff;border:1px solid var(--navy-2);color:var(--navy-2);font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:7px;cursor:pointer}
+  .recv-editbtn:hover{background:#dbe6f7}
+  .recvedit{grid-template-columns:repeat(2,1fr)}
+  .recvedit label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:#41506b}
+  .recvedit .inline{display:flex;gap:6px}
+  .recvsave{padding:0 12px 12px}
   .recvgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 16px;padding:12px}
   .recvgrid > div{display:flex;flex-direction:column;gap:2px}
   .recvgrid span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
@@ -426,6 +432,7 @@ let qrOpen=false, qr=null;   // stav QR skeneru
 let manage={on:false};                                        // režim „Správa požadavků" (jen skladník/admin)
 let mgrSel=new Set();                                          // vybrané řádky (_id)
 let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
+let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
 
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -857,7 +864,7 @@ function modalView(){
           <label class="txtchk" title="Položka nemá skladové číslo"><input type="checkbox" id="e-txt" ${isTxt?'checked':''}>TXT</label>
         </div>${errs.sklad?`<span class="err">${esc(errs.sklad)}</span>`:''}</div>
       ${statusLocked
-        ? `<div class="f span2"><label>Stav schvalování</label><div class="ro">${esc(isNew?'nový':statusLabel(r.status||'nový'))}</div><div id="auto-hint" class="autohint ${(isNew||(Number(r.cena)||0)===0)?'grey':''}">${isNew?'Nový požadavek se vždy založí ve stavu „nový" — bez ohledu na cenu. Do schvalování ho posune až sklad/schvalovatel.':((Number(r.cena)||0)>0?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.')}</div></div>`
+        ? `<div class="f span2"><label>Stav schvalování</label><div class="ro">${esc(isNew?'nový':statusLabel(r.status||'nový'))}</div><div id="auto-hint" class="autohint grey">${isNew?'Nový požadavek se vždy založí ve stavu „nový". Stav pak mění ručně jen sklad nebo admin.':'Stav mění ručně jen sklad nebo admin — doplnění ceny stav automaticky nezmění.'}</div></div>`
         : wrap('status',`<select id="e-status">${STATUSES.map(s=>`<option value="${esc(s.k)}" ${r.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select>`)}
       ${wrapL('typ','Druh požadavku',`<select id="e-typ">${TYPES.map(t=>`<option ${(r.typ||'Nový požadavek')===t?'selected':''}>${esc(t)}</option>`).join('')}</select>`,'span2')}
       <div class="f"><label>Pořadové číslo</label><div class="ro">${isNew?'<span class="muted">přidělí se po uložení</span>':esc(r.poradove)}</div></div>
@@ -911,7 +918,21 @@ function modalView(){
       ? `<div class="robar">Jako schvalovatel požadavek neupravuješ — rozhoduješ o něm tlačítky dole. Změny údajů zadej skladu.</div>`
       : `<div class="robar">Požadavek je jen ke čtení. Změnu domluv se skladem.</div>`);
   const hasRecv = !isNew && (r.reqNo||r.rfqNo||r.orderNo||r.dssiItem||r.receivedDate||r.docType||r.docNo||r.skladComment||(r.receivedQty!==undefined&&r.receivedQty!==''));
-  const receiveInfo = hasRecv ? `<div class="recvbox"><div class="recvh">📦 Příjem / sklad</div><div class="recvgrid">
+  const recvEditable = !isNew && P().edit;                 // přepsat req. čísla smí jen skladník/admin
+  const showRecv = hasRecv || recvEditable;
+  const recvBody = (recvEdit && recvEditable) ? `<div class="recvgrid recvedit">
+      <label>Req no.<input id="e-reqno" value="${esc(r.reqNo||'')}"></label>
+      <label>RFQ no.<input id="e-rfqno" value="${esc(r.rfqNo||'')}"></label>
+      <label>Order no.<input id="e-orderno" value="${esc(r.orderNo||'')}"></label>
+      <label>DSSI item<input id="e-dssi" value="${esc(r.dssiItem||'')}"></label>
+      <label>Přijaté množství<input id="e-recvqty" type="number" min="0" step="1" value="${esc((r.receivedQty===undefined||r.receivedQty==='')?'':r.receivedQty)}"></label>
+      <label>Datum přijetí<input id="e-recvdate" type="date" value="${esc(r.receivedDate||'')}"></label>
+      <label>Doklad<div class="inline">
+        <select id="e-doctype"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${r.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
+        <input id="e-docno" value="${esc(r.docNo||'')}" placeholder="číslo dokladu"></div></label>
+      <label class="span2">Komentář skladu<input id="e-skladcomment" value="${esc(r.skladComment||'')}" placeholder="nepřepíše Poznámku"></label>
+    </div>
+    <div class="recvsave"><button class="btn-ok" data-a="recv-save">Uložit příjem/sklad</button></div>` : `<div class="recvgrid">
       <div><span>Req no.</span><b>${esc(r.reqNo||'—')}</b></div>
       <div><span>RFQ no.</span><b>${esc(r.rfqNo||'—')}</b></div>
       <div><span>Order no.</span><b>${esc(r.orderNo||'—')}</b></div>
@@ -920,7 +941,8 @@ function modalView(){
       <div><span>Datum přijetí</span><b>${r.receivedDate?esc(dateCz(r.receivedDate)):'—'}</b></div>
       <div><span>Doklad</span><b>${(r.docType||r.docNo)?esc(((r.docType||'')+' '+(r.docNo||'')).trim()):'—'}</b></div>
       <div class="span2"><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>
-    </div></div>` : '';
+    </div>`;
+  const receiveInfo = showRecv ? `<div class="recvbox"><div class="recvh">📦 Příjem / sklad${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
   return `<div class="overlay"><div class="modal">
     <h3>${isNew?'Nový nákupní požadavek':esc(r.poradove)}${!isNew?` <span style="font-weight:400;opacity:.8;font-size:12px">${esc(r.authorName||'')}</span>`:''}<button class="x" data-a="close">✕</button></h3>
     ${roleBar}
@@ -1096,6 +1118,12 @@ function collect(){
     min:Number(g('e-min'))||0,max:Number(g('e-max'))||0,url:g('e-url'),notifyEmail:g('e-notify'),poznamka:g('e-poznamka')};
   Object.keys(set).forEach(k=>{if(set[k]!==undefined)editing[k]=set[k];});
   const ns=document.getElementById('e-newstock'); if(ns) editing.newStock=ns.checked;
+  // editace sekce Příjem/sklad (jen pokud jsou její pole na stránce)
+  if(document.getElementById('e-reqno')){
+    editing.reqNo=g('e-reqno')||''; editing.rfqNo=g('e-rfqno')||''; editing.orderNo=g('e-orderno')||''; editing.dssiItem=g('e-dssi')||'';
+    const rq=g('e-recvqty'); editing.receivedQty=(rq===''||rq===undefined)?'':Number(rq);
+    editing.receivedDate=g('e-recvdate')||''; editing.docType=g('e-doctype')||''; editing.docNo=g('e-docno')||''; editing.skladComment=g('e-skladcomment')||'';
+  }
 }
 function recalc(){
   collect();
@@ -1103,9 +1131,9 @@ function recalc(){
   if(t)t.textContent=num(total(editing))+' '+editing.mena;
   if(e)e.textContent=num(totalEur(editing))+' €';
   const h=document.getElementById('auto-hint');
-  if(h){const isNew=!editing._id; const has=(Number(editing.cena)||0)>0;
-    h.className='autohint '+((isNew||!has)?'grey':'');
-    h.textContent=isNew?'Nový požadavek se vždy založí ve stavu „nový" — bez ohledu na cenu. Do schvalování ho posune až sklad/schvalovatel.':(has?'Cena je vyplněná → po odeslání půjde rovnou ke schválení.':'Bez ceny zůstane ve stavu „nový" — cenu doplníš ty nebo sklad.');}
+  if(h){const isNew=!editing._id;
+    h.className='autohint grey';
+    h.textContent=isNew?'Nový požadavek se vždy založí ve stavu „nový". Stav pak mění ručně jen sklad nebo admin.':'Stav mění ručně jen sklad nebo admin — doplnění ceny stav automaticky nezmění.';}
 }
 function validate(){
   errs={};
@@ -1158,10 +1186,8 @@ async function updateRequest(){
   const hist=(editing.hist||[]).slice();
   if(touched) hist.push(`${today()} · ${me.name} · stav ${old.status} → ${editing.status}`);
   else hist.push(`${today()} · ${me.name} · upravil požadavek`);
-  if(!touched && (Number(old.cena)||0)===0 && (Number(editing.cena)||0)>0){
-    const auto=applyAutoStatus(editing,old.status,false);
-    if(auto) hist.push(`${today()} · ${me.name} · ${auto}`);
-  }
+  // Automatická změna stavu po doplnění ceny je PROZATÍM VYPNUTÁ (na přání Davida) —
+  // stav mění ručně jen skladník/admin ve výběru „Stav schvalování".
   const {_id,...data}=editing; data.hist=hist;
   await updateDoc(doc(db,'requests',id),data);
 }
@@ -1196,7 +1222,7 @@ function bind(){
   if(qrOpen) startQr();
 }
 
-const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive',
+const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save',
   'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','save-rates','req',
   'user-role','user-name','user-email','user-team']);
 async function act(a,v,el,ev){
@@ -1242,7 +1268,7 @@ async function act(a,v,el,ev){
       errs={};footMsg='';break;
     case 'open':{ editing=JSON.parse(JSON.stringify(rows.find(r=>r._id===v)));
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
-      errs={};footMsg='';break;}
+      recvEdit=false; errs={};footMsg='';break;}
     case 'dup':{const s=rows.find(r=>r._id===v);
       editing=Object.assign(JSON.parse(JSON.stringify(s)),{_id:null,poradove:'',status:'nový',datum:'',approvedBy:null,approvedAt:null,hist:[]});
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
@@ -1307,7 +1333,21 @@ async function act(a,v,el,ev){
 
     case 'close': case 'close-bg':
       if(a==='close-bg'&&ev&&ev.target!==el)return;
-      stopQr(); qrOpen=false; editing=null;errs={};footMsg='';break;
+      stopQr(); qrOpen=false; editing=null;recvEdit=false;errs={};footMsg='';break;
+
+    case 'recv-edit':{ if(!P().edit||!editing||!editing._id)return; if(!recvEdit)collect(); recvEdit=!recvEdit; break; }
+    case 'recv-save':{
+      if(!P().edit||!editing||!editing._id)return;
+      collect();
+      const rid=editing._id;
+      const patch={reqNo:editing.reqNo||'',rfqNo:editing.rfqNo||'',orderNo:editing.orderNo||'',dssiItem:editing.dssiItem||'',
+        receivedQty:(editing.receivedQty===''||editing.receivedQty===undefined)?'':Number(editing.receivedQty),
+        receivedDate:editing.receivedDate||'',docType:editing.docType||'',docNo:editing.docNo||'',skladComment:editing.skladComment||''};
+      patch.hist=(editing.hist||[]).concat(`${today()} · ${me.name} · upravil příjem/sklad`);
+      try{ await updateDoc(doc(db,'requests',rid),patch); editing.hist=patch.hist; recvEdit=false; toast('Příjem/sklad uložen.','ok'); }
+      catch(e){ toast('Uložení selhalo: '+e.message,'err'); return; }
+      break;
+    }
 
     case 'export':{
       const head=['Stav','Druh','Pořadové číslo','Vytvořeno','Skladové číslo','Popis položky','Důvod objednání','Priorita','Množství','Cena/ks','Měna','Cena celkem','Cena EUR','Výrobce','Účet','Popis účtu','Linka','Stroj','Předpokládané datum dodání','MIN','MAX','URL','Upozornit e-mailem','Poznámka','Zadal','Schválil','Schváleno dne'];
