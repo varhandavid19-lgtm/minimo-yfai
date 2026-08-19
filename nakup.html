@@ -140,6 +140,21 @@
   .recvedit label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:#41506b}
   .recvedit .inline{display:flex;gap:6px}
   .recvsave{padding:0 12px 12px}
+  /* Přílohy / nabídky */
+  .attbox{margin:0 0 12px;border:1px solid #cddaf0;border-radius:8px;overflow:hidden}
+  .atth{background:#eef3fb;padding:8px 12px;font-weight:700;font-size:12.5px;color:var(--navy-2);display:flex;align-items:center;gap:10px}
+  .att-add{margin-left:auto;background:var(--navy-2);color:#fff;font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer}
+  .att-add:hover{background:#153c74}
+  .att-add.busy{opacity:.6;cursor:default}
+  .attlist{padding:8px 12px;display:flex;flex-direction:column;gap:6px}
+  .attrow{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .attlink{font-weight:600;color:var(--blue);text-decoration:none;word-break:break-all}
+  .attlink:hover{text-decoration:underline}
+  .attmeta{font-size:10.5px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .att-del{background:#fdecea;border:1px solid #f5cfca;color:var(--red);border-radius:6px;width:26px;height:26px;padding:0;font-size:13px;cursor:pointer;flex:none}
+  .attempty{padding:10px 12px;font-size:12px;color:var(--muted)}
+  .atthint{padding:0 12px 10px;font-size:10.5px;color:var(--muted)}
+  .clip{font-size:11px;color:#41506b;white-space:nowrap}
   .recvgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 16px;padding:12px}
   .recvgrid > div{display:flex;flex-direction:column;gap:2px}
   .recvgrid span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
@@ -305,6 +320,8 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, creat
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
   onSnapshot, query, orderBy, serverTimestamp, runTransaction }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+import { getStorage, ref as sref, uploadBytes, getDownloadURL, deleteObject }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
 
 /* ====== FIREBASE KONFIGURACE (David / projekt nakupni-pozadavky) ====== */
 const firebaseConfig = {
@@ -319,6 +336,7 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+const storage = getStorage(fbApp);   // úložiště na soubory (přílohy / nabídky)
 function logoSvg(){
   return `<svg viewBox="0 0 300 138" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YFAI minimo">
     <defs>
@@ -438,6 +456,7 @@ let manage={on:false};                                        // režim „Sprá
 let mgrSel=new Set();                                          // vybrané řádky (_id)
 let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
 let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
+let uploadBusy=false;                                         // právě se nahrává příloha
 
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -447,6 +466,9 @@ const total = r => (Number(r.cena)||0)*(Number(r.mnozstvi)||0);
 const totalEur = r => r.mena==='EUR'?total(r):total(r)/((cfg?.rates?.[r.mena])||1);
 const fld = id => (cfg?.fields||[]).find(f=>f.id===id)||{label:id,req:false};
 const today = () => new Date().toISOString().slice(0,10);
+const fmtSize = b => { b=Number(b)||0; return b<1024?b+' B':(b<1048576?(b/1024).toFixed(0)+' kB':(b/1048576).toFixed(1)+' MB'); };
+const MAX_FILE = 5*1024*1024;   // 5 MB na soubor
+const canAttach = r => !!r && (P().edit || (me && r.author===me.uid));   // žadatel u svého + skladník/admin
 /* Filtry a volby jsou POUZE tvoje – ukládají se jen do tvého prohlížeče (localStorage),
    nejdou do databáze, takže ostatní uživatele nijak neovlivní a mají svoje vlastní. */
 function saveView(){ try{ localStorage.setItem('minimo-nakup-view', JSON.stringify({filters,sort,dashRange})); }catch(e){} }
@@ -762,7 +784,7 @@ function listView(){
           <td class="hide-mobile ordcell" data-label="Objednávka">${(r.rfqNo||r.dssiItem||r.reqNo||r.orderNo)?`${r.rfqNo?`<div>RFQ: ${esc(r.rfqNo)}</div>`:''}${r.dssiItem?`<div>DSSI Item: ${esc(r.dssiItem)}</div>`:''}${r.reqNo?`<div>Req. ${esc(r.reqNo)}</div>`:''}${r.orderNo?`<div>Order: ${esc(r.orderNo)}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="num hide-mobile" data-label="Přijato">${(r.receivedQty!==undefined&&r.receivedQty!=='')?`<b>${esc(r.receivedQty)}</b> / ${esc(r.mnozstvi||0)}${r.receivedDate?`<div class="muted" style="font-size:10px">${esc(dateCz(r.receivedDate))}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="num hide-mobile ${(Number(r.min)||0)>0&&(Number(r.mnozstvi)||0)<Number(r.min)?'stock-warn':''}" data-label="MIN/MAX">${(r.min||r.max)?`${r.min||0} / ${r.max||0}`:'<span class="muted">—</span>'}</td>
-          <td class="hide-mobile" data-label="Odkaz">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ odkaz</a>`:'<span class="muted">—</span>'}</td>
+          <td class="hide-mobile" data-label="Odkaz">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ odkaz</a>`:''}${(r.files&&r.files.length)?`${r.url?'<br>':''}<span class="clip" title="Přílohy: ${r.files.length}">📎 ${r.files.length}</span>`:''}${(!r.url&&!(r.files&&r.files.length))?'<span class="muted">—</span>':''}</td>
           <td class="hide-mobile" data-label="Zadal">${esc(r.authorName||'—')}</td>
           <td class="hide-mobile" data-label="Schválil">${r.approvedBy?`<span class="badge b-green">✔ ${esc(r.approvedBy)}</span><div class="muted" style="font-size:10px">${esc(dateCz(r.approvedAt)||'')}</div>`:'<span class="muted">—</span>'}</td>
           <td class="hide-mobile" data-label="Výmaz řádku"><button class="rowbtn no" data-a="del" data-v="${r._id}" ${r.status==='doručeno'?'disabled title="Doručený požadavek nelze smazat (ochrana proti omylu)"':(P().del?'':'disabled title="Mazat požadavky může jen skladník/admin"')}>Smazat</button></td>
@@ -949,11 +971,24 @@ function modalView(){
       <div class="span2"><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>
     </div>`;
   const receiveInfo = showRecv ? `<div class="recvbox"><div class="recvh">📦 Příjem / sklad${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
+  const attFiles = r.files||[];
+  const attCan = canAttach(r);
+  const filesSection = isNew
+    ? `<div class="attbox"><div class="atth">📎 Nabídky / přílohy</div><div class="attempty">Přílohy (např. nabídku) přidáš <b>po uložení</b> požadavku — pak požadavek otevři a nahraj soubor.</div></div>`
+    : `<div class="attbox"><div class="atth">📎 Nabídky / přílohy${attCan?`<label class="att-add ${uploadBusy?'busy':''}">${uploadBusy?'Nahrávám…':'+ Přidat přílohu'}<input type="file" id="att-input" data-a="upload-file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt" ${uploadBusy?'disabled':''} hidden></label>`:''}</div>
+      ${attFiles.length?`<div class="attlist">${attFiles.map((f,i)=>`<div class="attrow">
+        <a href="${esc(f.url)}" target="_blank" rel="noopener" class="attlink" onclick="event.stopPropagation()" title="Otevřít ${esc(f.name)}">📄 ${esc(f.name)}</a>
+        <span class="attmeta">${f.size?esc(fmtSize(f.size)):''}${f.by?' · '+esc(f.by):''}${f.at?' · '+esc(dateCz(f.at)):''}</span>
+        ${attCan?`<button class="att-del" data-a="del-file" data-v="${i}" title="Smazat přílohu">✕</button>`:''}
+      </div>`).join('')}</div>`:`<div class="attempty">${attCan?'Zatím žádná příloha. Nahraj nabídku tlačítkem „+ Přidat přílohu".':'Žádné přílohy.'}</div>`}
+      <div class="atthint">Soubor se uloží do našeho úložiště a jde otevřít i z mobilu. Max 5 MB na soubor.</div>
+    </div>`;
   return `<div class="overlay"><div class="modal">
     <h3>${isNew?'Nový nákupní požadavek':esc(r.poradove)}${!isNew?` <span style="font-weight:400;opacity:.8;font-size:12px">${esc(r.authorName||'')}</span>`:''}<button class="x" data-a="close">✕</button></h3>
     ${roleBar}
     <div class="form">${body}</div>
     ${receiveInfo}
+    ${filesSection}
     ${(!isNew&&r.hist&&r.hist.length)?`<div class="hist"><b>Historie</b>${r.hist.slice(-8).reverse().map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
     <div class="foot">
       ${footMsg?`<span class="msg">${esc(footMsg)}</span>`:(ed?`<span class="muted">Pole s <span style="color:#c0392b">*</span> jsou povinná.</span>`:'')}
@@ -1242,7 +1277,7 @@ function syncTopScroll(){
     window.addEventListener('resize',()=>{ const t=document.getElementById('tbltop-inner'), w=document.getElementById('tblwrap'); const tb=w&&w.querySelector('table'); if(t&&tb) t.style.width=tb.scrollWidth+'px'; }); }
 }
 
-const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save',
+const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save','upload-file','del-file',
   'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','save-rates','req',
   'user-role','user-name','user-email','user-team']);
 async function act(a,v,el,ev){
@@ -1288,7 +1323,7 @@ async function act(a,v,el,ev){
       errs={};footMsg='';break;
     case 'open':{ editing=JSON.parse(JSON.stringify(rows.find(r=>r._id===v)));
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
-      recvEdit=false; errs={};footMsg='';break;}
+      recvEdit=false; uploadBusy=false; errs={};footMsg='';break;}
     case 'dup':{const s=rows.find(r=>r._id===v);
       editing=Object.assign(JSON.parse(JSON.stringify(s)),{_id:null,poradove:'',status:'nový',datum:'',approvedBy:null,approvedAt:null,hist:[]});
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
@@ -1354,7 +1389,47 @@ async function act(a,v,el,ev){
 
     case 'close': case 'close-bg':
       if(a==='close-bg'&&ev&&ev.target!==el)return;
-      stopQr(); qrOpen=false; editing=null;recvEdit=false;errs={};footMsg='';break;
+      stopQr(); qrOpen=false; editing=null;recvEdit=false;uploadBusy=false;errs={};footMsg='';break;
+
+    case 'upload-file':{
+      const f=el.files&&el.files[0]; if(!f) return;
+      if(!editing||!editing._id){ toast('Nejdřív ulož požadavek, pak přidej přílohu.','err'); return; }
+      const cur=rows.find(x=>x._id===editing._id)||editing;
+      if(!canAttach(cur)){ toast('Na přidání přílohy nemáš právo.','err'); return; }
+      if(f.size>MAX_FILE){ toast(`Soubor je větší než 5 MB (${fmtSize(f.size)}).`,'err'); return; }
+      uploadBusy=true; render();
+      try{
+        const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-80);
+        const path='nabidky/'+editing._id+'/'+Date.now()+'_'+safe;
+        const s=sref(storage,path);
+        await uploadBytes(s,f,{contentType:f.type||'application/octet-stream'});
+        const url=await getDownloadURL(s);
+        const base=rows.find(x=>x._id===editing._id)||editing;
+        const files=(base.files||[]).concat({name:f.name,path,url,size:f.size,at:today(),by:me.name});
+        const hist=(base.hist||[]).concat(`${today()} · ${me.name} · přidal přílohu ${f.name}`);
+        await updateDoc(doc(db,'requests',editing._id),{files,hist});
+        editing.files=files; editing.hist=hist;
+        toast('Příloha nahrána.','ok');
+      }catch(e){ toast('Nahrání selhalo: '+e.message,'err'); }
+      uploadBusy=false; render(); return;
+    }
+    case 'del-file':{
+      if(!editing||!editing._id) return;
+      const cur=rows.find(x=>x._id===editing._id)||editing;
+      if(!canAttach(cur)){ toast('Na smazání přílohy nemáš právo.','err'); return; }
+      const files=(editing.files||[]).slice(); const f=files[Number(v)];
+      if(!f) return;
+      if(!await askYes(`Smazat přílohu „${f.name}"? Soubor se odstraní z úložiště.`,{title:'Smazání přílohy',ok:'Smazat',danger:true})) return;
+      try{
+        try{ await deleteObject(sref(storage,f.path)); }catch(e){ /* soubor už možná není – pokračuj v odebrání z požadavku */ }
+        files.splice(Number(v),1);
+        const hist=(editing.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${f.name}`);
+        await updateDoc(doc(db,'requests',editing._id),{files,hist});
+        editing.files=files; editing.hist=hist;
+        toast('Příloha smazána.','ok');
+      }catch(e){ toast('Smazání selhalo: '+e.message,'err'); }
+      render(); return;
+    }
 
     case 'recv-edit':{ if(!P().edit||!editing||!editing._id)return; if(!recvEdit)collect(); recvEdit=!recvEdit; break; }
     case 'recv-save':{

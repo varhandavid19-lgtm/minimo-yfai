@@ -33,7 +33,9 @@ service cloud.firestore {
                     && request.resource.data.status in ['nový','ve schvalování'];
       allow update: if canEdit()
                     || (isSchvalovatel()
-                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvedBy','approvedAt','status','poznamka','hist']));
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvedBy','approvedAt','status','poznamka','hist']))
+                    || (request.auth.uid == resource.data.author
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['files','hist']));
       allow delete: if isAdmin();
     }
 
