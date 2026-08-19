@@ -415,6 +415,13 @@ const DEFAULT_CONFIG = {
   rates:{CZK:25.0,EUR:1,USD:0.92},
   accounts:[{code:'511300',name:'Údržba budovy'},{code:'511305',name:''},{code:'511310',name:''},
     {code:'511315',name:''},{code:'511320',name:''},{code:'511600',name:''},{code:'511680',name:''},{code:'511690',name:''}],
+  costCenters:[{code:'3751',name:'Maintenance machines'},{code:'3752',name:'Maintenance toolshop'},
+    {code:'3753',name:'Maintenance building'},{code:'3755',name:'Maintenance SK370'},{code:'3761',name:'Maintenance GB'},
+    {code:'3770',name:'Maintenance IM'},{code:'3771',name:'Maintenance IM G463 DP'},{code:'3772',name:'Maintenance G463 DP'},
+    {code:'3773',name:'Maintenance W177 IP'},{code:'3774',name:'Maintenance W247 IP'},{code:'3775',name:'Maintenance W177 GB'},
+    {code:'3776',name:'Maintenance W247 GB'},{code:'3777',name:'Maintenance W206 IP'},{code:'3778',name:'Maintenance OV51_52 IP'},
+    {code:'3781',name:'Maintenance IP WS206'},{code:'3784',name:'Maintenance SK336 IP'},{code:'3785',name:'Maintenance AU380 IP'},
+    {code:'3786',name:'Maintenance OV64 IP'},{code:'3792',name:'Maintenance X540 IP'},{code:'3793',name:'Maintenance W520 IP'}],
   sections:[{name:'Slush',machines:['Slush01','Slush02','Slush03']},
     {name:'Assembly',machines:['Assembly01','Assembly02']},{name:'IMM',machines:['IMM07','IMM012']}],
   fields:[
@@ -486,6 +493,9 @@ const dateCz = d => d ? String(d).slice(0,10).split('-').reverse().map(x=>String
 const acc = c => (cfg?.accounts||[]).find(a=>a.code===c);
 const accName = c => (acc(c)||{}).name || '';
 const accLabel = c => c ? (accName(c)?c+' — '+accName(c):c) : '';
+const cc = c => (cfg?.costCenters||[]).find(a=>a.code===c);
+const ccName = c => (cc(c)||{}).name || '';
+const ccLabel = c => c ? (ccName(c)?c+' — '+ccName(c):c) : '';
 /* Podbarvení řádků dle stavu (klíče stavů zůstávají): nový=bílá, poptáno=žlutá,
    schváleno=oranžová, PO ve schvalování=světle modrá, PO odesláno=tmavší modrá,
    doručeno=zelená, zamítnuto=šedá. */
@@ -906,7 +916,7 @@ function modalView(){
       ${wrapL('dodavatel','Dodavatel',`<input id="e-dodavatel" list="dodav-list" value="${esc(r.dodavatel)}" placeholder="nepovinné — u koho objednáváme"><datalist id="dodav-list">${dodavatele.map(m=>`<option value="${esc(m)}"></option>`).join('')}</datalist>`)}
       ${wrapL('vyrobce','Výrobce',`<input id="e-vyrobce" list="vyrobci-list" value="${esc(r.vyrobce)}" placeholder="nepovinné — Hasco, Engel, Wera…"><datalist id="vyrobci-list">${vyrobci.map(m=>`<option value="${esc(m)}"></option>`).join('')}</datalist>`)}
       ${wrap('ucet',`<select id="e-ucet"><option value="">— vyber účet —</option>${cfg.accounts.map(a=>`<option value="${esc(a.code)}" ${r.ucet===a.code?'selected':''}>${esc(accLabel(a.code))}</option>`).join('')}</select>`)}
-      ${wrapL('costcenter','CostCenter',`<input id="e-costcenter" value="${esc(r.costcenter)}" placeholder="nepovinné">`)}
+      ${wrapL('costcenter','CostCenter',`<select id="e-costcenter"><option value="">— nepovinné —</option>${(cfg.costCenters||[]).map(c=>`<option value="${esc(c.code)}" ${r.costcenter===c.code?'selected':''}>${esc(ccLabel(c.code))}</option>`).join('')}${(r.costcenter&&!cc(r.costcenter))?`<option value="${esc(r.costcenter)}" selected>${esc(r.costcenter)}</option>`:''}</select>`)}
       ${wrapL('usek','Linka',`<select id="e-usek"><option value="">— vyber linku —</option>${cfg.sections.map(x=>`<option ${r.usek===x.name?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`,'',fld('usek').req)}
       ${wrap('stroj',machineSelect(r))}
       ${wrapL('datum','Předpokládané datum dodání',`<input id="e-datum" type="date" value="${esc(r.datum)}">`)}
@@ -931,7 +941,7 @@ function modalView(){
       ${roL('Dodavatel',r.dodavatel)}
       ${roL('Výrobce',r.vyrobce)}
       ${ro('ucet',accLabel(r.ucet))}
-      ${roL('CostCenter',r.costcenter)}
+      ${roL('CostCenter',ccLabel(r.costcenter))}
       <div class="f"><label>Linka / stroj</label><div class="ro">${r.usek?esc(r.usek)+(r.stroj?' · '+esc(r.stroj):''):'<span class="muted">—</span>'}</div></div>
       ${roL('Předpokládané datum dodání',dateCz(r.datum))}
       ${(r.newStock||(Number(r.min)||0)>0||(Number(r.max)||0)>0)?`<div class="f"><label>MIN / MAX skladem</label><div class="ro">${(r.min||0)} / ${(r.max||0)}</div></div>`:''}
@@ -1059,6 +1069,17 @@ function adminView(){
         <div class="inline"><input id="new-acc" data-draft="new-acc" value="${esc(drafts['new-acc']||'')}" placeholder="číslo účtu" style="max-width:150px">
           <input id="new-acc-name" data-draft="new-acc-name" value="${esc(drafts['new-acc-name']||'')}" placeholder="popis účtu">
           <button class="btn-primary" data-a="add-acc">Přidat</button></div>
+      </div></div>
+
+    <div class="panel adm"><h2>Cost centra</h2>
+      <div class="tblwrap"><table><thead><tr><th class="no-sort" style="width:90px">Cost center</th><th class="no-sort">Popis</th><th class="no-sort" style="width:80px"></th></tr></thead>
+        <tbody>${(cfg.costCenters||[]).map(a=>`<tr><td><b>${esc(a.code)}</b></td>
+          <td><input value="${esc(a.name)}" data-a="cc-name" data-v="${esc(a.code)}" placeholder="např. Maintenance machines"></td>
+          <td><button class="rowbtn" data-a="del-cc" data-v="${esc(a.code)}">Odebrat</button></td></tr>`).join('')}</tbody></table></div>
+      <div class="body" style="border-top:1px solid var(--line)">
+        <div class="inline"><input id="new-cc" data-draft="new-cc" value="${esc(drafts['new-cc']||'')}" placeholder="číslo cost centra" style="max-width:150px">
+          <input id="new-cc-name" data-draft="new-cc-name" value="${esc(drafts['new-cc-name']||'')}" placeholder="popis cost centra">
+          <button class="btn-primary" data-a="add-cc">Přidat</button></div>
       </div></div>
 
     <div class="panel adm"><h2>Kurzy</h2>
@@ -1240,7 +1261,7 @@ function bind(){
   document.querySelectorAll('[data-a]').forEach(el=>{
     const a=el.dataset.a,v=el.dataset.v;
     const isInput = (el.tagName==='SELECT'||el.type==='checkbox'||el.type==='file'||
-      (el.tagName==='INPUT'&&['acc-name','user-name','user-email','user-team','user-role'].includes(a)));
+      (el.tagName==='INPUT'&&['acc-name','cc-name','user-name','user-email','user-team','user-role'].includes(a)));
     if(isInput) el.onchange=ev=>act(a,v,el,ev);
     else el.onclick=ev=>{ev.stopPropagation();act(a,v,el,ev);};
   });
@@ -1278,7 +1299,7 @@ function syncTopScroll(){
 }
 
 const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save','upload-file','del-file',
-  'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','save-rates','req',
+  'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','add-cc','del-cc','cc-name','save-rates','req',
   'user-role','user-name','user-email','user-team']);
 async function act(a,v,el,ev){
   // Pojistka: v režimu „jen pro čtení" neprojde žádná zapisovací akce (i kdyby zbylo tlačítko).
@@ -1484,6 +1505,20 @@ async function act(a,v,el,ev){
       if(!P().admin)return; const used=rows.filter(r=>r.ucet===v).length;
       if(!await askYes(used?`Účet ${v} je u ${used} požadavků — zůstane u nich, jen zmizí z nabídky.`:`Odebrat účet ${v}?`,{title:'Odebrání účtu',ok:'Odebrat',danger:true}))return;
       cfg.accounts=cfg.accounts.filter(x=>x.code!==v);await saveConfig();break;
+    }
+    case 'add-cc':{
+      if(!P().admin)return; const code=(drafts['new-cc']||'').trim(); const nm=(drafts['new-cc-name']||'').trim();
+      if(!code){toast('Vyplň číslo cost centra.','err');return;}
+      if(!cfg.costCenters) cfg.costCenters=[];
+      if(cfg.costCenters.some(a=>a.code===code)){toast('Cost centrum už existuje.','err');return;}
+      cfg.costCenters.push({code,name:nm});cfg.costCenters.sort((a,b)=>a.code.localeCompare(b.code,'cs',{numeric:true}));
+      delete drafts['new-cc'];delete drafts['new-cc-name'];await saveConfig();break;
+    }
+    case 'cc-name':{ if(!P().admin)return; const x=cc(v); if(x){x.name=el.value.trim(); await saveConfig();} return; }
+    case 'del-cc':{
+      if(!P().admin)return; const used=rows.filter(r=>r.costcenter===v).length;
+      if(!await askYes(used?`Cost centrum ${v} je u ${used} požadavků — zůstane u nich, jen zmizí z nabídky.`:`Odebrat cost centrum ${v}?`,{title:'Odebrání cost centra',ok:'Odebrat',danger:true}))return;
+      cfg.costCenters=(cfg.costCenters||[]).filter(x=>x.code!==v);await saveConfig();break;
     }
     case 'save-rates':{
       if(!P().admin)return;
