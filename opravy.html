@@ -266,7 +266,7 @@ function listView(){
       <label class="check"><input type="checkbox" id="f-mine" ${filters.mine?'checked':''}>Mé požadavky</label>
     </div>
     <div class="tblwrap"><table>
-      <thead><tr>${th('status','Stav')}${th('poradove','Č. opravy')}${th('created','Vytvořeno')}${th('urgentnost','Urgentnost')}${th('sklad','Skladové č.')}${th('typ','Typ dílu')}${th('firma','Firma')}<th class="no-sort">Ks</th>${th('linka','Linka / stroj')}<th class="no-sort">Závada</th><th class="no-sort">Nákup. požadavek</th>${P().del?'<th class="no-sort">Smazat</th>':''}</tr></thead>
+      <thead><tr>${th('status','Stav')}${th('poradove','Č. opravy')}${th('created','Vytvořeno')}${th('urgentnost','Urgentnost')}${th('sklad','Skladové č.')}<th class="no-sort">Popis</th>${th('typ','Typ dílu')}${th('firma','Firma')}<th class="no-sort">Ks</th>${th('linka','Linka / stroj')}<th class="no-sort">Závada</th>${th('authorName','Zadal')}<th class="no-sort">Nákup. požadavek</th>${P().del?'<th class="no-sort">Smazat</th>':''}</tr></thead>
       <tbody>${rr.length?rr.map(o=>{const st=effStatus(o);const crit=isStale(o)||o.urgentnost==='kritická'&&!['doručeno','zamítnuto'].includes(st);const sd=staleDays(o);
         return `<tr class="${crit?'crit':''}" style="--row:${ROW_TINT[st]||'#fff'}" data-a="open" data-v="${o._id}">
           <td>${badge(st,STATUSES)}${sd>=STALE_DAYS?`<div class="stale">⏳ ${sd} dní bez pohybu</div>`:''}</td>
@@ -274,14 +274,16 @@ function listView(){
           <td>${esc(dateCz(o.created))}</td>
           <td>${badge(o.urgentnost,URGENCY)}</td>
           <td>${o.sklad?esc(o.sklad):'<span class="muted">—</span>'}</td>
+          <td class="muted" style="max-width:200px">${o.popisdilu?esc(o.popisdilu):'—'}</td>
           <td>${esc(o.typ||'')}${o.serial?`<div class="muted" style="font-size:11px">SN: ${esc(o.serial)}</div>`:''}</td>
           <td>${esc(o.firma||'—')}</td>
           <td>${esc(o.ks||'')}</td>
           <td>${o.linka?`<b>${esc(o.linka)}</b>${o.stroj?`<div class="muted" style="font-size:11px">${esc(o.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="muted" style="max-width:220px">${esc((o.zavada||'').slice(0,80))}</td>
+          <td>${esc(o.authorName||'—')}</td>
           <td>${o.nakupPoradove?`<span class="badge b-blue">${esc(o.nakupPoradove)}</span>`:'<span class="muted">—</span>'}</td>
           ${P().del?`<td><button class="btn-danger" data-a="del" data-v="${o._id}" onclick="event.stopPropagation()" style="padding:5px 9px">Smazat</button></td>`:''}
-        </tr>`;}).join(''):`<tr><td colspan="12" class="empty">Žádné požadavky na opravu.</td></tr>`}</tbody>
+        </tr>`;}).join(''):`<tr><td colspan="14" class="empty">Žádné požadavky na opravu.</td></tr>`}</tbody>
     </table></div>
   </div>`;
 }
