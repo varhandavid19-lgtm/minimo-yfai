@@ -148,6 +148,7 @@ function mapNakupStatus(ns){
 let me=null, rows=[], reqRows=[], editing=null, errs={}, footMsg='', modalTab='oprava';
 let sort={col:'created',dir:-1}, filters={q:'',status:'',mine:false}, toastMsg=null, toastKind='';
 let loginBusy=false, loginErr='', dataReady=false, fatal='';
+let reqReady=false;      // nákupní požadavky už načtené (kvůli ověření propojení)
 let cfg={sections:[]};   // meta/config – sdílené linky a stroje (společné s nákupem)
 let unsubO=null, unsubR=null, unsubC=null;
 const sectionByName = n => (cfg.sections||[]).find(s=>s.name===n);
@@ -194,7 +195,7 @@ function subscribe(){
       rows=snap.docs.map(d=>Object.assign({_id:d.id}, d.data())); dataReady=true; if(!editing) render();
     }, err=>{ fatal='Nemám přístup k datům: '+err.message; render(); });
     unsubR=onSnapshot(collection(db,'requests'), snap=>{
-      reqRows=snap.docs.map(d=>Object.assign({_id:d.id}, d.data())); if(!editing) render();
+      reqRows=snap.docs.map(d=>Object.assign({_id:d.id}, d.data())); reqReady=true; if(!editing) render();
     }, ()=>{});
     unsubC=onSnapshot(doc(db,'meta','config'), snap=>{
       const d=snap.data()||{}; cfg={sections:d.sections||[]}; if(!editing) render();
@@ -281,7 +282,7 @@ function listView(){
           <td>${o.linka?`<b>${esc(o.linka)}</b>${o.stroj?`<div class="muted" style="font-size:11px">${esc(o.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td class="muted" style="max-width:220px">${esc((o.zavada||'').slice(0,80))}</td>
           <td>${esc(o.authorName||'—')}</td>
-          <td>${o.nakupPoradove?`<span class="badge b-blue">${esc(o.nakupPoradove)}</span>`:'<span class="muted">—</span>'}</td>
+          <td>${linkedReq(o)?`<span class="badge b-blue">${esc(o.nakupPoradove||linkedReq(o).poradove||'')}</span>`:'<span class="muted">—</span>'}</td>
           ${P().del?`<td><button class="btn-danger" data-a="del" data-v="${o._id}" onclick="event.stopPropagation()" style="padding:5px 9px">Smazat</button></td>`:''}
         </tr>`;}).join(''):`<tr><td colspan="14" class="empty">Žádné požadavky na opravu.</td></tr>`}</tbody>
     </table></div>
@@ -355,8 +356,8 @@ function modalView(){
     <div class="foot">
       ${footMsg?`<span class="msg">${esc(footMsg)}</span>`:(ed?'<span class="muted">Pole s <span style="color:#c0392b">*</span> jsou povinná.</span>':'')}
       <div class="r">
-        ${(!isNew&&ed&&!o.nakupId)?`<button class="btn-ok" data-a="gen-nakup" data-v="${o._id}">🛒 Vygenerovat nákupní požadavek</button>`:''}
-        ${(!isNew&&o.nakupPoradove)?`<span class="badge b-blue" style="align-self:center">🔗 ${esc(o.nakupPoradove)}</span>`:''}
+        ${(!isNew&&ed&&reqReady&&!linked)?`<button class="btn-ok" data-a="gen-nakup" data-v="${o._id}">🛒 Vygenerovat nákupní požadavek</button>`:''}
+        ${(!isNew&&linked)?`<span class="badge b-blue" style="align-self:center">🔗 ${esc(o.nakupPoradove||linked.poradove||'')}</span>`:''}
         <button class="btn-ghost" data-a="close">${ed?'Zrušit':'Zavřít'}</button>
         ${ed?`<button class="btn-primary" data-a="save">${isNew?'Založit':'Uložit změny'}</button>`:''}
       </div>
@@ -457,7 +458,7 @@ async function act(a,v,el,ev){
       if(confirm(`Smazat požadavek na opravu ${o.poradove}?`)){ try{ await deleteDoc(doc(db,'opravy',v)); editing=null; toast('Smazáno.','ok'); }catch(e){ toast(e.message,'err'); } } break; }
     case 'word':{ collect(); genWord(editing); return; }
     case 'gen-nakup':{ if(!canEdit())return; const o=rows.find(x=>x._id===v); if(!o)return;
-      if(o.nakupId){ toast('Nákupní požadavek už existuje.','err'); return; }
+      if(linkedReq(o)){ toast('Nákupní požadavek už existuje.','err'); return; }
       if(!confirm('Vygenerovat nákupní požadavek z této opravy? Přenesou se vyplněná data a poběží standardní cestou.'))return;
       try{ const no=await genNakup(o); toast('Nákupní požadavek '+no+' vytvořen.','ok'); editing=rows.find(x=>x._id===v)||editing; }
       catch(e){ toast('Nepovedlo se: '+e.message,'err'); } break; }
