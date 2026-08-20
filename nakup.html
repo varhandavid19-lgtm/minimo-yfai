@@ -1082,13 +1082,14 @@ function adminView(){
           <td class="switch"><input type="checkbox" data-a="req" data-v="${f.id}" ${f.req?'checked':''} ${f.lock?'disabled':''} style="width:auto"></td></tr>`).join('')}</tbody></table></div></div>
 
     <div class="panel adm"><h2>Uživatelé a role</h2>
-      <div class="tblwrap"><table><thead><tr><th class="no-sort">Jméno</th><th class="no-sort">E-mail</th><th class="no-sort">Role</th><th class="no-sort">Útvar</th></tr></thead>
+      <div class="tblwrap"><table><thead><tr><th class="no-sort">Jméno</th><th class="no-sort">E-mail</th><th class="no-sort">Telefon</th><th class="no-sort">Role</th><th class="no-sort">Útvar</th></tr></thead>
         <tbody>${usersList.length?usersList.map(u=>`<tr>
           <td><input value="${esc(u.name||'')}" data-a="user-name" data-v="${u.uid}" ${u.uid===me.uid?'disabled':''}></td>
           <td><input type="email" value="${esc(u.email||'')}" data-a="user-email" data-v="${u.uid}" placeholder="e-mail@…" title="${u.uid===me.uid?'Váš e-mail se řídí přihlášením':'Doplní/opraví se sám, až se člověk přihlásí'}" ${u.uid===me.uid?'disabled':''}></td>
+          <td><input type="tel" value="${esc(u.phone||'')}" data-a="user-phone" data-v="${u.uid}" placeholder="+420…"></td>
           <td><select data-a="user-role" data-v="${u.uid}" ${u.uid===me.uid?'disabled':''}>${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v.lvl}. ${v.label}</option>`).join('')}</select></td>
           <td><input value="${esc(u.team||'')}" data-a="user-team" data-v="${u.uid}"></td></tr>`).join('')
-          :'<tr><td colspan="4" class="muted" style="padding:12px">Zatím jen ty. Další lidé se objeví, jakmile se poprvé přihlásí nebo je založíš níže.</td></tr>'}</tbody></table></div>
+          :'<tr><td colspan="5" class="muted" style="padding:12px">Zatím jen ty. Další lidé se objeví, jakmile se poprvé přihlásí nebo je založíš níže.</td></tr>'}</tbody></table></div>
       <div class="body" style="border-top:1px solid var(--line)">
         <div class="sechead"><b>Přidat uživatele</b><span class="muted">založí přihlášení i profil rovnou z aplikace</span></div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:9px">
@@ -1356,7 +1357,7 @@ function bind(){
   document.querySelectorAll('[data-a]').forEach(el=>{
     const a=el.dataset.a,v=el.dataset.v;
     const isInput = (el.tagName==='SELECT'||el.type==='checkbox'||el.type==='file'||
-      (el.tagName==='INPUT'&&['acc-name','cc-name','user-name','user-email','user-team','user-role'].includes(a)));
+      (el.tagName==='INPUT'&&['acc-name','cc-name','user-name','user-email','user-phone','user-team','user-role'].includes(a)));
     if(isInput) el.onchange=ev=>act(a,v,el,ev);
     else el.onclick=ev=>{ev.stopPropagation();act(a,v,el,ev);};
   });
@@ -1413,7 +1414,7 @@ function syncTopScroll(){
 
 const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save','upload-file','del-file',
   'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','add-cc','del-cc','cc-name','save-rates','req',
-  'user-role','user-name','user-email','user-team']);
+  'user-role','user-name','user-email','user-phone','user-team']);
 async function act(a,v,el,ev){
   // Pojistka: v režimu „jen pro čtení" neprojde žádná zapisovací akce (i kdyby zbylo tlačítko).
   if(isNakupRO() && WRITE_ACTIONS.has(a)){ toast('Tento modul máte jen pro čtení.','err'); return; }
@@ -1652,6 +1653,7 @@ async function act(a,v,el,ev){
       }catch(e){ toast('Založení selhalo: '+authMsg(e.code),'err'); return; }
       break;
     }
+    case 'user-phone':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{phone:el.value.trim()});}catch(e){toast(e.message,'err');} return; }
     case 'user-role':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{role:el.value});}catch(e){toast(e.message,'err');} return; }
     case 'user-name':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{name:el.value.trim()});}catch(e){toast(e.message,'err');} return; }
     case 'user-email':{ if(!P().admin)return; try{await updateDoc(doc(db,'users',v),{email:el.value.trim()});}catch(e){toast(e.message,'err');} return; }

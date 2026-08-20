@@ -27,6 +27,12 @@
       if(o.modules && key!=='portal' && o.modules.indexOf(key)<0) return '';
       return '<a class="'+(o.cur===key?'cur':'')+'" href="'+href+'">'+ico+' '+label+'</a>';
     }
+    // Externí opravy zatím vidí v menu jen správce (podle e-mailu)
+    var OPRAVY_OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
+    function opravyLink(){
+      if(OPRAVY_OWNERS.indexOf(String(o.user||'').trim().toLowerCase())<0) return '';
+      return '<a class="'+(o.cur==='opravy'?'cur':'')+'" href="opravy.html">🛠️ Externí opravy</a>';
+    }
     return '<header class="uhdr">'
       + '<div class="uh-menuwrap">'
         + '<button class="uh-menu" id="mm-btn" aria-label="Menu modulů" title="Moduly">☰</button>'
@@ -35,6 +41,7 @@
           + link('index.html','🏠','Hlavní stránka','portal')
           + link('nakup.html','🛒','Nákupní požadavky','nakup')
           + link('dovolenky.html','🗓️','Plánování směn','dovolenky')
+          + opravyLink()
           + link('nastaveni.html','⚙️','Nastavení','nastaveni')
           + '<div class="mm-sep"></div>'
           + '<button class="mm-view">🖥️ Zobrazit jako na počítači</button>'

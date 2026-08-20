@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Externí opravy — YFAI minimo</title>
+<link rel="stylesheet" href="header.css">
+<style>
+  :root{--navy-1:#0f2f5f;--navy-2:#1b4b8f;--bg:#f4f6f9;--card:#fff;--line:#dde4ec;--text:#16233a;--muted:#6b7a90;
+    --green:#1f9254;--red:#c0392b;--amber:#b7791f;--blue:#2563a8;--radius:6px}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:13px}
+  button{font-family:inherit;font-size:12px;cursor:pointer;border-radius:var(--radius);border:1px solid transparent;padding:7px 12px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input,select,textarea{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;color:var(--text);width:100%}
+  main{padding:14px 18px 40px}
+  .btn-primary{background:var(--navy-2);color:#fff}.btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b}
+  .btn-danger{background:#c0392b;color:#fff}.btn-ok{background:#1f9254;color:#fff}
+  .btn-new{background:linear-gradient(180deg,#f6821f,#e8590c);color:#fff;font-size:18px;font-weight:800;padding:15px 34px;border-radius:10px;
+    box-shadow:0 4px 14px rgba(232,89,12,.4);letter-spacing:.4px;text-transform:uppercase}
+  .newbar{margin-bottom:12px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:14px}
+  .panel>h2{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:11px 15px;font-size:14px;display:flex;align-items:center}
+  .panel>h2 .right{margin-left:auto;font-weight:500;font-size:11px;opacity:.85}
+  .notice{background:#eef4fc;border:1px solid #cfe0f5;color:#274a74;border-radius:8px;padding:10px 13px;margin-bottom:12px;font-size:12.5px}
+  .legend{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:9px 13px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted)}
+  .stchip{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:4px 10px;font-size:11px;cursor:pointer;color:#41506b;font-weight:600}
+  .stchip i{width:11px;height:11px;border-radius:50%;border:1px solid rgba(0,0,0,.12)}
+  .stchip.on{border-color:var(--navy-2);background:#eef3fb;color:var(--navy-2)}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);background:#fafbfd}
+  .filters input,.filters select{width:auto;min-width:150px;font-size:14px}
+  .filters .grow{flex:1 1 300px;max-width:520px}
+  label.check{display:inline-flex;gap:7px;align-items:center;font-size:14px;color:#41506b;white-space:nowrap;cursor:pointer;font-weight:700}
+  label.check input{width:18px;height:18px;min-width:0;margin:0;flex:none}
+  .tblwrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  thead th{background:#16355f;color:#fff;text-align:left;padding:9px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;cursor:pointer}
+  thead th.no-sort{cursor:default}
+  tbody td{padding:8px 10px;border-bottom:1px solid #eef1f5;vertical-align:top;background:var(--row,#fff)}
+  tbody tr{cursor:pointer}
+  tbody tr:hover td{filter:brightness(.975)}
+  tr.crit td{background:#f8d2ce}
+  tr.crit td:first-child{box-shadow:inset 4px 0 0 var(--red)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid transparent;white-space:nowrap}
+  .b-white{background:#fff;color:#41506b;border-color:#d5deea}.b-yellow{background:#fdf4c8;color:#7a5b06;border-color:#efe1a0}
+  .b-orange{background:#ffe3c2;color:#9a4f0e;border-color:#f6cfa5}.b-blue{background:#e9f1fb;color:#2563a8;border-color:#cbdff5}
+  .b-navy{background:#1b4b8f;color:#fff;border-color:#143a70}.b-green{background:#e8f6ee;color:#1f9254;border-color:#c4e6d3}
+  .b-grey{background:#eef1f5;color:#4a5a70;border-color:#dfe4ea}.b-red{background:#fdecea;color:#c0392b;border-color:#f5cfca}
+  .muted{color:var(--muted)}
+  .empty{text-align:center;color:var(--muted);padding:26px}
+  .stale{font-size:10px;color:#c0392b;font-weight:700;margin-top:2px}
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(12,26,48,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto;z-index:50}
+  .modal{background:#fff;border-radius:10px;width:min(980px,95vw);height:min(90vh,860px);margin:auto;box-shadow:0 18px 50px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+  .modal>h3{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:14px 18px;font-size:17px;display:flex;align-items:center;gap:10px;flex:none}
+  .modal>h3 .x{margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;padding:0 4px}
+  .mtabs{display:flex;gap:8px;margin:12px 14px 2px;padding:5px;background:#f1f4f8;border-radius:11px;flex:none}
+  .mtab{flex:1;background:#fff;border:1px solid var(--line);color:#41506b;padding:11px 12px;font-size:13px;font-weight:800;cursor:pointer;border-radius:8px;text-align:center}
+  .mtab:hover{background:#eaf1fb;border-color:#a9c6ec;color:#255a9e}
+  .mtab.on{background:linear-gradient(180deg,#2f6bbf,#255a9e);color:#fff;border-color:#255a9e;box-shadow:0 3px 10px rgba(37,90,158,.35)}
+  .modalbody{flex:1 1 auto;overflow-y:auto;min-height:0}
+  .form{padding:18px;display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .f{display:flex;flex-direction:column;gap:4px}.f.span2{grid-column:span 2}
+  .f label{font-size:12.5px;font-weight:600;color:#41506b}
+  .f .req{color:#c0392b}
+  .f .ro{background:#f6f8fb;border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-height:36px;font-size:14px}
+  .f.invalid input,.f.invalid select,.f.invalid textarea{border-color:#c0392b;background:#fdecea}
+  .err{color:#c0392b;font-size:11px}
+  .infobox{margin:14px;border:1px solid #cddaf0;border-radius:8px;overflow:hidden}
+  .infobox .ih{background:#eef3fb;padding:8px 12px;font-weight:700;font-size:12.5px;color:var(--navy-2);display:flex;align-items:center;gap:10px}
+  .hist{padding:14px}.hist b{display:block;margin-bottom:8px;color:#41506b}
+  .hist div{font-size:12.5px;padding:5px 2px;border-top:1px dotted var(--line)}
+  .foot{padding:12px 15px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;background:#fafbfd;flex-wrap:wrap;flex:none}
+  .foot .r{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .foot .msg{font-size:12px;color:var(--red);font-weight:600}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#16355f;color:#fff;padding:11px 18px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:80;font-weight:600}
+  .toast.err{background:#c0392b}.toast.ok{background:#1f9254}
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .login{background:#fff;border:1px solid var(--line);border-radius:14px;padding:30px;width:340px;box-shadow:0 12px 40px rgba(0,0,0,.12);text-align:center}
+  .login input{margin-bottom:10px}.login button{width:100%;background:var(--navy-2);color:#fff;padding:11px;font-size:14px;font-weight:700}
+  .loginerr{background:#fdecea;color:#c0392b;border-radius:8px;padding:8px;font-size:12px;margin-bottom:10px}
+  @media(max-width:760px){.form{grid-template-columns:1fr}.f.span2{grid-column:span 1}.mtabs{flex-wrap:wrap}.mtab{flex:1 1 40%}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="header.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+  onSnapshot, query, orderBy, serverTimestamp, runTransaction }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDi3OVq2Al0WXFPgqhMAN9lPGuExOU80Cc",
+  authDomain: "nakupni-pozadavky.firebaseapp.com",
+  projectId: "nakupni-pozadavky",
+  storageBucket: "nakupni-pozadavky.firebasestorage.app",
+  messagingSenderId: "214674774365",
+  appId: "1:214674774365:web:7f7b51c8169b75f8acb0b4"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+/* ===== Kdo modul zatím vidí (jen David) ===== */
+const OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
+const isOwner = e => OWNERS.includes(String(e||'').trim().toLowerCase());
+
+/* ===== Role / práva ===== */
+const ROLES = {
+  zadavatel:   {label:'Zadavatel',    edit:false, del:false, admin:false},
+  skladnik:    {label:'Skladník',     edit:true,  del:false, admin:false},
+  schvalovatel:{label:'Schvalovatel', edit:false, del:false, admin:false},
+  admin:       {label:'Administrátor',edit:true,  del:true,  admin:true}
+};
+const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai','david.varhan@yanfeng.com'];
+const isForcedAdmin = e => ADMIN_EMAILS.includes(String(e||'').trim().toLowerCase());
+const ROLE2LEVEL = {zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
+const P = () => ROLES[me&&me.role] || ROLES.zadavatel;
+
+/* ===== Stavy a urgentnost (barvy jako v nákupu) ===== */
+const STATUSES = [
+  {k:'nový',              label:'nový',                        cls:'b-white',  auto:false},
+  {k:'odesláno na opravu',label:'odesláno na opravu',          cls:'b-yellow', auto:false},
+  {k:'ve schvalování',    label:'PO ve schvalování',           cls:'b-blue',   auto:true},
+  {k:'odesláno',          label:'PO odesláno (oprava probíhá)',cls:'b-navy',   auto:true},
+  {k:'doručeno',          label:'doručeno (díl zpět)',         cls:'b-green',  auto:true},
+  {k:'zamítnuto',         label:'zamítnuto',                   cls:'b-grey',   auto:true}
+];
+const ROW_TINT = {'nový':'#ffffff','odesláno na opravu':'#fdf7d6','ve schvalování':'#e7eefb','odesláno':'#c2d6f5','doručeno':'#d3f1dc','zamítnuto':'#eef1f5'};
+const statusLabel = k => { const d=STATUSES.find(s=>s.k===k); return d?(d.label||d.k):(k||''); };
+const URGENCY = [{k:'kritická',cls:'b-red'},{k:'vysoká',cls:'b-orange'},{k:'běžná',cls:'b-blue'},{k:'nízká',cls:'b-grey'}];
+const STALE_DAYS = 7;   // týden bez pohybu → kritické
+
+/* Mapování stavu nákupního požadavku → stav opravy (pro auto stavy) */
+function mapNakupStatus(ns){
+  if(ns==='ve schvalování'||ns==='schváleno') return 've schvalování';
+  if(ns==='odesláno') return 'odesláno';
+  if(ns==='doručeno') return 'doručeno';
+  if(ns==='zamítnuto') return 'zamítnuto';
+  return null;   // poptáno / nový → neurčuje stav opravy
+}
+
+/* ===== Stav aplikace ===== */
+let me=null, rows=[], reqRows=[], editing=null, errs={}, footMsg='', modalTab='oprava';
+let sort={col:'created',dir:-1}, filters={q:'',status:'',mine:false}, toastMsg=null, toastKind='';
+let loginBusy=false, loginErr='', dataReady=false, fatal='';
+let unsubO=null, unsubR=null;
+
+/* ===== pomocné ===== */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today = () => new Date().toISOString().slice(0,10);
+const dateCz = s => { if(!s) return ''; const p=String(s).slice(0,10).split('-'); return p.length===3?`${+p[2]}. ${+p[1]}. ${p[0]}.`:s; };
+const badge = (v,defs)=>{const d=defs.find(x=>x.k===v);const t=(d&&d.label)?d.label:v;return `<span class="badge ${d?d.cls:'b-grey'}">${esc(t||'—')}</span>`;};
+const linkedReq = o => o.nakupId ? reqRows.find(r=>r._id===o.nakupId) : null;
+/* Efektivní stav: první dva ručně (uložený status), od „ve schvalování" se bere z nákupu */
+function effStatus(o){
+  const r=linkedReq(o);
+  if(r){ const m=mapNakupStatus(r.status); if(m) return m; }
+  return o.status||'nový';
+}
+function parseHistDate(h){ const m=String(h||'').match(/^(\d{4}-\d{2}-\d{2})/); return m?m[1]:''; }
+function lastActivity(o){ const hs=o.hist||[]; for(let i=hs.length-1;i>=0;i--){ const d=parseHistDate(hs[i]); if(d) return d; } return o.created||''; }
+function staleDays(o){ const st=effStatus(o); if(['doručeno','zamítnuto'].includes(st)) return 0; const d=lastActivity(o); if(!d) return 0; return Math.floor((Date.parse(today())-Date.parse(d))/86400000); }
+const isStale = o => staleDays(o) >= STALE_DAYS;
+
+/* ===== auth ===== */
+onAuthStateChanged(auth, async user=>{
+  loginBusy=false;
+  if(!user){ me=null; teardown(); render(); return; }
+  me = await loadProfile(user);
+  if(!isOwner(user.email)){ render(); return; }   // cizí uživatel → hláška bez dat
+  subscribe();
+  render();
+});
+async function loadProfile(user){
+  const ref=doc(db,'users',user.uid);
+  let d={};
+  try{ const s=await getDoc(ref); if(s.exists()) d=s.data(); }catch(e){}
+  const forced=isForcedAdmin(user.email);
+  const role = forced ? 'admin' : (d.role||'zadavatel');
+  const level = d.level || ROLE2LEVEL[role] || 'basic';
+  return {uid:user.uid, email:user.email, name:d.name||user.email, role, level, phone:d.phone||'', team:d.team||'—'};
+}
+function teardown(){ if(unsubO)unsubO(); if(unsubR)unsubR(); unsubO=unsubR=null; rows=[]; reqRows=[]; dataReady=false; }
+function subscribe(){
+  try{
+    unsubO=onSnapshot(query(collection(db,'opravy'),orderBy('createdTs','desc')), snap=>{
+      rows=snap.docs.map(d=>Object.assign({_id:d.id}, d.data())); dataReady=true; if(!editing) render();
+    }, err=>{ fatal='Nemám přístup k datům: '+err.message; render(); });
+    unsubR=onSnapshot(collection(db,'requests'), snap=>{
+      reqRows=snap.docs.map(d=>Object.assign({_id:d.id}, d.data())); if(!editing) render();
+    }, ()=>{});
+  }catch(e){ fatal=e.message; render(); }
+}
+
+/* ===== číslování OPR-rok-XXX ===== */
+async function nextNumber(){
+  const ref=doc(db,'meta','config'); const year=new Date().getFullYear();
+  const n=await runTransaction(db,async tx=>{ const s=await tx.get(ref); const seq=((s.data()||{}).seqOpr||0)+1; tx.update(ref,{seqOpr:seq}); return seq; });
+  return 'OPR-'+year+'-'+String(n).padStart(3,'0');
+}
+async function nextNakupNumber(){
+  const ref=doc(db,'meta','config'); const year=new Date().getFullYear();
+  const n=await runTransaction(db,async tx=>{ const s=await tx.get(ref); const seq=((s.data()||{}).seq||0)+1; tx.update(ref,{seq}); return seq; });
+  return 'NP-'+year+'-'+String(n).padStart(3,'0');
+}
+
+/* ===== render ===== */
+function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
+function render(){
+  const app=document.getElementById('app');
+  if(!me){ app.innerHTML=loginView(); bind(); return; }
+  if(!isOwner(me.email)){ app.innerHTML=shell(`<div class="notice">Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.</div>`); bind(); return; }
+  if(fatal){ app.innerHTML=shell(`<div class="notice">${esc(fatal)}</div>`); bind(); return; }
+  app.innerHTML = shell(listView()) + (editing?modalView():'') + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
+  bind();
+}
+function loginView(){
+  return `<div class="login-wrap"><form class="login" id="loginForm">
+    <h2>minimo · YFAI</h2><p class="muted" style="margin-top:0">Externí opravy</p>
+    ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
+    <input type="email" id="li-email" placeholder="E-mail" autocomplete="username">
+    <input type="password" id="li-pass" placeholder="Heslo" autocomplete="current-password">
+    <button type="submit" ${loginBusy?'disabled':''}>${loginBusy?'Přihlašuji…':'Přihlásit se'}</button>
+  </form></div>`;
+}
+function shell(inner){
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Externí opravy',cur:'opravy',user:esc(me.email),level:(P().label||''),logoutAttr:'id="btn-logout"',modules:['portal','nakup','dovolenky','nastaveni','opravy']}) : '';
+  return uh + `<main>${inner}</main>`;
+}
+function visibleRows(){
+  let r=rows.slice();
+  if(filters.mine) r=r.filter(x=>x.author===me.uid);
+  if(filters.status) r=r.filter(x=>effStatus(x)===filters.status);
+  if(filters.q){ const q=filters.q.toLowerCase(); r=r.filter(x=>[x.poradove,x.sklad,x.typ,x.serial,x.firma,x.linka,x.stroj,x.zavada].join(' ').toLowerCase().includes(q)); }
+  const c=sort.col;
+  r.sort((a,b)=>{ let x=c==='status'?effStatus(a):a[c], y=c==='status'?effStatus(b):b[c];
+    return String(x??'').localeCompare(String(y??''),'cs')*sort.dir; });
+  return r;
+}
+function th(c,l){ const on=sort.col===c; return `<th data-a="sort" data-v="${c}">${l}${on?(sort.dir>0?' ▲':' ▼'):''}</th>`; }
+function listView(){
+  if(!dataReady) return `<div class="notice">Načítám data…</div>`;
+  const rr=visibleRows();
+  const cnt=k=>rows.filter(x=>effStatus(x)===k).length;
+  return `
+  <div class="notice"><b>Externí opravy</b> — díl pošleš na opravu externí firmě, ta pošle nabídku a z ní se vygeneruje nákupní požadavek. ${P().edit?'Jako skladník/admin můžeš měnit stav i generovat Word a nákupní požadavek.':''}</div>
+  <div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek na opravu</button></div>
+  <div class="panel">
+    <h2>Přehled oprav <span class="right">${rr.length} z ${rows.length}</span></h2>
+    <div class="legend"><span style="font-weight:700;color:#41506b">Filtr stavu:</span>
+      <button class="stchip ${!filters.status?'on':''}" data-a="flt" data-v="">Vše (${rows.length})</button>
+      ${STATUSES.map(s=>`<button class="stchip ${filters.status===s.k?'on':''}" data-a="flt" data-v="${s.k}"><i style="background:${ROW_TINT[s.k]}"></i>${esc(s.label)} (${cnt(s.k)})</button>`).join('')}
+    </div>
+    <div class="filters">
+      <input class="grow" id="f-q" placeholder="Hledat v dílu, firmě, závadě, lince…" value="${esc(filters.q)}">
+      <label class="check"><input type="checkbox" id="f-mine" ${filters.mine?'checked':''}>Mé požadavky</label>
+    </div>
+    <div class="tblwrap"><table>
+      <thead><tr>${th('status','Stav')}${th('poradove','Č. opravy')}${th('created','Vytvořeno')}${th('urgentnost','Urgentnost')}${th('sklad','Skladové č.')}${th('typ','Typ dílu')}${th('firma','Firma')}<th class="no-sort">Ks</th>${th('linka','Linka / stroj')}<th class="no-sort">Závada</th><th class="no-sort">Nákup. požadavek</th>${P().del?'<th class="no-sort">Smazat</th>':''}</tr></thead>
+      <tbody>${rr.length?rr.map(o=>{const st=effStatus(o);const crit=isStale(o)||o.urgentnost==='kritická'&&!['doručeno','zamítnuto'].includes(st);const sd=staleDays(o);
+        return `<tr class="${crit?'crit':''}" style="--row:${ROW_TINT[st]||'#fff'}" data-a="open" data-v="${o._id}">
+          <td>${badge(st,STATUSES)}${sd>=STALE_DAYS?`<div class="stale">⏳ ${sd} dní bez pohybu</div>`:''}</td>
+          <td><b>${esc(o.poradove||'—')}</b></td>
+          <td>${esc(dateCz(o.created))}</td>
+          <td>${badge(o.urgentnost,URGENCY)}</td>
+          <td>${o.sklad?esc(o.sklad):'<span class="muted">—</span>'}</td>
+          <td>${esc(o.typ||'')}${o.serial?`<div class="muted" style="font-size:11px">SN: ${esc(o.serial)}</div>`:''}</td>
+          <td>${esc(o.firma||'—')}</td>
+          <td>${esc(o.ks||'')}</td>
+          <td>${o.linka?`<b>${esc(o.linka)}</b>${o.stroj?`<div class="muted" style="font-size:11px">${esc(o.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
+          <td class="muted" style="max-width:220px">${esc((o.zavada||'').slice(0,80))}</td>
+          <td>${o.nakupPoradove?`<span class="badge b-blue">${esc(o.nakupPoradove)}</span>`:'<span class="muted">—</span>'}</td>
+          ${P().del?`<td><button class="btn-danger" data-a="del" data-v="${o._id}" onclick="event.stopPropagation()" style="padding:5px 9px">Smazat</button></td>`:''}
+        </tr>`;}).join(''):`<tr><td colspan="12" class="empty">Žádné požadavky na opravu.</td></tr>`}</tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ===== modal ===== */
+const g = id => { const el=document.getElementById(id); return el?el.value:undefined; };
+function collect(){
+  if(!editing) return;
+  const map={urgentnost:'e-urg',sklad:'e-sklad',typ:'e-typ',serial:'e-serial',firma:'e-firma',ks:'e-ks',linka:'e-linka',stroj:'e-stroj',zavada:'e-zavada',
+    adresa:'e-adresa',kontakt:'e-kontakt',telefon:'e-telefon',balL:'e-ball',balH:'e-balh',balW:'e-balw',vaha:'e-vaha',obal:'e-obal'};
+  Object.keys(map).forEach(k=>{ const v=g(map[k]); if(v!==undefined) editing[k]=v; });
+  const st=g('e-status'); if(st!==undefined) editing.status=st;
+}
+function canEdit(){ return P().edit; }
+function modalView(){
+  const o=editing, isNew=!o._id, ed=canEdit();
+  const st=isNew?'nový':effStatus(o);
+  const linked=linkedReq(o);
+  const wrap=(id,label,inner,req=false,span=false)=>`<div class="f ${span?'span2':''} ${errs[id]?'invalid':''}"><label>${esc(label)}${req?' <span class="req">*</span>':''}</label>${inner}${errs[id]?`<span class="err">${esc(errs[id])}</span>`:''}</div>`;
+  const inp=(id,val,ph='')=>`<input id="e-${id}" value="${esc(val??'')}" placeholder="${esc(ph)}" ${ed?'':'disabled'}>`;
+  const ta=(id,val,ph='')=>`<textarea id="e-${id}" rows="2" placeholder="${esc(ph)}" ${ed?'':'disabled'}>${esc(val??'')}</textarea>`;
+  // záložka Oprava
+  const tabOprava = `<div class="form">
+    ${ed?wrap('status','Stav',`<select id="e-status">${STATUSES.map(s=>`<option value="${esc(s.k)}" ${o.status===s.k?'selected':''}>${esc(s.label)}</option>`).join('')}</select>`):`<div class="f"><label>Stav</label><div class="ro">${badge(st,STATUSES)}</div></div>`}
+    ${wrap('urg','Urgentnost opravy',`<select id="e-urg" ${ed?'':'disabled'}>${URGENCY.map(u=>`<option ${o.urgentnost===u.k?'selected':''}>${u.k}</option>`).join('')}</select>`,true)}
+    ${wrap('sklad','Skladové číslo',inp('sklad',o.sklad,'skladové číslo dílu'),true)}
+    ${wrap('typ','Typové označení dílu',inp('typ',o.typ,'typ / model'),true)}
+    ${wrap('serial','Sériové číslo',inp('serial',o.serial,'SN'))}
+    ${wrap('firma','Firma provádějící opravu',inp('firma',o.firma,'název externí firmy'),true)}
+    ${wrap('ks','Počet ks',`<input id="e-ks" type="number" min="1" value="${esc(o.ks??1)}" ${ed?'':'disabled'}>`,true)}
+    ${wrap('linka','Linka / projekt',inp('linka',o.linka,'linka / projekt'),true)}
+    ${wrap('stroj','Stroj',inp('stroj',o.stroj,'stroj / pod-úsek'))}
+    ${wrap('zavada','Popis závady',ta('zavada',o.zavada,'co je poškozené / co opravit'),true,true)}
+    ${linked?`<div class="f span2"><div class="notice" style="margin:0">🔗 Napojený nákupní požadavek <b>${esc(o.nakupPoradove||'')}</b> — stav „PO…" se bere z něj (nákup je právě: <b>${esc(linked.status)}</b>).</div></div>`:''}
+  </div>`;
+  // záložka Sklad
+  const tabSklad = `<div class="form">
+    <div class="f span2"><div class="notice" style="margin:0">Vyplní skladník před odesláním dílu. Pak klikni <b>Vygenerovat Word</b> a vytiskni průvodku.</div></div>
+    ${wrap('adresa','Adresa příjemce (kam se posílá)',ta('adresa',o.adresa,'firma, ulice, město, PSČ'),false,true)}
+    ${wrap('kontakt','Kontaktní osoba příjemce',inp('kontakt',o.kontakt,'jméno'))}
+    ${wrap('telefon','Telefon příjemce',inp('telefon',o.telefon,'+420…'))}
+    ${wrap('ball','Délka (cm)',`<input id="e-ball" type="number" min="0" value="${esc(o.balL??'')}" ${ed?'':'disabled'}>`)}
+    ${wrap('balh','Výška (cm)',`<input id="e-balh" type="number" min="0" value="${esc(o.balH??'')}" ${ed?'':'disabled'}>`)}
+    ${wrap('balw','Šířka (cm)',`<input id="e-balw" type="number" min="0" value="${esc(o.balW??'')}" ${ed?'':'disabled'}>`)}
+    ${wrap('vaha','Hmotnost (kg)',`<input id="e-vaha" type="number" min="0" step="0.1" value="${esc(o.vaha??'')}" ${ed?'':'disabled'}>`)}
+    ${wrap('obal','Do čeho zabaleno',inp('obal',o.obal,'karton / paleta / bublinková fólie…'),false,true)}
+    <div class="f span2">${isNew?'<div class="muted">Word a nákupní požadavek půjdou vytvořit až po uložení požadavku.</div>':`<button class="btn-primary" data-a="word" style="padding:10px 16px">🖨 Vygenerovat Word (průvodka)</button>`}</div>
+  </div>`;
+  const tabHist = `<div class="hist"><b>Historie požadavku</b>${(o.hist&&o.hist.length)?o.hist.slice().reverse().map(h=>`<div>${esc(h)}</div>`).join(''):'<div class="muted">Zatím žádné záznamy.</div>'}</div>`;
+  const tabbar = !isNew?`<div class="mtabs">
+      <button class="mtab ${modalTab==='oprava'?'on':''}" data-a="mtab" data-v="oprava">Oprava</button>
+      <button class="mtab ${modalTab==='sklad'?'on':''}" data-a="mtab" data-v="sklad">Sklad / průvodka</button>
+      <button class="mtab ${modalTab==='historie'?'on':''}" data-a="mtab" data-v="historie">Historie</button>
+    </div>`:'';
+  let content;
+  if(isNew) content = tabOprava + tabSklad;
+  else if(modalTab==='sklad') content = tabSklad;
+  else if(modalTab==='historie') content = tabHist;
+  else content = tabOprava;
+  return `<div class="overlay" data-a="close-bg"><div class="modal">
+    <h3>${isNew?'Nový požadavek na opravu':esc(o.poradove)}${!isNew?` <span style="font-weight:400;opacity:.85;font-size:12px">${esc(o.authorName||'')}</span>`:''}<button class="x" data-a="close">✕</button></h3>
+    ${tabbar}
+    <div class="modalbody">${content}</div>
+    <div class="foot">
+      ${footMsg?`<span class="msg">${esc(footMsg)}</span>`:(ed?'<span class="muted">Pole s <span style="color:#c0392b">*</span> jsou povinná.</span>':'')}
+      <div class="r">
+        ${(!isNew&&ed&&!o.nakupId)?`<button class="btn-ok" data-a="gen-nakup" data-v="${o._id}">🛒 Vygenerovat nákupní požadavek</button>`:''}
+        ${(!isNew&&o.nakupPoradove)?`<span class="badge b-blue" style="align-self:center">🔗 ${esc(o.nakupPoradove)}</span>`:''}
+        <button class="btn-ghost" data-a="close">${ed?'Zrušit':'Zavřít'}</button>
+        ${ed?`<button class="btn-primary" data-a="save">${isNew?'Založit':'Uložit změny'}</button>`:''}
+      </div>
+    </div>
+  </div></div>`;
+}
+function validate(){
+  errs={}; collect();
+  [['urg','urgentnost'],['sklad','sklad'],['typ','typ'],['firma','firma'],['ks','ks'],['linka','linka'],['zavada','zavada']].forEach(([eid,f])=>{
+    const v=editing[f]; if(v===''||v===undefined||v===null||(f==='ks'&&!(Number(v)>0))) errs[eid]='Povinné pole';
+  });
+  return Object.keys(errs).length===0;
+}
+
+/* ===== Word (průvodka) ===== */
+function genWord(o){
+  const cell=(a,b)=>`<tr><td style="border:1px solid #000;padding:8px 10px;font-weight:bold;width:38%">${esc(a)}</td><td style="border:1px solid #000;padding:8px 10px">${esc(b||'')}</td></tr>`;
+  const rozmer=[o.balL,o.balH,o.balW].filter(x=>x!==''&&x!==undefined&&x!==null);
+  const html=`<!doctype html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"></head>
+  <body style="font-family:Arial,sans-serif">
+    <div style="text-align:center;font-size:22px;font-weight:bold;color:#1f66b5;margin-bottom:6px">YFAI — Yanfeng</div>
+    <div style="text-align:center;font-size:13px;margin-bottom:16px">Průvodka zásilky — externí oprava (${esc(o.poradove||'')})</div>
+    <table style="border-collapse:collapse;width:100%;font-size:13px">
+      ${cell('Jméno a příjmení odesílatele', o.authorName||'')}
+      ${cell('Telefon odesílatele', o.authorPhone||'')}
+      ${cell('Adresa + kontaktní osoba příjemce (popř. tel.)', [o.adresa,o.kontakt,o.telefon].filter(Boolean).join(', '))}
+      ${cell('Velikost zásilky (D×V×Š) v cm', rozmer.length?rozmer.join(' × '):'')}
+      ${cell('Hmotnost zásilky kg', o.vaha||'')}
+      ${cell('Obsah zásilky', [o.typ&&('Díl: '+o.typ), o.sklad&&('Skl. č.: '+o.sklad), o.serial&&('SN: '+o.serial), o.ks&&(o.ks+' ks'), o.obal&&('Obal: '+o.obal)].filter(Boolean).join('; '))}
+      ${cell('Hodnota zásilky', '')}
+    </table>
+    <table style="margin-top:18px;font-size:13px"><tr>
+      <td style="border:1px solid #000;padding:10px 14px">Kontrola návratu (datum): ____________</td>
+      <td style="padding-left:28px">Pouze odeslání (nevrátí se) ☐</td></tr>
+      <tr><td></td><td style="padding-left:28px">Zápůjčka/oprava (vrátí se) ☒</td></tr>
+    </table>
+  </body></html>`;
+  const blob=new Blob(['﻿'+html],{type:'application/msword'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='pruvodka_'+(o.poradove||'oprava')+'.doc';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+
+/* ===== zápisy ===== */
+async function createOprava(){
+  const poradove=await nextNumber();
+  const rec=Object.assign({},editing,{poradove,status:'nový',author:me.uid,authorName:me.name,authorEmail:me.email,authorPhone:me.phone||'',
+    created:today(),createdTs:serverTimestamp(),hist:[`${today()} · ${me.name} · založil požadavek na opravu`]});
+  delete rec._id;
+  await addDoc(collection(db,'opravy'),rec);
+  return poradove;
+}
+async function updateOprava(){
+  const id=editing._id; const old=rows.find(r=>r._id===id)||{};
+  const hist=(editing.hist||[]).slice();
+  if(old.status!==editing.status) hist.push(`${today()} · ${me.name} · stav ${old.status||''} → ${editing.status}`);
+  else hist.push(`${today()} · ${me.name} · upravil požadavek`);
+  const {_id,...data}=editing; data.hist=hist;
+  await updateDoc(doc(db,'opravy',id),data);
+}
+const URG2PRIO = {'kritická':'kritická','vysoká':'vysoká','běžná':'běžná','nízká':'nízká'};
+async function genNakup(o){
+  const poradove=await nextNakupNumber();
+  const rec={ poradove, status:'nový', typ:'Nový požadavek',
+    sklad:o.sklad||'', popis:(o.typ||'')+(o.serial?(' · SN '+o.serial):''), duvod:'Externí oprava dílu — '+(o.poradove||'')+(o.zavada?(' · '+o.zavada):''),
+    priorita:URG2PRIO[o.urgentnost]||'běžná', mnozstvi:Number(o.ks)||1, cena:0, mena:'CZK',
+    dodavatel:o.firma||'', vyrobce:'', ucet:'', costcenter:'', usek:o.linka||'', stroj:o.stroj||'', datum:'',
+    min:0, max:0, newStock:false, url:'', notifyEmail:'', poznamka:'Vzniklo z opravy '+(o.poradove||''),
+    author:me.uid, authorName:me.name, authorEmail:me.email, created:today(), createdTs:serverTimestamp(),
+    approvedBy:null, approvedAt:null, opravaId:o._id, opravaPoradove:o.poradove||'',
+    hist:[`${today()} · ${me.name} · založil požadavek (z opravy ${o.poradove||''})`] };
+  const ref=await addDoc(collection(db,'requests'),rec);
+  const hist=(o.hist||[]).concat(`${today()} · ${me.name} · vygeneroval nákupní požadavek ${poradove}`);
+  await updateDoc(doc(db,'opravy',o._id),{nakupId:ref.id, nakupPoradove:poradove, hist});
+  return poradove;
+}
+
+/* ===== akce ===== */
+async function act(a,v,el,ev){
+  switch(a){
+    case 'login':{ const email=(g('li-email')||'').trim(), pass=g('li-pass')||'';
+      if(!email||!pass){loginErr='Vyplň e-mail i heslo.';render();return;}
+      loginBusy=true;loginErr='';render();
+      try{ await signInWithEmailAndPassword(auth,email,pass); }catch(e){ loginBusy=false; loginErr='Přihlášení selhalo.'; render(); } return; }
+    case 'logout': await signOut(auth); return;
+    case 'sort': sort=(sort.col===v)?{col:v,dir:-sort.dir}:{col:v,dir:1}; break;
+    case 'flt': filters.status=(filters.status===v?'':v); break;
+    case 'new': editing={urgentnost:'běžná',ks:1,status:'nový',hist:[]}; errs={};footMsg='';modalTab='oprava';break;
+    case 'open': editing=JSON.parse(JSON.stringify(rows.find(r=>r._id===v))); errs={};footMsg='';modalTab='oprava';break;
+    case 'close': case 'close-bg':
+      if(a==='close-bg'&&ev&&ev.target!==el)return; editing=null;errs={};footMsg='';break;
+    case 'mtab': collect(); modalTab=v; break;
+    case 'save':{ if(!canEdit())return; collect();
+      if(!validate()){footMsg='Doplň povinná pole.';modalTab='oprava';render();return;}
+      try{ if(!editing._id){ const no=await createOprava(); editing=null; toast('Oprava '+no+' založena.','ok'); }
+        else{ await updateOprava(); editing=null; toast('Změny uloženy.','ok'); } }
+      catch(e){ footMsg='Uložení selhalo: '+e.message; render(); return; } break; }
+    case 'del':{ if(!P().del)return; const o=rows.find(x=>x._id===v);
+      if(confirm(`Smazat požadavek na opravu ${o.poradove}?`)){ try{ await deleteDoc(doc(db,'opravy',v)); editing=null; toast('Smazáno.','ok'); }catch(e){ toast(e.message,'err'); } } break; }
+    case 'word':{ collect(); genWord(editing); return; }
+    case 'gen-nakup':{ if(!canEdit())return; const o=rows.find(x=>x._id===v); if(!o)return;
+      if(o.nakupId){ toast('Nákupní požadavek už existuje.','err'); return; }
+      if(!confirm('Vygenerovat nákupní požadavek z této opravy? Přenesou se vyplněná data a poběží standardní cestou.'))return;
+      try{ const no=await genNakup(o); toast('Nákupní požadavek '+no+' vytvořen.','ok'); editing=rows.find(x=>x._id===v)||editing; }
+      catch(e){ toast('Nepovedlo se: '+e.message,'err'); } break; }
+  }
+  render();
+}
+function bind(){
+  const lf=document.getElementById('loginForm'); if(lf) lf.onsubmit=e=>{e.preventDefault();act('login');};
+  const lo=document.getElementById('btn-logout'); if(lo) lo.onclick=()=>act('logout');
+  document.querySelectorAll('[data-a]').forEach(el=>{ const a=el.dataset.a,v=el.dataset.v;
+    if(a==='login'||a==='logout') return;
+    const isInput=(el.tagName==='SELECT'||el.type==='checkbox');
+    if(isInput) el.onchange=ev=>act(a,v,el,ev); else el.onclick=ev=>{ev.stopPropagation();act(a,v,el,ev);};
+  });
+  const q=document.getElementById('f-q'); if(q) q.oninput=()=>{filters.q=q.value;const p=q.selectionStart;render();const n=document.getElementById('f-q');if(n){n.focus();n.setSelectionRange(p,p);}};
+  const m=document.getElementById('f-mine'); if(m) m.onchange=()=>{filters.mine=m.checked;render();};
+}
+render();
+</script>
+</body>
+</html>
