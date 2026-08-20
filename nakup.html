@@ -676,7 +676,7 @@ function loginView(){
 
 /* ---------- shell ---------- */
 function shell(){
-  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Nákupní požadavky',cur:'nakup',user:esc(me.name),level:esc(me.team+' · '+P().label),logoutAttr:'data-a="logout"',modules:allowedMods(me&&me.modules,(me&&me.level)||'basic')}) : '';
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Nákupní požadavky',cur:'nakup',user:esc(me.name),email:esc(me.email),level:esc(me.team+' · '+P().label),logoutAttr:'data-a="logout"',modules:allowedMods(me&&me.modules,(me&&me.level)||'basic')}) : '';
   return `
   ${uh}
   <div class="tabbar">

@@ -148,7 +148,9 @@ function mapNakupStatus(ns){
 let me=null, rows=[], reqRows=[], editing=null, errs={}, footMsg='', modalTab='oprava';
 let sort={col:'created',dir:-1}, filters={q:'',status:'',mine:false}, toastMsg=null, toastKind='';
 let loginBusy=false, loginErr='', dataReady=false, fatal='';
-let unsubO=null, unsubR=null;
+let cfg={sections:[]};   // meta/config – sdílené linky a stroje (společné s nákupem)
+let unsubO=null, unsubR=null, unsubC=null;
+const sectionByName = n => (cfg.sections||[]).find(s=>s.name===n);
 
 /* ===== pomocné ===== */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -185,7 +187,7 @@ async function loadProfile(user){
   const level = d.level || ROLE2LEVEL[role] || 'basic';
   return {uid:user.uid, email:user.email, name:d.name||user.email, role, level, phone:d.phone||'', team:d.team||'—'};
 }
-function teardown(){ if(unsubO)unsubO(); if(unsubR)unsubR(); unsubO=unsubR=null; rows=[]; reqRows=[]; dataReady=false; }
+function teardown(){ if(unsubO)unsubO(); if(unsubR)unsubR(); if(unsubC)unsubC(); unsubO=unsubR=unsubC=null; rows=[]; reqRows=[]; dataReady=false; }
 function subscribe(){
   try{
     unsubO=onSnapshot(query(collection(db,'opravy'),orderBy('createdTs','desc')), snap=>{
@@ -193,6 +195,9 @@ function subscribe(){
     }, err=>{ fatal='Nemám přístup k datům: '+err.message; render(); });
     unsubR=onSnapshot(collection(db,'requests'), snap=>{
       reqRows=snap.docs.map(d=>Object.assign({_id:d.id}, d.data())); if(!editing) render();
+    }, ()=>{});
+    unsubC=onSnapshot(doc(db,'meta','config'), snap=>{
+      const d=snap.data()||{}; cfg={sections:d.sections||[]}; if(!editing) render();
     }, ()=>{});
   }catch(e){ fatal=e.message; render(); }
 }
@@ -236,7 +241,7 @@ function visibleRows(){
   let r=rows.slice();
   if(filters.mine) r=r.filter(x=>x.author===me.uid);
   if(filters.status) r=r.filter(x=>effStatus(x)===filters.status);
-  if(filters.q){ const q=filters.q.toLowerCase(); r=r.filter(x=>[x.poradove,x.sklad,x.typ,x.serial,x.firma,x.linka,x.stroj,x.zavada].join(' ').toLowerCase().includes(q)); }
+  if(filters.q){ const q=filters.q.toLowerCase(); r=r.filter(x=>[x.poradove,x.sklad,x.typ,x.popisdilu,x.serial,x.firma,x.linka,x.stroj,x.zavada].join(' ').toLowerCase().includes(q)); }
   const c=sort.col;
   r.sort((a,b)=>{ let x=c==='status'?effStatus(a):a[c], y=c==='status'?effStatus(b):b[c];
     return String(x??'').localeCompare(String(y??''),'cs')*sort.dir; });
@@ -285,7 +290,7 @@ function listView(){
 const g = id => { const el=document.getElementById(id); return el?el.value:undefined; };
 function collect(){
   if(!editing) return;
-  const map={urgentnost:'e-urg',sklad:'e-sklad',typ:'e-typ',serial:'e-serial',firma:'e-firma',ks:'e-ks',linka:'e-linka',stroj:'e-stroj',zavada:'e-zavada',
+  const map={urgentnost:'e-urg',sklad:'e-sklad',typ:'e-typ',popisdilu:'e-popisdilu',serial:'e-serial',firma:'e-firma',ks:'e-ks',linka:'e-linka',stroj:'e-stroj',zavada:'e-zavada',
     adresa:'e-adresa',kontakt:'e-kontakt',telefon:'e-telefon',balL:'e-ball',balH:'e-balh',balW:'e-balw',vaha:'e-vaha',obal:'e-obal'};
   Object.keys(map).forEach(k=>{ const v=g(map[k]); if(v!==undefined) editing[k]=v; });
   const st=g('e-status'); if(st!==undefined) editing.status=st;
@@ -298,17 +303,22 @@ function modalView(){
   const wrap=(id,label,inner,req=false,span=false)=>`<div class="f ${span?'span2':''} ${errs[id]?'invalid':''}"><label>${esc(label)}${req?' <span class="req">*</span>':''}</label>${inner}${errs[id]?`<span class="err">${esc(errs[id])}</span>`:''}</div>`;
   const inp=(id,val,ph='')=>`<input id="e-${id}" value="${esc(val??'')}" placeholder="${esc(ph)}" ${ed?'':'disabled'}>`;
   const ta=(id,val,ph='')=>`<textarea id="e-${id}" rows="2" placeholder="${esc(ph)}" ${ed?'':'disabled'}>${esc(val??'')}</textarea>`;
+  // linka + stroj z rolovacího seznamu (společné s nákupem – meta/config.sections)
+  const linkaSel = `<select id="e-linka" ${ed?'':'disabled'}><option value="">— vyber linku —</option>${(cfg.sections||[]).map(s=>`<option ${o.linka===s.name?'selected':''}>${esc(s.name)}</option>`).join('')}${(o.linka&&!sectionByName(o.linka))?`<option selected>${esc(o.linka)}</option>`:''}</select>`;
+  const sec=sectionByName(o.linka), machs=sec?(sec.machines||[]):[];
+  const strojSel = `<select id="e-stroj" ${ed&&sec?'':'disabled'}><option value="">${sec?(machs.length?'— celá linka (bez stroje) —':'linka nemá stroje'):'nejdřív vyber linku'}</option>${machs.map(m=>`<option ${o.stroj===m?'selected':''}>${esc(m)}</option>`).join('')}${(o.stroj&&sec&&!machs.includes(o.stroj))?`<option selected>${esc(o.stroj)}</option>`:''}</select>`;
   // záložka Oprava
   const tabOprava = `<div class="form">
     ${ed?wrap('status','Stav',`<select id="e-status">${STATUSES.map(s=>`<option value="${esc(s.k)}" ${o.status===s.k?'selected':''}>${esc(s.label)}</option>`).join('')}</select>`):`<div class="f"><label>Stav</label><div class="ro">${badge(st,STATUSES)}</div></div>`}
     ${wrap('urg','Urgentnost opravy',`<select id="e-urg" ${ed?'':'disabled'}>${URGENCY.map(u=>`<option ${o.urgentnost===u.k?'selected':''}>${u.k}</option>`).join('')}</select>`,true)}
-    ${wrap('sklad','Skladové číslo',inp('sklad',o.sklad,'skladové číslo dílu'),true)}
+    ${wrap('sklad','Skladové číslo',inp('sklad',o.sklad,'nepovinné — nový díl nemusí mít'))}
     ${wrap('typ','Typové označení dílu',inp('typ',o.typ,'typ / model'),true)}
+    ${wrap('popisdilu','Popis dílu',inp('popisdilu',o.popisdilu,'nepovinné — popiš díl slovy'),false,true)}
     ${wrap('serial','Sériové číslo',inp('serial',o.serial,'SN'))}
     ${wrap('firma','Firma provádějící opravu',inp('firma',o.firma,'název externí firmy'),true)}
     ${wrap('ks','Počet ks',`<input id="e-ks" type="number" min="1" value="${esc(o.ks??1)}" ${ed?'':'disabled'}>`,true)}
-    ${wrap('linka','Linka / projekt',inp('linka',o.linka,'linka / projekt'),true)}
-    ${wrap('stroj','Stroj',inp('stroj',o.stroj,'stroj / pod-úsek'))}
+    ${wrap('linka','Linka / projekt',linkaSel,true)}
+    ${wrap('stroj','Stroj',strojSel)}
     ${wrap('zavada','Popis závady',ta('zavada',o.zavada,'co je poškozené / co opravit'),true,true)}
     ${linked?`<div class="f span2"><div class="notice" style="margin:0">🔗 Napojený nákupní požadavek <b>${esc(o.nakupPoradove||'')}</b> — stav „PO…" se bere z něj (nákup je právě: <b>${esc(linked.status)}</b>).</div></div>`:''}
   </div>`;
@@ -323,7 +333,7 @@ function modalView(){
     ${wrap('balw','Šířka (cm)',`<input id="e-balw" type="number" min="0" value="${esc(o.balW??'')}" ${ed?'':'disabled'}>`)}
     ${wrap('vaha','Hmotnost (kg)',`<input id="e-vaha" type="number" min="0" step="0.1" value="${esc(o.vaha??'')}" ${ed?'':'disabled'}>`)}
     ${wrap('obal','Do čeho zabaleno',inp('obal',o.obal,'karton / paleta / bublinková fólie…'),false,true)}
-    <div class="f span2">${isNew?'<div class="muted">Word a nákupní požadavek půjdou vytvořit až po uložení požadavku.</div>':`<button class="btn-primary" data-a="word" style="padding:10px 16px">🖨 Vygenerovat Word (průvodka)</button>`}</div>
+    ${isNew?'':`<div class="f span2"><button class="btn-primary" data-a="word" style="padding:10px 16px">🖨 Vygenerovat Word (průvodka)</button></div>`}
   </div>`;
   const tabHist = `<div class="hist"><b>Historie požadavku</b>${(o.hist&&o.hist.length)?o.hist.slice().reverse().map(h=>`<div>${esc(h)}</div>`).join(''):'<div class="muted">Zatím žádné záznamy.</div>'}</div>`;
   const tabbar = !isNew?`<div class="mtabs">
@@ -353,7 +363,7 @@ function modalView(){
 }
 function validate(){
   errs={}; collect();
-  [['urg','urgentnost'],['sklad','sklad'],['typ','typ'],['firma','firma'],['ks','ks'],['linka','linka'],['zavada','zavada']].forEach(([eid,f])=>{
+  [['urg','urgentnost'],['typ','typ'],['firma','firma'],['ks','ks'],['linka','linka'],['zavada','zavada']].forEach(([eid,f])=>{
     const v=editing[f]; if(v===''||v===undefined||v===null||(f==='ks'&&!(Number(v)>0))) errs[eid]='Povinné pole';
   });
   return Object.keys(errs).length===0;
@@ -373,7 +383,7 @@ function genWord(o){
       ${cell('Adresa + kontaktní osoba příjemce (popř. tel.)', [o.adresa,o.kontakt,o.telefon].filter(Boolean).join(', '))}
       ${cell('Velikost zásilky (D×V×Š) v cm', rozmer.length?rozmer.join(' × '):'')}
       ${cell('Hmotnost zásilky kg', o.vaha||'')}
-      ${cell('Obsah zásilky', [o.typ&&('Díl: '+o.typ), o.sklad&&('Skl. č.: '+o.sklad), o.serial&&('SN: '+o.serial), o.ks&&(o.ks+' ks'), o.obal&&('Obal: '+o.obal)].filter(Boolean).join('; '))}
+      ${cell('Obsah zásilky', [o.typ&&('Díl: '+o.typ), o.popisdilu&&('Popis: '+o.popisdilu), o.sklad&&('Skl. č.: '+o.sklad), o.serial&&('SN: '+o.serial), o.ks&&(o.ks+' ks'), o.obal&&('Obal: '+o.obal)].filter(Boolean).join('; '))}
       ${cell('Hodnota zásilky', '')}
     </table>
     <table style="margin-top:18px;font-size:13px"><tr>
@@ -408,7 +418,7 @@ const URG2PRIO = {'kritická':'kritická','vysoká':'vysoká','běžná':'běžn
 async function genNakup(o){
   const poradove=await nextNakupNumber();
   const rec={ poradove, status:'nový', typ:'Nový požadavek',
-    sklad:o.sklad||'', popis:(o.typ||'')+(o.serial?(' · SN '+o.serial):''), duvod:'Externí oprava dílu — '+(o.poradove||'')+(o.zavada?(' · '+o.zavada):''),
+    sklad:o.sklad||'', popis:[o.typ,o.popisdilu].filter(Boolean).join(' — ')+(o.serial?(' · SN '+o.serial):''), duvod:'Externí oprava dílu — '+(o.poradove||'')+(o.zavada?(' · '+o.zavada):''),
     priorita:URG2PRIO[o.urgentnost]||'běžná', mnozstvi:Number(o.ks)||1, cena:0, mena:'CZK',
     dodavatel:o.firma||'', vyrobce:'', ucet:'', costcenter:'', usek:o.linka||'', stroj:o.stroj||'', datum:'',
     min:0, max:0, newStock:false, url:'', notifyEmail:'', poznamka:'Vzniklo z opravy '+(o.poradove||''),
@@ -460,6 +470,7 @@ function bind(){
     const isInput=(el.tagName==='SELECT'||el.type==='checkbox');
     if(isInput) el.onchange=ev=>act(a,v,el,ev); else el.onclick=ev=>{ev.stopPropagation();act(a,v,el,ev);};
   });
+  const lk=document.getElementById('e-linka'); if(lk) lk.onchange=()=>{collect(); editing.stroj=''; render();};
   const q=document.getElementById('f-q'); if(q) q.oninput=()=>{filters.q=q.value;const p=q.selectionStart;render();const n=document.getElementById('f-q');if(n){n.focus();n.setSelectionRange(p,p);}};
   const m=document.getElementById('f-mine'); if(m) m.onchange=()=>{filters.mine=m.checked;render();};
 }

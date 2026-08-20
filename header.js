@@ -30,7 +30,8 @@
     // Externí opravy zatím vidí v menu jen správce (podle e-mailu)
     var OPRAVY_OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
     function opravyLink(){
-      if(OPRAVY_OWNERS.indexOf(String(o.user||'').trim().toLowerCase())<0) return '';
+      var who = String(o.email||o.user||'').trim().toLowerCase();
+      if(OPRAVY_OWNERS.indexOf(who)<0) return '';
       return '<a class="'+(o.cur==='opravy'?'cur':'')+'" href="opravy.html">🛠️ Externí opravy</a>';
     }
     return '<header class="uhdr">'
