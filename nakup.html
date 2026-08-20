@@ -1027,7 +1027,7 @@ function modalView(){
   else if(modalTab==='prilohy') content = attBlock;
   else if(modalTab==='historie') content = histContent;
   else content = `${roleBar}<div class="form">${body}</div>`;
-  return `<div class="overlay"><div class="modal">
+  return `<div class="overlay" data-a="close-bg"><div class="modal">
     <h3>${isNew?'Nový nákupní požadavek':esc(r.poradove)}${!isNew?` <span style="font-weight:400;opacity:.8;font-size:12px">${esc(r.authorName||'')}</span>`:''}<button class="x" data-a="close">✕</button></h3>
     ${tabbar}
     <div class="modalbody">${content}</div>
