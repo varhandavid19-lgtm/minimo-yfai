@@ -155,6 +155,23 @@
   .attempty{padding:10px 12px;font-size:12px;color:var(--muted)}
   .atthint{padding:0 12px 10px;font-size:10.5px;color:var(--muted)}
   .clip{font-size:11px;color:#41506b;white-space:nowrap}
+  /* záložky v detailu */
+  .mtabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin:0 0 12px;padding:0 2px}
+  .mtab{background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;padding:9px 14px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-radius:6px 6px 0 0}
+  .mtab:hover{background:#f4f6f9;color:#41506b}
+  .mtab.on{color:var(--navy-2);border-bottom-color:var(--navy-2)}
+  .mtabwrap{min-height:60px}
+  .attnote{padding:8px 12px;font-size:11.5px;color:#41506b;background:#f8fafd;border-bottom:1px solid var(--line)}
+  .attbusy{font-weight:600;color:var(--green);font-size:11px}
+  .attcats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:12px}
+  .attcat{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+  .attcat-h{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#f4f6f9;font-weight:700;font-size:12px;color:#41506b}
+  .attcat-h .att-add{margin-left:auto}
+  .attdrop{padding:8px;display:flex;flex-direction:column;gap:6px;min-height:46px}
+  .attdrop.drag{background:#eaf2ff;outline:2px dashed var(--navy-2);outline-offset:-4px}
+  .att-dl{background:#eef3fb;border:1px solid #cddaf0;color:var(--navy-2);border-radius:6px;width:26px;height:26px;padding:0;font-size:13px;cursor:pointer;flex:none}
+  .att-dl:hover{background:#dbe6f7}
+  @media(max-width:700px){ .attcats{grid-template-columns:1fr} }
   .recvgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 16px;padding:12px}
   .recvgrid > div{display:flex;flex-direction:column;gap:2px}
   .recvgrid span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
@@ -377,6 +394,9 @@ const PRIORITIES = [
 ];
 const TYPES = ['Nový požadavek','Doplnění skladu'];
 const DOCTYPES = ['Objednávka','Dodací list','Faktura'];
+const ATT_CATS = [{key:'nabidka',label:'Nabídka'},{key:'po',label:'PO'},{key:'dodaci',label:'Dodací list'},{key:'faktura',label:'Faktura'},{key:'ostatni',label:'Ostatní'}];
+const ATT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt,.msg,.eml';
+const catLabel = k => (ATT_CATS.find(c=>c.key===k)||{label:'Ostatní'}).label;
 const ROLES = {
   zadavatel:   {label:'Zadavatel',    lvl:1, edit:false, approve:false, del:false, admin:false,
                 popis:'Zakládá požadavky, hledá a sleduje jejich stav. Po odeslání už požadavek needituje.'},
@@ -464,6 +484,8 @@ let mgrSel=new Set();                                          // vybrané řád
 let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
 let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
 let uploadBusy=false;                                         // právě se nahrává příloha
+let modalTab='pozadavek';                                     // aktivní záložka v detailu (pozadavek/prijem/prilohy)
+let pendingFiles=[];                                          // přílohy čekající na nahrání u nového požadavku [{file,cat}]
 
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -980,26 +1002,22 @@ function modalView(){
       <div><span>Doklad</span><b>${(r.docType||r.docNo)?esc(((r.docType||'')+' '+(r.docNo||'')).trim()):'—'}</b></div>
       <div class="span2"><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>
     </div>`;
-  const receiveInfo = showRecv ? `<div class="recvbox"><div class="recvh">📦 Příjem / sklad${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
-  const attFiles = r.files||[];
+  const receiveInfo = !isNew ? `<div class="recvbox"><div class="recvh">📦 Příjem / sklad${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
   const attCan = canAttach(r);
-  const filesSection = isNew
-    ? `<div class="attbox"><div class="atth">📎 Nabídky / přílohy</div><div class="attempty">Přílohy (např. nabídku) přidáš <b>po uložení</b> požadavku — pak požadavek otevři a nahraj soubor.</div></div>`
-    : `<div class="attbox"><div class="atth">📎 Nabídky / přílohy${attCan?`<label class="att-add ${uploadBusy?'busy':''}">${uploadBusy?'Nahrávám…':'+ Přidat přílohu'}<input type="file" id="att-input" data-a="upload-file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt" ${uploadBusy?'disabled':''} hidden></label>`:''}</div>
-      ${attFiles.length?`<div class="attlist">${attFiles.map((f,i)=>`<div class="attrow">
-        <a href="${esc(f.url)}" target="_blank" rel="noopener" class="attlink" onclick="event.stopPropagation()" title="Otevřít ${esc(f.name)}">📄 ${esc(f.name)}</a>
-        <span class="attmeta">${f.size?esc(fmtSize(f.size)):''}${f.by?' · '+esc(f.by):''}${f.at?' · '+esc(dateCz(f.at)):''}</span>
-        ${attCan?`<button class="att-del" data-a="del-file" data-v="${i}" title="Smazat přílohu">✕</button>`:''}
-      </div>`).join('')}</div>`:`<div class="attempty">${attCan?'Zatím žádná příloha. Nahraj nabídku tlačítkem „+ Přidat přílohu".':'Žádné přílohy.'}</div>`}
-      <div class="atthint">Soubor se uloží do našeho úložiště a jde otevřít i z mobilu. Max 5 MB na soubor.</div>
-    </div>`;
+  const attBlock = renderAttachments(r,isNew,attCan);
+  const tabbar = !isNew ? `<div class="mtabs">
+      <button class="mtab ${modalTab==='pozadavek'?'on':''}" data-a="mtab" data-v="pozadavek">Požadavek</button>
+      <button class="mtab ${modalTab==='prijem'?'on':''}" data-a="mtab" data-v="prijem">Příjem / Sklad</button>
+      <button class="mtab ${modalTab==='prilohy'?'on':''}" data-a="mtab" data-v="prilohy">Přílohy${(r.files&&r.files.length)?` (${r.files.length})`:''}</button>
+    </div>` : '';
+  let mid;
+  if(isNew) mid = `${roleBar}<div class="form">${body}</div>${attBlock}`;
+  else if(modalTab==='prijem') mid = tabbar + `<div class="mtabwrap">${receiveInfo}</div>`;
+  else if(modalTab==='prilohy') mid = tabbar + `<div class="mtabwrap">${attBlock}</div>`;
+  else mid = tabbar + `<div class="mtabwrap">${roleBar}<div class="form">${body}</div>${(r.hist&&r.hist.length)?`<div class="hist"><b>Historie</b>${r.hist.slice(-8).reverse().map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}</div>`;
   return `<div class="overlay"><div class="modal">
     <h3>${isNew?'Nový nákupní požadavek':esc(r.poradove)}${!isNew?` <span style="font-weight:400;opacity:.8;font-size:12px">${esc(r.authorName||'')}</span>`:''}<button class="x" data-a="close">✕</button></h3>
-    ${roleBar}
-    <div class="form">${body}</div>
-    ${receiveInfo}
-    ${filesSection}
-    ${(!isNew&&r.hist&&r.hist.length)?`<div class="hist"><b>Historie</b>${r.hist.slice(-8).reverse().map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
+    ${mid}
     <div class="foot">
       ${footMsg?`<span class="msg">${esc(footMsg)}</span>`:(ed?`<span class="muted">Pole s <span style="color:#c0392b">*</span> jsou povinná.</span>`:'')}
       <div class="r">
@@ -1012,6 +1030,28 @@ function modalView(){
       </div>
     </div>
   </div></div>`;
+}
+
+/* Přílohy rozdělené do kategorií (Nabídka / PO / Dodací list / Faktura / Ostatní). */
+function renderAttachments(r,isNew,attCan){
+  const note = isNew
+    ? `<div class="attnote">ℹ️ Přílohy se nahrají do úložiště <b>až po uložení požadavku</b> (po kliknutí „Založit požadavek"). Zatím jsou jen připravené.</div>`
+    : `<div class="attnote">Soubor otevřeš klikem na název, stáhneš tlačítkem ⬇ (nebo zkus přetáhnout na plochu). Nahrát můžeš i <b>přetažením souboru</b> do dlaždice. Max 5 MB.</div>`;
+  const cats = ATT_CATS.map(c=>{
+    let items='';
+    if(isNew){
+      items = pendingFiles.map((p,i)=>({p,i})).filter(x=>(x.p.cat||'ostatni')===c.key)
+        .map(x=>`<div class="attrow"><span class="attlink">📄 ${esc(x.p.file.name)}</span><span class="attmeta">${esc(fmtSize(x.p.file.size))} · připraveno</span>${attCan?`<button class="att-del" data-a="unqueue-file" data-v="${x.i}" title="Odebrat">✕</button>`:''}</div>`).join('');
+    } else {
+      items = (r.files||[]).map((f,i)=>({f,i})).filter(x=>(x.f.cat||'ostatni')===c.key)
+        .map(x=>`<div class="attrow" draggable="true" data-dl="${x.i}"><a class="attlink" href="${esc(x.f.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Otevřít ${esc(x.f.name)}">📄 ${esc(x.f.name)}</a><span class="attmeta">${x.f.size?esc(fmtSize(x.f.size)):''}${x.f.by?' · '+esc(x.f.by):''}</span><button class="att-dl" data-a="dl-file" data-v="${x.i}" title="Stáhnout">⬇</button>${attCan?`<button class="att-del" data-a="del-file" data-v="${x.i}" title="Smazat">✕</button>`:''}</div>`).join('');
+    }
+    return `<div class="attcat">
+      <div class="attcat-h">${esc(c.label)}${attCan?`<label class="att-add">+ soubor<input type="file" data-a="upload-file" data-v="${c.key}" accept="${ATT_ACCEPT}" multiple hidden></label>`:''}</div>
+      <div class="attdrop ${attCan?'':'ro'}" data-cat="${c.key}">${items||`<div class="attempty">${attCan?'Přetáhni sem soubor nebo „+ soubor".':'Žádné soubory.'}</div>`}</div>
+    </div>`;
+  }).join('');
+  return `<div class="attbox"><div class="atth">📎 Přílohy${uploadBusy?' <span class="attbusy">— nahrávám…</span>':''}</div>${note}<div class="attcats">${cats}</div></div>`;
 }
 
 /* ---------- administrace ---------- */
@@ -1229,6 +1269,40 @@ async function nextNumber(){
   return 'NP-'+year+'-'+String(n).padStart(3,'0');
 }
 
+/* ---------- přílohy: nahrání jednoho souboru + dávka ---------- */
+async function uploadOne(reqId,f,cat){
+  const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-80);
+  const path='nabidky/'+reqId+'/'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'_'+safe;
+  const s=sref(storage,path);
+  await uploadBytes(s,f,{contentType:f.type||'application/octet-stream'});
+  const url=await getDownloadURL(s);
+  return {name:f.name,path,url,size:f.size,cat:cat||'ostatni',at:today(),by:me.name};
+}
+/* Zpracuje vybrané/přetažené soubory: u nového požadavku je zařadí do fronty,
+   u existujícího je rovnou nahraje do úložiště. */
+async function handleFiles(fileList,cat){
+  const files=[...(fileList||[])].filter(Boolean); if(!files.length) return;
+  cat=cat||'ostatni';
+  if(!editing) return;
+  if(!editing._id){   // nový požadavek → fronta, nahraje se po založení
+    for(const f of files){ if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); continue; } pendingFiles.push({file:f,cat}); }
+    render(); return;
+  }
+  const cur=rows.find(x=>x._id===editing._id)||editing;
+  if(!canAttach(cur)){ toast('Na přidání přílohy nemáš právo.','err'); return; }
+  uploadBusy=true; render();
+  const base=rows.find(x=>x._id===editing._id)||editing;
+  const filesArr=(base.files||[]).slice(); const hist=(base.hist||[]).slice(); let ok=0;
+  for(const f of files){
+    if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); continue; }
+    try{ const meta=await uploadOne(editing._id,f,cat); filesArr.push(meta); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name} (${catLabel(cat)})`); ok++; }
+    catch(e){ toast(`Nahrání „${f.name}" selhalo: `+e.message,'err'); }
+  }
+  if(ok){ try{ await updateDoc(doc(db,'requests',editing._id),{files:filesArr,hist}); editing.files=filesArr; editing.hist=hist; toast(ok===1?'Příloha nahrána.':ok+' přílohy nahrány.','ok'); }
+    catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
+  uploadBusy=false; render();
+}
+
 /* ---------- zápisy do Firestore ---------- */
 async function createRequest(){
   const poradove=await nextNumber();
@@ -1238,8 +1312,15 @@ async function createRequest(){
   });
   // Nově založený požadavek je VŽDY ve stavu „nový" — nezáleží na ceně ani ostatních polích.
   // Do „ve schvalování" ho posune až sklad/schvalovatel (nebo se cena doplní později u existujícího požadavku).
-  delete rec._id;
-  await addDoc(collection(db,'requests'),rec);
+  delete rec._id; delete rec.files;
+  const refNew=await addDoc(collection(db,'requests'),rec);
+  // připravené přílohy nahraj až teď, když máme id požadavku
+  if(pendingFiles.length){
+    const filesArr=[]; const hist=rec.hist.slice();
+    for(const p of pendingFiles){ try{ const meta=await uploadOne(refNew.id,p.file,p.cat); filesArr.push(meta); hist.push(`${today()} · ${me.name} · přidal přílohu ${p.file.name} (${catLabel(p.cat)})`); }catch(e){} }
+    if(filesArr.length){ try{ await updateDoc(refNew,{files:filesArr,hist}); }catch(e){} }
+  }
+  pendingFiles=[];
   return poradove;
 }
 async function updateRequest(){
@@ -1283,6 +1364,24 @@ function bind(){
   const lp=document.getElementById('lg-pass');if(lp)lp.onkeydown=e=>{if(e.key==='Enter')act('login');};
   if(qrOpen) startQr();
   syncTopScroll();
+  bindAttachDnD();
+}
+/* Přetažení souboru DO dlaždice (nahrání) a přetažení souboru Z appky na plochu (stažení). */
+function bindAttachDnD(){
+  document.querySelectorAll('.attdrop').forEach(z=>{
+    if(z.classList.contains('ro')) return;
+    z.addEventListener('dragover',e=>{ if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){ e.preventDefault(); z.classList.add('drag'); } });
+    z.addEventListener('dragleave',()=>z.classList.remove('drag'));
+    z.addEventListener('drop',e=>{ e.preventDefault(); z.classList.remove('drag');
+      if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length) handleFiles(e.dataTransfer.files, z.dataset.cat); });
+  });
+  document.querySelectorAll('.attrow[data-dl]').forEach(row=>{
+    row.addEventListener('dragstart',e=>{
+      const f=(editing&&editing.files||[])[Number(row.dataset.dl)]; if(!f||!e.dataTransfer) return;
+      const mime = /\.pdf$/i.test(f.name)?'application/pdf':(/\.(png|jpe?g|gif|webp)$/i.test(f.name)?'image/*':'application/octet-stream');
+      try{ e.dataTransfer.setData('DownloadURL', `${mime}:${f.name}:${f.url}`); }catch(_){}
+    });
+  });
 }
 /* Napojí horní vodorovný posuvník na tabulku požadavků (obousměrná synchronizace). */
 function syncTopScroll(){
@@ -1341,21 +1440,21 @@ async function act(a,v,el,ev){
     case 'new':
       editing={status:'nový',typ:'Nový požadavek',poradove:'',sklad:'',popis:'',duvod:'',priorita:'běžná',mnozstvi:1,cena:'',mena:'CZK',
         dodavatel:'',vyrobce:'',ucet:'',costcenter:'',usek:'',stroj:'',datum:'',min:0,max:0,newStock:false,url:'',notifyEmail:'',poznamka:''};
-      errs={};footMsg='';break;
+      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; uploadBusy=false; errs={};footMsg='';break;
     case 'open':{ editing=JSON.parse(JSON.stringify(rows.find(r=>r._id===v)));
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
-      recvEdit=false; uploadBusy=false; errs={};footMsg='';break;}
+      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; uploadBusy=false; errs={};footMsg='';break;}
     case 'dup':{const s=rows.find(r=>r._id===v);
-      editing=Object.assign(JSON.parse(JSON.stringify(s)),{_id:null,poradove:'',status:'nový',datum:'',approvedBy:null,approvedAt:null,hist:[]});
+      editing=Object.assign(JSON.parse(JSON.stringify(s)),{_id:null,poradove:'',status:'nový',datum:'',approvedBy:null,approvedAt:null,hist:[],files:[]});
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
-      errs={};footMsg='';break;}
+      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; uploadBusy=false; errs={};footMsg='';break;}
 
     case 'save':{
       const isNew=!editing._id;
       if(!canEditRow(isNew, editing))return;
       collect();
       if(isNew&&!P().edit)editing.status='nový';
-      if(!validate()){footMsg='Doplň povinná pole označená červeně.';render();return;}
+      if(!validate()){footMsg='Doplň povinná pole označená červeně.';modalTab='pozadavek';render();return;}
       try{
         if(isNew){const no=await createRequest();editing=null;footMsg='';toast('Požadavek '+no+' založen.','ok');}
         else{
@@ -1410,29 +1509,25 @@ async function act(a,v,el,ev){
 
     case 'close': case 'close-bg':
       if(a==='close-bg'&&ev&&ev.target!==el)return;
-      stopQr(); qrOpen=false; editing=null;recvEdit=false;uploadBusy=false;errs={};footMsg='';break;
+      stopQr(); qrOpen=false; editing=null;recvEdit=false;uploadBusy=false;modalTab='pozadavek';pendingFiles=[];errs={};footMsg='';break;
+
+    case 'mtab': collect(); modalTab=v; break;
 
     case 'upload-file':{
-      const f=el.files&&el.files[0]; if(!f) return;
-      if(!editing||!editing._id){ toast('Nejdřív ulož požadavek, pak přidej přílohu.','err'); return; }
-      const cur=rows.find(x=>x._id===editing._id)||editing;
-      if(!canAttach(cur)){ toast('Na přidání přílohy nemáš právo.','err'); return; }
-      if(f.size>MAX_FILE){ toast(`Soubor je větší než 5 MB (${fmtSize(f.size)}).`,'err'); return; }
-      uploadBusy=true; render();
+      const files=el.files?[...el.files]:[]; if(!files.length) return;
+      await handleFiles(files, v||'ostatni');
+      return;
+    }
+    case 'unqueue-file':{ pendingFiles.splice(Number(v),1); break; }
+    case 'dl-file':{
+      const f=(editing&&editing.files||[])[Number(v)]; if(!f) return;
       try{
-        const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-80);
-        const path='nabidky/'+editing._id+'/'+Date.now()+'_'+safe;
-        const s=sref(storage,path);
-        await uploadBytes(s,f,{contentType:f.type||'application/octet-stream'});
-        const url=await getDownloadURL(s);
-        const base=rows.find(x=>x._id===editing._id)||editing;
-        const files=(base.files||[]).concat({name:f.name,path,url,size:f.size,at:today(),by:me.name});
-        const hist=(base.hist||[]).concat(`${today()} · ${me.name} · přidal přílohu ${f.name}`);
-        await updateDoc(doc(db,'requests',editing._id),{files,hist});
-        editing.files=files; editing.hist=hist;
-        toast('Příloha nahrána.','ok');
-      }catch(e){ toast('Nahrání selhalo: '+e.message,'err'); }
-      uploadBusy=false; render(); return;
+        const resp=await fetch(f.url); if(!resp.ok) throw new Error('net');
+        const blob=await resp.blob(); const u=URL.createObjectURL(blob);
+        const a2=document.createElement('a'); a2.href=u; a2.download=f.name; document.body.appendChild(a2); a2.click(); a2.remove();
+        setTimeout(()=>URL.revokeObjectURL(u),5000);
+      }catch(e){ window.open(f.url,'_blank','noopener'); }   // když stažení nejde (CORS), aspoň otevři
+      return;
     }
     case 'del-file':{
       if(!editing||!editing._id) return;
