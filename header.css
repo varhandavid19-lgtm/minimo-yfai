@@ -33,15 +33,15 @@
 .uh-logout:hover{background:rgba(255,255,255,.26)}
 
 /* rozbalovací menu modulů (kotva u tlačítka ☰) */
-.mm-panel{position:absolute;top:56px;left:0;z-index:200;background:#fff;border:1px solid #dde4ec;border-radius:12px;
-  box-shadow:0 16px 40px rgba(0,0,0,.26);min-width:260px;padding:6px;color:#16233a}
-.mm-panel .mm-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:#6b7a90;font-weight:700;padding:8px 10px 5px}
-.mm-panel a{display:flex;gap:9px;align-items:center;padding:10px 10px;border-radius:8px;text-decoration:none;color:#16233a;font-size:13.5px;font-weight:600}
+.mm-panel{position:absolute;top:64px;left:0;z-index:200;background:#fff;border:1px solid #dde4ec;border-radius:14px;
+  box-shadow:0 16px 40px rgba(0,0,0,.26);min-width:420px;padding:12px;color:#16233a}
+.mm-panel .mm-h{font-size:15px;text-transform:uppercase;letter-spacing:.5px;color:#6b7a90;font-weight:700;padding:12px 14px 8px}
+.mm-panel a{display:flex;gap:14px;align-items:center;padding:16px 16px;border-radius:10px;text-decoration:none;color:#16233a;font-size:20px;font-weight:600}
 .mm-panel a:hover{background:#eef3fb}
 .mm-panel a.cur{background:#eef3fb;color:#0f2f5f}
-.mm-panel .mm-sep{height:1px;background:#eef1f5;margin:6px 4px}
-.mm-panel .mm-view{width:100%;text-align:left;background:#f4f6f9;border:1px solid #dde4ec;border-radius:8px;
-  padding:9px 10px;font-size:12.5px;font-weight:700;color:#41506b;cursor:pointer}
+.mm-panel .mm-sep{height:1px;background:#eef1f5;margin:10px 6px}
+.mm-panel .mm-view{width:100%;text-align:left;background:#f4f6f9;border:1px solid #dde4ec;border-radius:10px;
+  padding:15px 16px;font-size:17px;font-weight:700;color:#41506b;cursor:pointer}
 .mm-panel .mm-view:hover{background:#eaeef4}
 
 /* ---- mobil ---- */
@@ -59,5 +59,6 @@
   .uh-user .n{font-size:11px}
   .uh-user .l{font-size:10px}
   .uh-logout{padding:6px 10px;font-size:11px}
-  .mm-panel{top:52px}
+  .mm-panel{top:58px;min-width:0;width:calc(100vw - 20px);max-width:360px}
+  .mm-panel a{font-size:18px;padding:15px 14px}
 }
