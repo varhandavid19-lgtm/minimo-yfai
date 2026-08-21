@@ -492,6 +492,7 @@ let mgrSel=new Set();                                          // vybrané řád
 let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
 let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
 let uploadBusy=false;                                         // právě se nahrává příloha
+let downOnOverlay=false;                                      // stisk myši začal na ztmavené ploše (kvůli zavírání kliknutím vedle)
 let modalTab='pozadavek';                                     // aktivní záložka v detailu (pozadavek/prijem/prilohy)
 let pendingFiles=[];                                          // přílohy čekající na nahrání u nového požadavku [{file,cat}]
 
@@ -1229,10 +1230,12 @@ function offerDeliveryMail(r){
 /* ---------- formulář: sběr, přepočet, validace ---------- */
 function collect(){
   const g=id=>{const el=document.getElementById(id);return el?el.value:undefined;};
+  // čísla čti jen když pole opravdu existuje (jinak by se při přepnutí záložky přepsala na 0)
+  const gnum=id=>{const el=document.getElementById(id);return el?(Number(el.value)||0):undefined;};
   const set={status:g('e-status'),typ:g('e-typ'),sklad:g('e-sklad'),popis:g('e-popis'),duvod:g('e-duvod'),priorita:g('e-priorita'),
-    mnozstvi:Number(g('e-mnozstvi'))||0,cena:Number(g('e-cena'))||0,mena:g('e-mena'),dodavatel:g('e-dodavatel'),vyrobce:g('e-vyrobce'),
+    mnozstvi:gnum('e-mnozstvi'),cena:gnum('e-cena'),mena:g('e-mena'),dodavatel:g('e-dodavatel'),vyrobce:g('e-vyrobce'),
     ucet:g('e-ucet'),costcenter:g('e-costcenter'),usek:g('e-usek'),stroj:g('e-stroj'),datum:g('e-datum'),
-    min:Number(g('e-min'))||0,max:Number(g('e-max'))||0,url:g('e-url'),notifyEmail:g('e-notify'),poznamka:g('e-poznamka')};
+    min:gnum('e-min'),max:gnum('e-max'),url:g('e-url'),notifyEmail:g('e-notify'),poznamka:g('e-poznamka')};
   Object.keys(set).forEach(k=>{if(set[k]!==undefined)editing[k]=set[k];});
   const ns=document.getElementById('e-newstock'); if(ns) editing.newStock=ns.checked;
   // editace sekce Příjem/sklad (jen pokud jsou její pole na stránce)
@@ -1354,6 +1357,8 @@ async function updateRequest(){
    BIND + AKCE
    ========================================================== */
 function bind(){
+  const ov=document.querySelector('.overlay[data-a="close-bg"]');
+  if(ov) ov.addEventListener('mousedown',e=>{ downOnOverlay=(e.target===ov); });
   document.querySelectorAll('[data-a]').forEach(el=>{
     const a=el.dataset.a,v=el.dataset.v;
     const isInput = (el.tagName==='SELECT'||el.type==='checkbox'||el.type==='file'||
@@ -1523,7 +1528,9 @@ async function act(a,v,el,ev){
     case 'qr-close': stopQr(); qrOpen=false; break;
 
     case 'close': case 'close-bg':
-      if(a==='close-bg'&&ev&&ev.target!==el)return;
+      // zavřít pozadím jen když stisk i puštění bylo na pozadí (ne tažení myší z okna ven při označování textu)
+      if(a==='close-bg'&&(!downOnOverlay||(ev&&ev.target!==el))){ downOnOverlay=false; return; }
+      downOnOverlay=false;
       stopQr(); qrOpen=false; editing=null;recvEdit=false;uploadBusy=false;modalTab='pozadavek';pendingFiles=[];errs={};footMsg='';break;
 
     case 'mtab': collect(); modalTab=v; break;

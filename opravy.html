@@ -149,6 +149,7 @@ let me=null, rows=[], reqRows=[], editing=null, errs={}, footMsg='', modalTab='o
 let sort={col:'created',dir:-1}, filters={q:'',status:'',mine:false}, toastMsg=null, toastKind='';
 let loginBusy=false, loginErr='', dataReady=false, fatal='';
 let reqReady=false;      // nákupní požadavky už načtené (kvůli ověření propojení)
+let downOnOverlay=false; // stisk myši začal na ztmavené ploše (kvůli zavírání kliknutím vedle)
 let cfg={sections:[]};   // meta/config – sdílené linky a stroje (společné s nákupem)
 let unsubO=null, unsubR=null, unsubC=null;
 const sectionByName = n => (cfg.sections||[]).find(s=>s.name===n);
@@ -447,7 +448,8 @@ async function act(a,v,el,ev){
     case 'new': editing={urgentnost:'běžná',ks:1,status:'nový',hist:[]}; errs={};footMsg='';modalTab='oprava';break;
     case 'open': editing=JSON.parse(JSON.stringify(rows.find(r=>r._id===v))); errs={};footMsg='';modalTab='oprava';break;
     case 'close': case 'close-bg':
-      if(a==='close-bg'&&ev&&ev.target!==el)return; editing=null;errs={};footMsg='';break;
+      if(a==='close-bg'&&(!downOnOverlay||(ev&&ev.target!==el))){ downOnOverlay=false; return; }
+      downOnOverlay=false; editing=null;errs={};footMsg='';break;
     case 'mtab': collect(); modalTab=v; break;
     case 'save':{ if(!canEdit())return; collect();
       if(!validate()){footMsg='Doplň povinná pole.';modalTab='oprava';render();return;}
@@ -468,6 +470,7 @@ async function act(a,v,el,ev){
 function bind(){
   const lf=document.getElementById('loginForm'); if(lf) lf.onsubmit=e=>{e.preventDefault();act('login');};
   const lo=document.getElementById('btn-logout'); if(lo) lo.onclick=()=>act('logout');
+  const ov=document.querySelector('.overlay[data-a="close-bg"]'); if(ov) ov.addEventListener('mousedown',e=>{ downOnOverlay=(e.target===ov); });
   document.querySelectorAll('[data-a]').forEach(el=>{ const a=el.dataset.a,v=el.dataset.v;
     if(a==='login'||a==='logout') return;
     const isInput=(el.tagName==='SELECT'||el.type==='checkbox');
