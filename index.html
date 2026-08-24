@@ -107,7 +107,8 @@ const resolveModule=(mods,level,key)=>{ const p=mods&&mods[key];
 const allowedMods=(mods,level)=>['portal',
   resolveModule(mods,level,'nakup')!=='none'?'nakup':null,
   resolveModule(mods,level,'plan')!=='none'?'dovolenky':null,
-  resolveModule(mods,level,'nastaveni')!=='none'?'nastaveni':null].filter(Boolean);
+  resolveModule(mods,level,'nastaveni')!=='none'?'nastaveni':null,
+  'opravy','engineering'].filter(Boolean);
 
 /* Zajistí, že přihlášený má záznam v users (aby se objevil ve správě uživatelů). */
 async function ensureUserDoc(user){
@@ -139,6 +140,7 @@ const MODULES = [
   {ico:'🛒', nm:'Nákupní požadavky', ds:'Evidence a schvalování nákupních požadavků ve výrobě.', href:'nakup.html', active:true, key:'nakup'},
   {ico:'🗓️', nm:'Plánování směn a přítomnosti', ds:'Dovolené, nepřítomnosti a plánování směn po sekcích.', href:'dovolenky.html', active:true, key:'plan'},
   {ico:'🛠️', nm:'Externí opravy',    ds:'Požadavky na opravu dílů externí firmou.', href:'opravy.html', active:true, key:'opravy', ownerOnly:true},
+  {ico:'🏭', nm:'Engineering',       ds:'Prostoje na linkách, KPI a import reportu ze Symesticu.', href:'engineering.html', active:true, key:'engineering', ownerOnly:true},
   {ico:'🔧', nm:'Údržba',            ds:'Hlášení a evidence oprav a údržby strojů. Připravujeme.', active:false},
   {ico:'⚠️', nm:'Reklamace',         ds:'Evidence reklamací a neshod kvality. Připravujeme.', active:false},
   {ico:'⚙️', nm:'Nastavení',         ds:'Správa uživatelů, práv a modulů.', href:'nastaveni.html', active:true, key:'nastaveni'},

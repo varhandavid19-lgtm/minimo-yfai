@@ -34,6 +34,12 @@
       if(OPRAVY_OWNERS.indexOf(who)<0) return '';
       return '<a class="'+(o.cur==='opravy'?'cur':'')+'" href="opravy.html">🛠️ Externí opravy</a>';
     }
+    // Engineering zatím také jen pro správce (stejný seznam e-mailů)
+    function engineeringLink(){
+      var who = String(o.email||o.user||'').trim().toLowerCase();
+      if(OPRAVY_OWNERS.indexOf(who)<0) return '';
+      return '<a class="'+(o.cur==='engineering'?'cur':'')+'" href="engineering.html">🏭 Engineering</a>';
+    }
     return '<header class="uhdr">'
       + '<div class="uh-menuwrap">'
         + '<button class="uh-menu" id="mm-btn" aria-label="Menu modulů" title="Moduly">☰</button>'
@@ -43,6 +49,7 @@
           + link('nakup.html','🛒','Nákupní požadavky','nakup')
           + link('dovolenky.html','🗓️','Plánování směn','dovolenky')
           + opravyLink()
+          + engineeringLink()
           + link('nastaveni.html','⚙️','Nastavení','nastaveni')
           + '<div class="mm-sep"></div>'
           + '<button class="mm-view">🖥️ Zobrazit jako na počítači</button>'

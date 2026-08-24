@@ -1,40 +1,79 @@
-# Nákupní požadavky — projekt pro Claude Code
+# minimo · YFAI — projekt pro Claude Code
 
-Interní webová aplikace pro evidenci nákupních požadavků ve výrobní firmě (YFAI).
+Firemní portál interních webových aplikací YFAI. Tohle je ŽIVÁ aplikace, kterou
+vyvíjíme — starý repozitář `Nakupni-pozadavky` je jen archiv, nesahej na něj.
 Tento soubor čteš automaticky u každého úkolu — drž se ho.
 
 Majitel projektu (David) není programátor. Vysvětluj změny česky a lidsky.
 
-## Co aplikace dělá
-Lidé se přihlásí, založí nákupní požadavek (skladové číslo, popis, množství,
-cena, účet, úsek/stroj, priorita, …). Schvalovatel ho schválí nebo zamítne,
-sklad mění stavy a doplňuje datum dodání. Vše je jedna webová aplikace.
+## Co portál dělá
+Jedno přihlášení platí pro všechny moduly. Na rozcestníku jsou dlaždice a každý
+modul je vlastní stránka.
+
+## Struktura — JEDNA STRÁNKA = JEDEN MODUL
+- `index.html` — rozcestník: přihlášení a dlaždice modulů (pole `MODULES`)
+- `nakup.html` — Nákupní požadavky
+- `dovolenky.html` — Plánování směn a přítomnosti
+- `opravy.html` — Externí opravy (zatím vidí jen správce podle e-mailu)
+- `engineering.html` — Engineering: prostoje, KPI, import ze Symesticu
+  (zatím vidí jen správce podle e-mailu)
+- `nastaveni.html` — uživatelé, úrovně a přístupy k modulům
+- `header.js` + `header.css` — SPOLEČNÁ hlavička všech modulů.
+  Nová stránka ji vykreslí přes `window.uheaderHTML({module, cur, user, level,
+  logoutAttr, modules})`. Když přidáváš modul, přidej odkaz i sem.
+
+Nový modul = nová stránka + dlaždice v `MODULES` v `index.html` + odkaz
+v `header.js`. Nerozděluj jeden modul do více souborů.
 
 ## Technický stack — NEMĚNIT
-- **Jeden jediný soubor:** `index.html` v kořeni repozitáře. Veškerý HTML, CSS
-  i JavaScript jsou v něm. Nerozděluj do více souborů.
 - **Žádný build:** čistý HTML + CSS + vanilla JavaScript (ES modules). Žádné npm,
   bundler, TypeScript ani framework (React/Vue…). Musí běžet na GitHub Pages
   bez jakékoli kompilace.
-- **Hosting:** GitHub Pages, větev `main`, kořen repozitáře. Adresa:
-  `https://varhandavid19-lgtm.github.io/Nakupni-pozadavky/`. Po sloučení do `main`
+- **Hosting:** GitHub Pages, větev `main`, kořen repozitáře. Po sloučení do `main`
   se web sám vystaví do 1–2 minut.
-- **Databáze:** Firebase Firestore, projekt `nakupni-pozadavky`.
+- **Databáze:** Firebase Firestore, projekt `nakupni-pozadavky` (sdílený všemi moduly).
 - **Přihlašování:** Firebase Authentication, e-mail + heslo.
 - Firebase SDK se importuje z CDN v `<script type="module">` na začátku souboru.
 
 ## Firebase config — NECHAT V KÓDU
-`firebaseConfig` je přímo v `index.html`. To je správně a bezpečné — jde o
+`firebaseConfig` je přímo v každé stránce. To je správně a bezpečné — jde o
 veřejné frontendové klíče. NEODSTRAŇUJ je, NEPŘESOUVEJ do .env, NEZAVÁDĚJ kvůli
 nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíčů.
 
 ## Datový model (Firestore)
-- kolekce `requests` — jeden dokument = jeden požadavek
-- kolekce `users` — id dokumentu = uid uživatele; pole `name`, `role`, `team`
-- dokument `meta/config` — účty, úseky, stroje, povinná pole, kurzy, čítač `seq`
-- Role a úrovně: `zadavatel` (1), `skladnik` (2), `schvalovatel` (3), `admin` (4).
-  Práva jsou v objektu `ROLES` v kódu a SOUČASNĚ vynucená bezpečnostními pravidly
-  Firestore na serveru (soubor `firestore.rules`).
+- kolekce `requests` — jeden dokument = jeden nákupní požadavek
+- kolekce `opravy` — externí opravy
+- kolekce `people`, `absences`, `shifts`, `rotations` — plánování směn
+- kolekce `users` — id dokumentu = uid uživatele; pole `name`, `level`, `role`,
+  `positions`, `perms`, `modules` (přístup k modulům: none / read / write)
+- dokument `meta/config` — účty, úseky, stroje, povinná pole, kurzy, čítače
+  `seq` (nákup) a `seqOpr` (opravy)
+- kolekce `downtimes` — jeden dokument = jeden prostoj ze Symesticu.
+  Id dokumentu je `datum_linka_časZačátku`, takže opakovaný import nikdy nezaloží
+  duplicitu. NEPŘEVÁDĚJ na `addDoc` s náhodným id.
+- kolekce `dt_days` — denní souhrn prostojů (id = `RRRR-MM-DD`). Přehled a KPI čtou
+  jen tyhle malé dokumenty, ne jednotlivé prostoje — jinak by aplikace prožrala
+  bezplatný limit čtení ve Firestore. Souhrn se po importu vždy přepočítá z databáze.
+- kolekce `dt_imports` — historie importů (kdo, kdy, jaký soubor, kolik řádků)
+- Úrovně uživatelů: `basic`, `warehouse`, `approver`, `wadmin`, `superadmin`,
+  s můstkem na staré role (`zadavatel`, `skladnik`, `schvalovatel`, `admin`).
+  Práva jsou v kódu a SOUČASNĚ vynucená bezpečnostními pravidly Firestore
+  na serveru (soubor `firestore.rules`).
+
+## Modul Engineering (`engineering.html`)
+Prostoje na linkách, KPI a import týdenního reportu z interního systému Symestic.
+- Report (Downtimes) má sloupce `Segment`, `Reason`, `Start time`, `End time`,
+  `Duration`, `Net duration`, `Comment`. Poznají se podle názvu, na pořadí nezáleží.
+  Umí se načíst `.xlsx` i `.csv`.
+- Knihovna na čtení Excelu (SheetJS) se stahuje z CDN, až když někdo opravdu
+  importuje. Když se nestáhne, aplikace nabídne CSV, které umí přečíst sama.
+- Časy z Excelu se počítají v UTC (`fromSerial`), aby se prostoj neposunul
+  o hodinu podle nastavení počítače. Nepřepisuj na `new Date(...)` s místním časem.
+- Modul zatím vidí jen správce podle e-mailu (pole `OWNERS`), stejně jako Externí
+  opravy. Importovat smí jen role `admin` — vynuceno i pravidly Firestore.
+- KPI: prostoje po linkách, changeover time, podíl nezařazených prostojů.
+  Scrap a cycle time čekají na odpovídající report ze Symesticu — dlaždice pro ně
+  v přehledu už jsou a hlásí, že data zatím nejsou.
 
 ## Chování, které se NESMÍ rozbít
 - KAŽDÝ nově založený požadavek má VŽDY stav „nový", pro všechny role bez výjimky

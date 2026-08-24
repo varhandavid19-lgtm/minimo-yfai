@@ -61,5 +61,23 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // --- Engineering: prostoje ze Symesticu ---
+    // Prostoje a denní souhrny čte každý přihlášený, zapisuje je jen správce
+    // při importu reportu.
+    match /downtimes/{id} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+    match /dt_days/{datum} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+    // Záznam v historii importů jde jen založit, ne měnit ani mazat.
+    match /dt_imports/{id} {
+      allow read:   if signedIn();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
   }
 }
