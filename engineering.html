@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engineering — YFAI minimo</title>
+<link rel="stylesheet" href="header.css">
+<style>
+  :root{--navy-1:#0f2f5f;--navy-2:#1b4b8f;--bg:#f4f6f9;--card:#fff;--line:#dde4ec;--text:#16233a;--muted:#6b7a90;
+    --green:#1f9254;--red:#c0392b;--amber:#b7791f;--blue:#2563a8;--purple:#6b46c1;
+    --teal:#0d7377;--teal-bg:#e4f2f2;--teal-dark:#0a5b5e;--radius:6px}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:13px}
+  button{font-family:inherit;font-size:12px;cursor:pointer;border-radius:var(--radius);border:1px solid transparent;padding:7px 12px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input,select{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;color:var(--text);width:100%}
+  input:focus,select:focus,button:focus-visible,a:focus-visible{outline:2px solid #2a5ea3;outline-offset:1px}
+  main{padding:14px 18px 40px;max-width:1560px;margin:0 auto}
+  .btn-primary{background:var(--navy-2);color:#fff}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b}
+  .btn-ok{background:var(--green);color:#fff}
+  .btn-teal{background:var(--teal);color:#fff;font-weight:700}
+  .muted{color:var(--muted)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+
+  .notice{background:#eef4fc;border:1px solid #cfe0f5;color:#274a74;border-radius:8px;padding:10px 13px;margin-bottom:12px;font-size:12.5px}
+  .notice.warn{background:#fdf3e2;border-color:#f2dfb8;color:#7a5410}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:14px}
+  .panel>h2{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:11px 15px;font-size:14px;display:flex;align-items:center;gap:10px}
+  .panel>h2 .right{margin-left:auto;font-weight:500;font-size:11px;opacity:.85}
+  .panel .body{padding:13px}
+  .empty{padding:26px;text-align:center;color:var(--muted)}
+
+  .tabs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .tab{background:#eef1f5;color:#41506b;border:1px solid var(--line);font-weight:600;padding:8px 14px}
+  .tab.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .tabs .sp{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .rangebtn{background:#fff;border:1px solid var(--line);color:#41506b;font-size:11.5px;padding:6px 11px}
+  .rangebtn.on{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:12px;margin-bottom:14px}
+  .kcard{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--muted);border-radius:var(--radius);padding:11px 13px}
+  .kcard .lbl{font-size:10px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .kcard .val{font-size:27px;font-weight:700;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+  .kcard .val small{font-size:14px;font-weight:600;color:var(--muted);margin-left:2px}
+  .kcard .note{font-size:11px;color:var(--muted)}
+  .kcard.soon{border-left-color:#c8d3e0;background:repeating-linear-gradient(135deg,#fff,#fff 8px,#fafbfd 8px,#fafbfd 16px)}
+  .kcard.soon .val{color:var(--muted)}
+
+  .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start}
+  @media(max-width:1000px){.grid2{grid-template-columns:1fr}}
+
+  .bars{display:flex;flex-direction:column}
+  .bar{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dotted var(--line)}
+  .bar:last-child{border-bottom:0}
+  .bar .nm{flex:1.1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+  .bar .tr{flex:1.5;height:14px;background:#eef1f5;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .bar .tr i{display:block;height:100%;border-radius:3px}
+  .bar .vl{flex:none;width:120px;text-align:right;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+  .chart{width:100%;height:auto;display:block}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);background:#fafbfd}
+  .filters input,.filters select{width:auto;min-width:150px}
+  .filters .grow{flex:1 1 260px;max-width:520px}
+  .tblwrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  thead th{background:#16355f;color:#fff;text-align:left;padding:9px 10px;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+  tbody td{padding:8px 10px;border-bottom:1px solid #eef1f5;vertical-align:top}
+  tbody tr:hover td{background:#fafbfd}
+  tr.long td{background:#fdf1ef}
+  td.desc{min-width:180px;max-width:340px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid transparent;white-space:nowrap}
+  .b-grey{background:#eef1f5;color:#4a5a70;border-color:#dfe4ea}
+  .b-teal{background:var(--teal-bg);color:var(--teal-dark);border-color:#bfdedd}
+  .b-green{background:#e8f6ee;color:var(--green);border-color:#c4e6d3}
+  .b-red{background:#fdecea;color:var(--red);border-color:#f5cfca}
+
+  .steps{display:flex;padding:0;margin:0 0 14px;list-style:none;flex-wrap:wrap}
+  .steps li{flex:1;min-width:150px;background:#fff;border:1px solid var(--line);border-right:0;padding:10px 14px;font-size:12px;color:var(--muted);display:flex;gap:9px;align-items:center}
+  .steps li:first-child{border-radius:var(--radius) 0 0 var(--radius)}
+  .steps li:last-child{border-right:1px solid var(--line);border-radius:0 var(--radius) var(--radius) 0}
+  .steps li b{flex:none;width:22px;height:22px;border-radius:50%;background:#eef1f5;color:#4a5a70;display:flex;align-items:center;justify-content:center;font-size:11px}
+  .steps li.on{background:var(--teal-bg);color:var(--teal-dark);font-weight:700;border-color:#bfdedd}
+  .steps li.on b{background:var(--teal);color:#fff}
+  .steps li.done b{background:var(--green);color:#fff}
+  .drop{border:2px dashed #b9c8da;border-radius:10px;background:#fbfcfe;padding:30px 18px;text-align:center;color:var(--muted)}
+  .drop.hot{border-color:var(--teal);background:var(--teal-bg)}
+  .drop .big{font-size:16px;font-weight:700;color:var(--text)}
+  .filebtn{border:1px dashed #c8d3e0;background:#fafbfd;border-radius:var(--radius);padding:7px 11px;font-size:12.5px;color:#41506b;cursor:pointer;display:inline-block}
+  .filebtn input{display:none}
+  .foot{padding:12px 13px;border-top:1px solid var(--line);background:#fafbfd;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .file{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;flex-wrap:wrap}
+  .file .nm{font-weight:700}
+  .file .sz{color:var(--muted);font-size:11.5px}
+
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#0f2f5f,#2a5ea3);padding:16px}
+  .login{background:#fff;border-radius:14px;width:340px;padding:24px;box-shadow:0 22px 55px rgba(0,0,0,.35)}
+  .login h2{margin:0 0 2px;font-size:18px;text-align:center}
+  .login p{font-size:11.5px;color:var(--muted);text-align:center;margin:0 0 16px}
+  .login input{margin-bottom:10px}
+  .login button{width:100%;padding:10px;font-size:13px;background:var(--navy-2);color:#fff;font-weight:700}
+  .loginerr{background:#fdecea;border:1px solid #f5cfca;color:#c0392b;font-size:11.5px;padding:8px 10px;border-radius:8px;margin-bottom:10px;font-weight:600}
+
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#16233a;color:#fff;
+    padding:10px 16px;border-radius:8px;font-size:12.5px;box-shadow:0 10px 26px rgba(0,0,0,.3);z-index:90}
+  .toast.ok{background:#157347}
+  .toast.err{background:#c0392b}
+
+  @media(max-width:680px){
+    main{padding:12px 10px 34px}
+    .filters{flex-direction:column;align-items:stretch}
+    .filters input,.filters select,.filters .grow{width:100%;max-width:none}
+    .tblwrap{overflow-x:visible}
+    thead{display:none}
+    tbody tr{display:block;border:1px solid var(--line);border-radius:8px;margin:0 0 11px;padding:6px 12px;background:#fff}
+    tbody td{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border:0;border-bottom:1px solid #eef1f5;text-align:right}
+    tbody td:last-child{border-bottom:0}
+    tbody td::before{content:attr(data-label);font-weight:700;color:var(--muted);text-align:left;flex:none;font-size:11px;text-transform:uppercase}
+    tr.long td{background:none}
+    tr.long{border-left:4px solid var(--red)}
+    td.desc{max-width:none}
+    .bar{flex-wrap:wrap}
+    .bar .nm{flex:1 0 100%}
+    .bar .vl{width:auto}
+    .tabs .sp{margin-left:0;width:100%}
+  }
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="app"><div class="login-wrap"><div class="login"><h2>Načítám…</h2><p>Připojuji se k Firebase.</p></div></div></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
+  query, where, orderBy, limit, writeBatch }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+/* Společný Firebase projekt pro celý portál. Veřejné frontendové klíče —
+   je správné je mít v kódu, zabezpečení řeší pravidla Firestore. */
+const firebaseConfig = {
+  apiKey: "AIzaSyDi3OVq2Al0WXFPgqhMAN9lPGuExOU80Cc",
+  authDomain: "nakupni-pozadavky.firebaseapp.com",
+  projectId: "nakupni-pozadavky",
+  storageBucket: "nakupni-pozadavky.firebasestorage.app",
+  messagingSenderId: "214674774365",
+  appId: "1:214674774365:web:7f7b51c8169b75f8acb0b4",
+  measurementId: "G-BGDMXEWBQH"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+/* ===== Kdo modul zatím vidí (jen David) — stejně jako u Externích oprav ===== */
+const OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
+const isOwner = e => OWNERS.includes(String(e||'').trim().toLowerCase());
+const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai','david.varhan@yanfeng.com'];
+const isForcedAdmin = e => ADMIN_EMAILS.includes(String(e||'').trim().toLowerCase());
+const ROLE2LEVEL = {zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
+const LEVEL_LABEL = {basic:'Basic',warehouse:'Warehouse',approver:'Approver',wadmin:'Warehouse Admin',superadmin:'Super Admin'};
+/* Importovat smí jen ten, koho pustí i pravidla Firestore (role admin). */
+const canImport = () => !!me && me.role==='admin';
+
+/* ==========================================================
+   Čtení reportu prostojů ze Symesticu
+   Sloupce: Segment, Reason, Start time, End time, Duration,
+   Net duration, Comment. Poznají se podle názvu, pořadí nevadí.
+   ========================================================== */
+
+const ENG_GROUPS = [
+  {g:'Porucha stroje',       m:['porucha stroje','machine malfunction','porucha klipova','nefunkční tiskárna','breakdown']},
+  {g:'Přestavba a seřízení', m:['tool changeover','seřizování','machine adjustment','výměna nástroje','výměna formy','změna materiálu','uvolnění prvního']},
+  {g:'Technický prostoj',    m:['technický prostoj','technical downtime']},
+  {g:'Materiál a logistika', m:['material missing','disturbed material flow','packaging material','čekání na agv','material flow']},
+  {g:'Kvalita',              m:['špatná kvalita','quality','zmetk']},
+  {g:'Organizace výroby',    m:['production preparation','chybí plán','omezená výroba','výroba na druhé lince','plánované zkoušky']},
+  {g:'Lidé a přestávky',     m:['chybí personál','missing personal','operator training','break','end of shift','ohc']},
+  {g:'Systém a data',        m:['výpadek symestic','kusy nepočítala']}
+];
+const GROUP_COLOR = {
+  'Porucha stroje':'#c0392b','Přestavba a seřízení':'#b7791f','Technický prostoj':'#8a5a2b',
+  'Materiál a logistika':'#2563a8','Kvalita':'#6b46c1','Organizace výroby':'#0d7377',
+  'Lidé a přestávky':'#1f9254','Systém a data':'#6b7a90','Nezařazeno':'#98a5b6'
+};
+const UNKNOWN = 'Nezařazeno';
+function engGroup(reason){
+  const t=String(reason||'').toLowerCase();
+  for(const r of ENG_GROUPS) if(r.m.some(x=>t.includes(x))) return r.g;
+  return UNKNOWN;
+}
+function isChangeover(reason){
+  const t=String(reason||'').toLowerCase();
+  return t.includes('tool changeover')||t.includes('výměna nástroje')||t.includes('výměna formy');
+}
+const slug = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80) || 'x';
+const pad2 = n => String(n).padStart(2,'0');
+
+/* Excel drží čas jako číslo (dny od r. 1900). Počítá se v UTC, aby se prostoj
+   neposunul o hodinu podle nastavení počítače. */
+function fromSerial(v){
+  const ms = Math.round((Number(v)-25569)*86400)*1000;
+  if(!isFinite(ms)) return null;
+  const d = new Date(ms);
+  return {iso:`${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}-${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`,
+          date:`${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}-${pad2(d.getUTCDate())}`, hour:d.getUTCHours(), ms};
+}
+function mkTime(y,mo,d,H,M,S){
+  return {iso:`${y}-${pad2(mo)}-${pad2(d)}T${pad2(H)}:${pad2(M)}:${pad2(S)}`,
+          date:`${y}-${pad2(mo)}-${pad2(d)}`, hour:H, ms:Date.UTC(y,mo-1,d,H,M,S)};
+}
+function fromText(s){
+  const t=String(s).trim();
+  let m=t.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if(m) return mkTime(+m[1],+m[2],+m[3],+m[4],+m[5],+(m[6]||0));
+  m=t.match(/^(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if(m) return mkTime(+m[3],+m[2],+m[1],+m[4],+m[5],+(m[6]||0));
+  m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})[, ]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+  if(m){ let y=+m[3]; if(y<100)y+=2000; let H=+m[4]; const ap=(m[7]||'').toUpperCase();
+    if(ap==='PM'&&H<12)H+=12; if(ap==='AM'&&H===12)H=0; return mkTime(y,+m[1],+m[2],H,+m[5],+(m[6]||0)); }
+  return null;
+}
+function engTime(v){
+  if(v==null||v==='') return null;
+  if(typeof v==='number') return fromSerial(v);
+  if(v instanceof Date) return mkTime(v.getFullYear(),v.getMonth()+1,v.getDate(),v.getHours(),v.getMinutes(),v.getSeconds());
+  return fromText(v);
+}
+function engDur(v){
+  if(v==null||v==='') return null;
+  if(typeof v==='number') return Math.round(v*86400);
+  const t=String(v).trim();
+  const m=t.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
+  if(m) return (+m[1])*3600+(+m[2])*60+(+(m[3]||0));
+  const n=Number(t.replace(',','.'));
+  return isFinite(n)?Math.round(n*60):null;
+}
+const shiftOf = h => (h>=6&&h<14)?'R':((h>=14&&h<22)?'O':'N');
+const SHIFT_LBL = {R:'Ranní',O:'Odpolední',N:'Noční'};
+
+const HEAD = {
+  seg:['segment','anlage','linie','line','stroj','linka','machine'],
+  reason:['reason','grund','duvod','důvod'],
+  start:['start time','start','beginn','zacatek','začátek','od'],
+  end:['end time','end','ende','konec','do'],
+  dur:['duration','dauer','trvani','trvání'],
+  net:['net duration','net','netto'],
+  comment:['comment','bemerkung','poznamka','poznámka','note']
+};
+function engParse(aoa){
+  const norm = s => String(s??'').trim().toLowerCase();
+  let hi=-1, map=null;
+  for(let i=0;i<Math.min(aoa.length,30);i++){
+    const cells=(aoa[i]||[]).map(norm), m={};
+    for(const key of Object.keys(HEAD)){
+      const idx=cells.findIndex(c=>c && HEAD[key].some(h=>c===h));
+      if(idx>=0) m[key]=idx;
+    }
+    if(m.seg!=null && m.reason!=null && m.start!=null){ hi=i; map=m; break; }
+  }
+  if(hi<0) return {ok:false, err:'V souboru nejsou sloupce Segment, Reason a Start time. Je to opravdu report prostojů ze Symesticu?'};
+  const out=[], bad=[];
+  for(let i=hi+1;i<aoa.length;i++){
+    const r=aoa[i]||[];
+    const seg=String(r[map.seg]??'').trim();
+    if(!seg) continue;
+    const st=engTime(r[map.start]);
+    if(!st){ bad.push(i+1); continue; }
+    const en = map.end!=null ? engTime(r[map.end]) : null;
+    let sec = map.dur!=null ? engDur(r[map.dur]) : null;      // primárně sloupec Duration ze Symesticu
+    if(sec==null && en && en.ms>st.ms) sec=Math.round((en.ms-st.ms)/1000);
+    if(sec==null||sec<0){ bad.push(i+1); continue; }
+    const net = map.net!=null ? engDur(r[map.net]) : null;
+    const reason = String(r[map.reason]??'').trim() || '00 Unknown';
+    out.push({seg, reason, group:engGroup(reason), co:isChangeover(reason),
+      start:st.iso, end:en?en.iso:'', date:st.date, shift:shiftOf(st.hour),
+      sec, net:(net==null?sec:net),
+      comment: map.comment!=null ? String(r[map.comment]??'').trim().slice(0,500) : '',
+      _id:`${st.date}_${slug(seg)}_${Math.round(st.ms/1000)}`});
+  }
+  return {ok:true, rows:out, bad};
+}
+/* Denní souhrn — počítá se vždy z toho, co je v databázi */
+function aggregate(list){
+  const d={sec:0,net:0,cnt:0,segs:{},groups:{},reasons:{},shifts:{},co:{sec:0,cnt:0}};
+  for(const e of list){
+    const sec=Number(e.sec)||0, net=Number(e.net)||sec;
+    d.sec+=sec; d.net+=net; d.cnt++;
+    const sk=slug(e.seg), gk=slug(e.group||engGroup(e.reason)), rk=slug(e.reason);
+    d.segs[sk]    = d.segs[sk]    || {label:e.seg,sec:0,net:0,cnt:0};
+    d.groups[gk]  = d.groups[gk]  || {label:e.group||engGroup(e.reason),sec:0,cnt:0};
+    d.reasons[rk] = d.reasons[rk] || {label:e.reason,sec:0,cnt:0};
+    d.shifts[e.shift] = d.shifts[e.shift] || {sec:0,cnt:0};
+    d.segs[sk].sec+=sec; d.segs[sk].net+=net; d.segs[sk].cnt++;
+    d.groups[gk].sec+=sec; d.groups[gk].cnt++;
+    d.reasons[rk].sec+=sec; d.reasons[rk].cnt++;
+    d.shifts[e.shift].sec+=sec; d.shifts[e.shift].cnt++;
+    if(e.co){ d.co.sec+=sec; d.co.cnt++; }
+  }
+  return d;
+}
+
+/* ===== stav stránky ===== */
+let me=null, loginBusy=false, loginErr='';
+let engTab='dash';
+let days=[], events=[], history=[];
+let range=7, loaded=false, busy='', errMsg='';
+let evLoaded='', evMore=false;
+let f={seg:'',group:'',shift:'',q:''};
+let imp={step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null};
+let toastMsg=null, toastKind='';
+
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v,d=1)=>(isFinite(v)?Number(v):0).toLocaleString('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
+const today = () => new Date().toISOString().slice(0,10);
+const dateFrom = n => { const d=new Date(); d.setDate(d.getDate()-(n-1)); return d.toISOString().slice(0,10); };
+const dayCz = d => String(d).slice(8,10).replace(/^0/,'')+'. '+String(d).slice(5,7).replace(/^0/,'')+'.';
+function fmtDur(sec){
+  if(!sec) return '0 min';
+  if(sec<3600) return Math.round(sec/60)+' min';
+  return num(sec/3600,1)+' h';
+}
+function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
+
+/* ===== auth ===== */
+onAuthStateChanged(auth, async user=>{
+  loginBusy=false;
+  if(!user){ me=null; days=[]; events=[]; history=[]; loaded=false; evLoaded=''; render(); return; }
+  me = await loadProfile(user);
+  render();
+  if(isOwner(user.email)) loadDays();
+});
+async function loadProfile(user){
+  const ref=doc(db,'users',user.uid);
+  let d={};
+  try{ const s=await getDoc(ref); if(s.exists()) d=s.data(); }catch(e){}
+  const forced=isForcedAdmin(user.email);
+  const role = forced ? 'admin' : (d.role||'zadavatel');
+  return {uid:user.uid, email:user.email, name:d.name||user.email, role,
+          level: d.level || ROLE2LEVEL[role] || 'basic'};
+}
+
+/* ===== načítání dat ===== */
+function ruleHint(e){
+  const m=String((e&&e.message)||e);
+  if(/permission|insufficient/i.test(m))
+    return 'Do prostojů nevidím — ve Firebase konzoli je potřeba publikovat pravidla pro kolekce downtimes, dt_days a dt_imports (Firestore → Rules → Publish).';
+  return 'Nepodařilo se načíst data: '+m;
+}
+async function loadDays(force){
+  if(loaded && !force) return;
+  busy='Načítám souhrny…'; errMsg=''; render();
+  try{
+    const qs = await getDocs(query(collection(db,'dt_days'), where('date','>=',dateFrom(range)), orderBy('date','desc')));
+    days = qs.docs.map(d=>Object.assign({date:d.id}, d.data()));
+    const hs = await getDocs(query(collection(db,'dt_imports'), orderBy('at','desc'), limit(10)));
+    history = hs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    loaded=true;
+  }catch(e){ errMsg=ruleHint(e); }
+  busy=''; render();
+}
+async function loadEvents(){
+  const from=dateFrom(range);
+  if(evLoaded===from) return;
+  busy='Načítám prostoje…'; errMsg=''; render();
+  try{
+    const qs = await getDocs(query(collection(db,'downtimes'), where('date','>=',from), orderBy('date','desc'), limit(1200)));
+    events = qs.docs.map(d=>Object.assign({_id:d.id}, d.data())).sort((a,b)=>String(b.start).localeCompare(String(a.start)));
+    evMore = qs.docs.length>=1200;
+    evLoaded = from;
+  }catch(e){ errMsg=ruleHint(e); }
+  busy=''; render();
+}
+
+/* SheetJS se stahuje, až když se opravdu importuje — stránku to nezdržuje. */
+let xlsxP=null;
+function loadXlsx(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(xlsxP) return xlsxP;
+  xlsxP = new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload=()=>res(window.XLSX);
+    s.onerror=()=>rej(new Error('Nepodařilo se stáhnout knihovnu pro čtení Excelu. Ulož report jako CSV a nahraj ho — CSV umí aplikace přečíst i bez ní.'));
+    document.head.appendChild(s);
+  });
+  return xlsxP;
+}
+function csvToAoa(text){
+  const rows=[]; let row=[], cur='', q=false;
+  const push=()=>{row.push(cur);cur='';};
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"') q=true;
+    else if(c===','||c===';'||c==='\t') push();
+    else if(c==='\n'){ push(); rows.push(row); row=[]; }
+    else if(c!=='\r') cur+=c;
+  }
+  push(); if(row.length>1||row[0]) rows.push(row);
+  return rows;
+}
+async function readFile(file){
+  const name=(file.name||'').toLowerCase();
+  if(name.endsWith('.csv')||name.endsWith('.txt')) return csvToAoa(await file.text());
+  const XLSX = await loadXlsx();
+  const wb = XLSX.read(await file.arrayBuffer(), {cellDates:false});
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:true, defval:null, blankrows:false});
+}
+async function takeFile(file){
+  if(!canImport()) return;
+  imp.err=''; imp.name=file.name; imp.prog='Čtu soubor…'; render();
+  try{
+    const res = engParse(await readFile(file));
+    if(!res.ok){ imp.prog=''; imp.err=res.err; render(); return; }
+    if(!res.rows.length){ imp.prog=''; imp.err='V souboru nejsou žádné prostoje ke zpracování.'; render(); return; }
+    imp.rows=res.rows; imp.bad=res.bad; imp.step=2; imp.prog='';
+  }catch(e){ imp.prog=''; imp.err=String((e&&e.message)||e); }
+  render();
+}
+
+/* ===== zápis importu ===== */
+async function runImport(){
+  const list=imp.rows||[];
+  if(!list.length) return;
+  const dates=[...new Set(list.map(r=>r.date))].sort();
+  try{
+    /* 1) prostoje po dávkách — stejné id = přepis, dvojí import nic nezduplikuje */
+    for(let i=0;i<list.length;i+=400){
+      const b=writeBatch(db);
+      list.slice(i,i+400).forEach(e=>{ const {_id,...data}=e; b.set(doc(db,'downtimes',_id), data); });
+      await b.commit();
+      imp.prog=`Zapisuji prostoje… ${Math.min(i+400,list.length)} z ${list.length}`; render();
+    }
+    /* 2) denní souhrny — přepočítané z databáze, ne z importovaného souboru */
+    for(let i=0;i<dates.length;i++){
+      const d=dates[i];
+      imp.prog=`Počítám souhrn za ${dayCz(d)} (${i+1} z ${dates.length})…`; render();
+      const qs = await getDocs(query(collection(db,'downtimes'), where('date','==',d)));
+      await setDoc(doc(db,'dt_days',d), Object.assign({date:d, updated:new Date().toISOString()}, aggregate(qs.docs.map(x=>x.data()))));
+    }
+    /* 3) záznam do historie */
+    await addDoc(collection(db,'dt_imports'), {file:imp.name, rows:list.length, bad:imp.bad.length,
+      from:dates[0], to:dates[dates.length-1], days:dates.length,
+      at:new Date().toISOString(), by:me.uid, byName:me.name});
+    imp.done={rows:list.length, days:dates.length, from:dates[0], to:dates[dates.length-1]};
+    imp.step=3; imp.prog='';
+    loaded=false; evLoaded='';
+    await loadDays(true);
+    toast('Import hotový — '+list.length.toLocaleString('cs-CZ')+' prostojů.','ok');
+  }catch(e){ imp.prog=''; imp.err=ruleHint(e); render(); }
+}
+
+/* ===== souhrny pro přehled ===== */
+function totals(){
+  const t={sec:0,net:0,cnt:0,segs:{},groups:{},reasons:{},shifts:{},co:{sec:0,cnt:0}};
+  for(const d of days){
+    t.sec+=d.sec||0; t.net+=d.net||0; t.cnt+=d.cnt||0;
+    t.co.sec+=(d.co&&d.co.sec)||0; t.co.cnt+=(d.co&&d.co.cnt)||0;
+    for(const key of ['segs','groups','reasons']){
+      for(const [k,v] of Object.entries(d[key]||{})){
+        const o=t[key][k]||(t[key][k]={label:v.label||k,sec:0,net:0,cnt:0});
+        o.sec+=v.sec||0; o.net+=v.net||0; o.cnt+=v.cnt||0;
+      }
+    }
+    for(const [k,v] of Object.entries(d.shifts||{})){
+      const o=t.shifts[k]||(t.shifts[k]={sec:0,cnt:0}); o.sec+=v.sec||0; o.cnt+=v.cnt||0;
+    }
+  }
+  return t;
+}
+const top = (obj,n) => Object.values(obj||{}).sort((a,b)=>b.sec-a.sec).slice(0,n||99);
+
+function bars(items,color){
+  if(!items.length) return `<div class="empty">Zatím žádná data.</div>`;
+  const max=Math.max(...items.map(i=>i.sec))||1;
+  return `<div class="bars">`+items.map(i=>`
+    <div class="bar">
+      <div class="nm" title="${esc(i.label)}">${esc(i.label)}</div>
+      <div class="tr"><i style="width:${Math.max(1,i.sec/max*100).toFixed(1)}%;background:${i.color||color||'#1b4b8f'}"></i></div>
+      <div class="vl">${fmtDur(i.sec)}<span class="muted" style="font-weight:400"> · ${i.cnt}×</span></div>
+    </div>`).join('')+`</div>`;
+}
+function trend(){
+  const dd=days.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  if(!dd.length) return '';
+  const W=720,H=175,ml=46,mr=10,mt=12,mb=32,iw=W-ml-mr,ih=H-mt-mb;
+  const peak=Math.max(...dd.map(d=>d.sec))||1;
+  const nice=[1,2,5,10,20,25,50,100,200,250,500,1000];
+  const stepH=nice.find(n=>n*3>=peak/3600)||Math.ceil(peak/3600/3);
+  const max=stepH*3*3600, step=iw/dd.length, bw=Math.min(46,step-8);
+  let g='';
+  for(let i=0;i<=3;i++){ const y=mt+ih-ih*i/3;
+    g+=`<line x1="${ml}" y1="${y}" x2="${ml+iw}" y2="${y}" stroke="#eef1f5"/>
+        <text x="${ml-6}" y="${y+3}" text-anchor="end" font-size="10" fill="#6b7a90">${stepH*i} h</text>`; }
+  const bb=dd.map((d,i)=>{
+    const h=ih*d.sec/max, x=ml+step*i+(step-bw)/2, y=mt+ih-h;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${Math.max(1,h)}" rx="3" fill="#1b4b8f"><title>${esc(dayCz(d.date))} — ${fmtDur(d.sec)}, ${d.cnt} událostí</title></rect>
+      <text x="${x+bw/2}" y="${mt+ih+15}" text-anchor="middle" font-size="10" fill="#6b7a90">${dayCz(d.date)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Prostoje po dnech">${g}${bb}
+    <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="#c8d3e0"/></svg>`;
+}
+
+/* ===== obrazovky ===== */
+function emptyView(){
+  return `<div class="panel"><div class="body" style="text-align:center;padding:32px 18px">
+    <div style="font-size:34px">📊</div>
+    <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím tu nejsou žádné prostoje</div>
+    <p class="muted" style="max-width:520px;margin:0 auto 14px">Vyjeď v Symesticu report prostojů (Downtimes) za období,
+      ulož ho do Excelu a nahraj ho v záložce <b>Import ze Symesticu</b>. Přehled a KPI se spočítají samy.</p>
+    ${canImport()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
+  </div></div>`;
+}
+function dashView(){
+  if(!days.length) return emptyView();
+  const t=totals();
+  const segs=top(t.segs,12), groups=top(t.groups);
+  const unk=Object.values(t.groups||{}).find(g=>g.label===UNKNOWN);
+  const unkPct = t.sec ? Math.round((unk?unk.sec:0)/t.sec*100) : 0;
+  const coAvg = t.co.cnt ? Math.round(t.co.sec/t.co.cnt/60) : 0;
+  const worst = segs[0];
+  const n=days.length;
+  return `
+  <div class="cards">
+    <div class="kcard" style="border-left-color:#1b4b8f">
+      <div class="lbl">Prostoje celkem</div>
+      <div class="val">${num(t.sec/3600,0)}<small> h</small></div>
+      <div class="note">${t.cnt.toLocaleString('cs-CZ')} událostí za ${n} ${n===1?'den':(n<5?'dny':'dní')}</div>
+    </div>
+    <div class="kcard" style="border-left-color:#c0392b">
+      <div class="lbl">Nejhorší linka</div>
+      <div class="val" style="font-size:17px;line-height:1.25;margin-top:8px">${esc(worst?worst.label:'—')}</div>
+      <div class="note">${worst?fmtDur(worst.sec)+' · '+worst.cnt+' událostí':''}</div>
+    </div>
+    <div class="kcard" style="border-left-color:#b7791f">
+      <div class="lbl">Changeover time</div>
+      <div class="val">${coAvg}<small> min</small></div>
+      <div class="note">průměr na přestavbu · ${t.co.cnt}× · celkem ${fmtDur(t.co.sec)}</div>
+    </div>
+    <div class="kcard" style="border-left-color:${unkPct>10?'#c0392b':'#6b7a90'}">
+      <div class="lbl">Nezařazené prostoje</div>
+      <div class="val">${unkPct}<small> %</small></div>
+      <div class="note">${fmtDur(unk?unk.sec:0)} bez důvodu (00 Unknown)</div>
+    </div>
+    <div class="kcard soon"><div class="lbl">Scrap</div><div class="val">—</div>
+      <div class="note">čeká na report ze Symesticu</div></div>
+    <div class="kcard soon"><div class="lbl">Cycle time linky</div><div class="val">—</div>
+      <div class="note">čeká na report ze Symesticu</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Prostoje po linkách<span class="right">${Object.keys(t.segs).length} linek · TOP 12</span></h2>
+      <div class="body">${bars(segs,'#1b4b8f')}</div>
+    </div>
+    <div class="panel">
+      <h2>Podle důvodu</h2>
+      <div class="body">${bars(groups.map(g=>Object.assign({},g,{color:GROUP_COLOR[g.label]||'#6b7a90'})))}</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Vývoj po dnech<span class="right">celkem přes všechny linky</span></h2>
+      <div class="body">${trend()}</div>
+    </div>
+    <div class="panel">
+      <h2>Podle směny</h2>
+      <div class="body">${bars(['R','O','N'].filter(k=>t.shifts[k]).map(k=>({label:SHIFT_LBL[k],sec:t.shifts[k].sec,cnt:t.shifts[k].cnt})),'#0d7377')}
+        <div class="notice" style="margin:12px 0 0">Směny se počítají podle času začátku: ranní 6–14, odpolední 14–22, noční 22–6.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>TOP 10 důvodů prostoje<span class="right">konkrétní kódy ze Symesticu</span></h2>
+    <div class="body">${bars(top(t.reasons,10),'#41506b')}</div>
+  </div>`;
+}
+
+function listView(){
+  if(!events.length && !busy) return emptyView();
+  let r=events.slice();
+  if(f.seg) r=r.filter(x=>x.seg===f.seg);
+  if(f.group) r=r.filter(x=>(x.group||'')===f.group);
+  if(f.shift) r=r.filter(x=>x.shift===f.shift);
+  if(f.q){ const q=f.q.toLowerCase(); r=r.filter(x=>[x.seg,x.reason,x.comment].join(' ').toLowerCase().includes(q)); }
+  const segList=[...new Set(events.map(x=>x.seg))].sort((a,b)=>a.localeCompare(b,'cs'));
+  const grpList=[...new Set(events.map(x=>x.group||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
+  const sum=r.reduce((s,x)=>s+(x.sec||0),0);
+  return `
+  <div class="panel">
+    <h2>Prostoje<span class="right">${r.length.toLocaleString('cs-CZ')} záznamů · ${fmtDur(sum)}</span></h2>
+    <div class="filters">
+      <input class="grow" id="f-q" placeholder="Hledat v linkách, důvodech a poznámkách…" value="${esc(f.q)}">
+      <select id="f-seg"><option value="">Všechny linky</option>${segList.map(s=>`<option ${f.seg===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      <select id="f-group"><option value="">Všechny důvody</option>${grpList.map(s=>`<option ${f.group===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      <select id="f-shift"><option value="">Všechny směny</option>${['R','O','N'].map(k=>`<option value="${k}" ${f.shift===k?'selected':''}>${SHIFT_LBL[k]}</option>`).join('')}</select>
+      <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
+    </div>
+    ${evMore?`<div class="notice warn" style="margin:0;border-radius:0;border-left:0;border-right:0">Zobrazuji posledních 1 200 prostojů z vybraného období. Pro starší data zkrať období nebo použij export.</div>`:''}
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Datum</th><th>Sm.</th><th>Linka / stroj</th><th>Od</th><th>Do</th><th>Trvání</th><th>Skupina</th><th>Důvod</th><th>Poznámka</th></tr></thead>
+        <tbody>${r.slice(0,300).map(e=>`
+          <tr class="${e.sec>=3600?'long':''}">
+            <td data-label="Datum">${dayCz(e.date)}</td>
+            <td data-label="Směna">${e.shift||''}</td>
+            <td data-label="Linka"><b>${esc(e.seg)}</b></td>
+            <td data-label="Od">${String(e.start).slice(11,16)}</td>
+            <td data-label="Do">${e.end?String(e.end).slice(11,16):'—'}</td>
+            <td data-label="Trvání" class="num"><b>${fmtDur(e.sec)}</b></td>
+            <td data-label="Skupina"><span class="badge b-grey">${esc(e.group||'—')}</span></td>
+            <td data-label="Důvod" class="desc">${esc(e.reason)}</td>
+            <td data-label="Poznámka" class="desc muted">${esc(e.comment||'')}</td>
+          </tr>`).join('') || `<tr><td colspan="9" class="empty">Nic neodpovídá filtru.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    ${r.length>300?`<div class="foot muted">Zobrazeno prvních 300 řádků z ${r.length.toLocaleString('cs-CZ')}. Zúži filtr nebo si data vyexportuj.</div>`:''}
+  </div>`;
+}
+
+function importView(){
+  if(!canImport()) return `<div class="notice warn">Import reportu dělá správce.</div>`;
+  const s=imp;
+  let body='';
+  if(s.step===1){
+    body=`<div class="body">
+      <div class="drop" id="drop">
+        <div class="big">Přetáhni sem report prostojů ze Symesticu</div>
+        <div style="margin:8px 0">nebo <label class="filebtn">Vybrat soubor<input type="file" id="file" accept=".xlsx,.xls,.csv"></label></div>
+        <div style="font-size:12px">Formáty <b>.xlsx</b> a <b>.csv</b> · soubor se zpracuje přímo v prohlížeči, nikam se neposílá.</div>
+      </div>
+      ${s.prog?`<div class="notice" style="margin-top:12px">${esc(s.prog)}</div>`:''}
+      ${s.err?`<div class="notice warn" style="margin-top:12px">${esc(s.err)}</div>`:''}
+      <div class="notice" style="margin-top:12px"><b>Jak na to:</b> v Symesticu vyjeď report <b>Downtimes</b> za období → export do Excelu → soubor přetáhni sem.
+        Sloupce Segment, Reason, Start time, End time, Duration, Net duration a Comment se poznají samy.</div>
+      <div class="notice" style="margin-top:8px">Stejný prostoj se nikdy nezaloží dvakrát — každý má vlastní klíč z data, linky a času začátku.
+        Můžeš klidně nahrát překrývající se období nebo tentýž soubor znovu.</div>
+    </div>`;
+  }
+  if(s.step===2){
+    const rows=s.rows||[];
+    const dates=[...new Set(rows.map(r=>r.date))].sort();
+    const segs=[...new Set(rows.map(r=>r.seg))].sort((a,b)=>a.localeCompare(b,'cs'));
+    const unk=rows.filter(r=>r.group===UNKNOWN).length;
+    const tot=rows.reduce((a,r)=>a+r.sec,0);
+    body=`<div class="body">
+      <div class="file"><span class="nm">${esc(s.name)}</span>
+        <span class="sz">${rows.length.toLocaleString('cs-CZ')} prostojů · ${dates.length} dní · ${segs.length} linek</span>
+        <button class="btn-ghost" style="margin-left:auto" data-a="imp-reset">Vybrat jiný soubor</button></div>
+      <div class="cards">
+        <div class="kcard" style="border-left-color:#1f9254"><div class="lbl">Načteno</div>
+          <div class="val">${rows.length.toLocaleString('cs-CZ')}</div><div class="note">prostojů, celkem ${fmtDur(tot)}</div></div>
+        <div class="kcard" style="border-left-color:#1b4b8f"><div class="lbl">Období</div>
+          <div class="val" style="font-size:17px;margin-top:8px">${dayCz(dates[0])} – ${dayCz(dates[dates.length-1])}</div><div class="note">${dates.length} dní</div></div>
+        <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Nezařazené důvody</div>
+          <div class="val">${unk}</div><div class="note">projdou, jen se počítají zvlášť</div></div>
+        <div class="kcard" style="border-left-color:${s.bad.length?'#c0392b':'#1f9254'}"><div class="lbl">Nečitelné řádky</div>
+          <div class="val">${s.bad.length}</div><div class="note">${s.bad.length?'přeskočí se':'nic neblokuje import'}</div></div>
+      </div>
+      ${s.err?`<div class="notice warn">${esc(s.err)}</div>`:''}
+      <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius)">
+        <table><thead><tr><th>Datum</th><th>Sm.</th><th>Linka</th><th>Od</th><th>Trvání</th><th>Skupina</th><th>Důvod</th></tr></thead>
+        <tbody>${rows.slice(0,8).map(e=>`<tr>
+          <td data-label="Datum">${dayCz(e.date)}</td><td data-label="Směna">${e.shift}</td>
+          <td data-label="Linka"><b>${esc(e.seg)}</b></td><td data-label="Od">${e.start.slice(11,16)}</td>
+          <td data-label="Trvání" class="num">${fmtDur(e.sec)}</td>
+          <td data-label="Skupina"><span class="badge b-grey">${esc(e.group)}</span></td>
+          <td data-label="Důvod" class="desc">${esc(e.reason)}</td></tr>`).join('')}
+        ${rows.length>8?`<tr><td colspan="7" class="muted" style="text-align:center">… a dalších ${(rows.length-8).toLocaleString('cs-CZ')} řádků</td></tr>`:''}
+        </tbody></table>
+      </div>
+      <div class="notice" style="margin-top:12px">Linky v souboru: ${segs.map(x=>esc(x)).join(' · ')}</div>
+    </div>
+    <div class="foot">
+      <button class="btn-ghost" data-a="imp-reset">Zpět</button>
+      ${s.prog?`<span class="muted">${esc(s.prog)}</span>`:''}
+      <span style="margin-left:auto"></span>
+      <button class="btn-ok" data-a="imp-run" ${s.prog?'disabled':''}>${s.prog?'Importuji…':'Importovat '+rows.length.toLocaleString('cs-CZ')+' prostojů'}</button>
+    </div>`;
+  }
+  if(s.step===3){
+    const d=s.done||{};
+    body=`<div class="body" style="text-align:center;padding:30px 18px">
+      <div style="font-size:40px;line-height:1;color:#1f9254">✓</div>
+      <div style="font-size:18px;font-weight:800;margin:8px 0 6px">Import hotový</div>
+      <div class="muted">Uloženo <b>${(d.rows||0).toLocaleString('cs-CZ')}</b> prostojů za ${d.days} dní (${dayCz(d.from||'')} – ${dayCz(d.to||'')}).</div>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn-primary" data-a="tab" data-v="dash">Zobrazit přehled</button>
+        <button class="btn-ghost" data-a="imp-reset">Importovat další soubor</button>
+      </div>
+    </div>`;
+  }
+  const stepsHtml = `<ul class="steps">${[['1','Nahrát soubor'],['2','Kontrola'],['3','Hotovo']].map(([n,t],i)=>{
+    const idx=i+1; return `<li class="${idx===s.step?'on':''} ${idx<s.step?'done':''}"><b>${idx<s.step?'✓':n}</b>${t}</li>`;}).join('')}</ul>`;
+  return stepsHtml + `
+  <div class="panel"><h2>Import ze Symesticu<span class="right">krok ${s.step} ze 3</span></h2>${body}</div>
+  <div class="panel">
+    <h2>Historie importů</h2>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Kdy</th><th>Kdo</th><th>Soubor</th><th>Prostojů</th><th>Období</th></tr></thead>
+      <tbody>${history.map(h=>`<tr>
+        <td data-label="Kdy">${esc(String(h.at||'').slice(0,16).replace('T',' '))}</td>
+        <td data-label="Kdo">${esc(h.byName||'')}</td>
+        <td data-label="Soubor" class="desc">${esc(h.file||'')}</td>
+        <td data-label="Prostojů" class="num">${(h.rows||0).toLocaleString('cs-CZ')}</td>
+        <td data-label="Období">${dayCz(h.from||'')} – ${dayCz(h.to||'')}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="empty">Zatím žádný import.</td></tr>`}
+      </tbody></table></div>
+  </div>`;
+}
+
+function exportCsv(){
+  let r=events.slice();
+  if(f.seg) r=r.filter(x=>x.seg===f.seg);
+  if(f.group) r=r.filter(x=>(x.group||'')===f.group);
+  if(f.shift) r=r.filter(x=>x.shift===f.shift);
+  if(f.q){ const q=f.q.toLowerCase(); r=r.filter(x=>[x.seg,x.reason,x.comment].join(' ').toLowerCase().includes(q)); }
+  const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  const csv=[line(['Datum','Směna','Linka','Začátek','Konec','Trvání (min)','Netto (min)','Skupina','Důvod','Poznámka'])]
+    .concat(r.map(e=>line([e.date,e.shift,e.seg,String(e.start).slice(11,19),e.end?String(e.end).slice(11,19):'',
+      Math.round(e.sec/60),Math.round((e.net||e.sec)/60),e.group,e.reason,e.comment||'']))).join('\n');
+  const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url; a.download='prostoje_'+today()+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+/* ===== render ===== */
+function render(){
+  const app=document.getElementById('app');
+  if(!me){ app.innerHTML=loginView(); bind(); return; }
+  if(!isOwner(me.email)){
+    app.innerHTML = shell(`<div class="notice">Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.</div>`);
+    bind(); return;
+  }
+  const inner = engTab==='dash' ? dashView() : (engTab==='list' ? listView() : importView());
+  app.innerHTML = shell(`
+    <div class="tabs">
+      <button class="tab ${engTab==='dash'?'on':''}" data-a="tab" data-v="dash">Přehled a KPI</button>
+      <button class="tab ${engTab==='list'?'on':''}" data-a="tab" data-v="list">Prostoje</button>
+      ${canImport()?`<button class="tab ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import ze Symesticu</button>`:''}
+      <span class="sp">
+        <span class="muted" style="font-size:11.5px">Období:</span>
+        ${[7,14,30].map(n=>`<button class="rangebtn ${range===n?'on':''}" data-a="range" data-v="${n}">${n} dní</button>`).join('')}
+        <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
+      </span>
+    </div>
+    ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
+    ${busy?`<div class="notice">${esc(busy)}</div>`:''}
+    ${inner}`) + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
+  bind();
+}
+function shell(inner){
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Engineering', cur:'engineering',
+    user:esc(me.email), level:(LEVEL_LABEL[me.level]||''), logoutAttr:'id="btn-logout"',
+    modules:['portal','nakup','dovolenky','nastaveni','opravy','engineering']}) : '';
+  return uh + `<main>${inner}</main>`;
+}
+function loginView(){
+  return `<div class="login-wrap"><form class="login" id="loginForm">
+    <h2>minimo · YFAI</h2><p>Engineering — prostoje a KPI</p>
+    ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
+    <input type="email" id="li-email" placeholder="E-mail" autocomplete="username">
+    <input type="password" id="li-pass" placeholder="Heslo" autocomplete="current-password">
+    <button type="submit" ${loginBusy?'disabled':''}>${loginBusy?'Přihlašuji…':'Přihlásit se'}</button>
+  </form></div>`;
+}
+
+/* ===== ovládání ===== */
+function bind(){
+  const lf=document.getElementById('loginForm');
+  if(lf) lf.onsubmit=async e=>{
+    e.preventDefault();
+    const email=document.getElementById('li-email').value.trim();
+    const pass=document.getElementById('li-pass').value;
+    loginBusy=true; loginErr=''; render();
+    try{ await signInWithEmailAndPassword(auth,email,pass); }
+    catch(err){ loginBusy=false; loginErr=loginErrMsg(err.code); render(); }
+  };
+  const lo=document.getElementById('btn-logout'); if(lo) lo.onclick=()=>signOut(auth);
+  document.querySelectorAll('[data-a]').forEach(el=>{ el.onclick=ev=>{ ev.stopPropagation(); act(el.dataset.a, el.dataset.v); }; });
+
+  const q=document.getElementById('f-q');
+  if(q) q.oninput=()=>{ f.q=q.value; const p=q.selectionStart; render();
+    const n=document.getElementById('f-q'); if(n){ n.focus(); n.setSelectionRange(p,p); } };
+  [['f-seg','seg'],['f-group','group'],['f-shift','shift']].forEach(([id,k])=>{
+    const el=document.getElementById(id); if(el) el.onchange=()=>{ f[k]=el.value; render(); };
+  });
+
+  const fi=document.getElementById('file');
+  if(fi) fi.onchange=()=>{ if(fi.files&&fi.files[0]) takeFile(fi.files[0]); };
+  const dz=document.getElementById('drop');
+  if(dz){
+    ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('hot');}));
+    ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('hot');}));
+    dz.addEventListener('drop',e=>{ const file=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(file) takeFile(file); });
+  }
+}
+async function act(a,v){
+  switch(a){
+    case 'tab':
+      engTab=v;
+      if(v==='list') loadEvents();
+      if(v==='imp' && imp.step===3) imp={step:1,name:'',rows:null,bad:[],err:'',prog:'',done:null};
+      break;
+    case 'range':
+      range=Number(v)||7; loaded=false; evLoaded='';
+      loadDays(true); if(engTab==='list') loadEvents();
+      break;
+    case 'reload':
+      loaded=false; evLoaded='';
+      loadDays(true); if(engTab==='list') loadEvents();
+      break;
+    case 'imp-reset': imp={step:1,name:'',rows:null,bad:[],err:'',prog:'',done:null}; break;
+    case 'imp-run':
+      if(!canImport()) return;
+      imp.err=''; imp.prog='Připravuji zápis…'; render();
+      await runImport();
+      break;
+    case 'export': exportCsv(); return;
+  }
+  render();
+}
+function loginErrMsg(code){
+  const m={'auth/invalid-email':'Neplatný e-mail.','auth/user-not-found':'Účet neexistuje.',
+    'auth/wrong-password':'Nesprávné heslo.','auth/invalid-credential':'Nesprávný e-mail nebo heslo.',
+    'auth/too-many-requests':'Příliš mnoho pokusů, zkuste to za chvíli.',
+    'auth/operation-not-allowed':'Přihlašování e-mailem není ve Firebase zapnuté.'};
+  return m[code]||('Přihlášení se nezdařilo ('+code+').');
+}
+
+render();
+</script>
+<script src="header.js"></script>
+</body>
+</html>
