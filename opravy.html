@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%20100%20100%27%3E%3Crect%20width=%27100%27%20height=%27100%27%20rx=%2722%27%20fill=%27%231b4b8f%27/%3E%3Ctext%20x=%2750%27%20y=%2776%27%20font-size=%2774%27%20font-family=%27Arial,sans-serif%27%20font-weight=%27bold%27%20fill=%27white%27%20text-anchor=%27middle%27%3Em%3C/text%3E%3C/svg%3E">
 <title>Externí opravy — YFAI minimo</title>
 <link rel="stylesheet" href="header.css">
 <style>
@@ -53,7 +54,9 @@
   .overlay{position:fixed;inset:0;background:rgba(12,26,48,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto;z-index:50}
   .modal{background:#fff;border-radius:10px;width:min(980px,95vw);height:min(90vh,860px);margin:auto;box-shadow:0 18px 50px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
   .modal>h3{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:14px 18px;font-size:17px;display:flex;align-items:center;gap:10px;flex:none}
-  .modal>h3 .x{margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;padding:0 4px}
+  .modal>h3 .x{margin-left:auto;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.5);color:#fff;font-size:18px;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s,transform .05s}
+  .modal>h3 .x:hover{background:rgba(255,255,255,.32)}
+  .modal>h3 .x:active{background:rgba(255,255,255,.5);transform:scale(.9)}
   .mtabs{display:flex;gap:8px;margin:12px 14px 2px;padding:5px;background:#f1f4f8;border-radius:11px;flex:none}
   .mtab{flex:1;background:#fff;border:1px solid var(--line);color:#41506b;padding:11px 12px;font-size:13px;font-weight:800;cursor:pointer;border-radius:8px;text-align:center}
   .mtab:hover{background:#eaf1fb;border-color:#a9c6ec;color:#255a9e}
@@ -350,7 +353,7 @@ function modalView(){
   else if(modalTab==='sklad') content = tabSklad;
   else if(modalTab==='historie') content = tabHist;
   else content = tabOprava;
-  return `<div class="overlay" data-a="close-bg"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <h3>${isNew?'Nový požadavek na opravu':esc(o.poradove)}${!isNew?` <span style="font-weight:400;opacity:.85;font-size:12px">${esc(o.authorName||'')}</span>`:''}<button class="x" data-a="close">✕</button></h3>
     ${tabbar}
     <div class="modalbody">${content}</div>
