@@ -6,7 +6,14 @@ service cloud.firestore {
     function myRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
-    function isAdmin()        { return signedIn() && myRole() == 'admin'; }
+    // Správci podle e-mailu – platí i kdyby v databázi neměli roli „admin"
+    // (drží se shodně s klientem, aby server nezamítal úpravy plnoprávnému správci).
+    function isEmailAdmin() {
+      return signedIn() && request.auth.token.email in [
+        'varhan@minimo.yfai','norkova@minimo.yfai','david.varhan@yanfeng.com','varhandavid19@gmail.com'
+      ];
+    }
+    function isAdmin()        { return isEmailAdmin() || (signedIn() && myRole() == 'admin'); }
     function isSklad()        { return signedIn() && myRole() == 'skladnik'; }
     function isSchvalovatel() { return signedIn() && myRole() == 'schvalovatel'; }
     function canEdit()        { return isAdmin() || isSklad(); }

@@ -421,7 +421,7 @@ const ROLES = {
 /* Účty, které jsou VŽDY administrátor — pojistka proti zamčení z administrace.
    Když se některým z nich rozhodí role v databázi, po přihlášení se admin
    automaticky obnoví. Porovnává se bez ohledu na velikost písmen. */
-const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai'];
+const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai','david.varhan@yanfeng.com','varhandavid19@gmail.com'];
 const isForcedAdmin = email => ADMIN_EMAILS.includes(String(email||'').trim().toLowerCase());
 
 /* ===== Přístup k modulům (společné napříč portálem) ===== */
