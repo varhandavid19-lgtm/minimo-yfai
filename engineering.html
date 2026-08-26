@@ -165,7 +165,9 @@ const db = getFirestore(fbApp);
 /* ===== Kdo modul zatím vidí (jen David) — stejně jako u Externích oprav ===== */
 const OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
 const isOwner = e => OWNERS.includes(String(e||'').trim().toLowerCase());
-const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai','david.varhan@yanfeng.com'];
+/* Stejný seznam jako isEmailAdmin v firestore.rules — kdyby se lišily, správci by
+   se v aplikaci nabídl import, který by mu server zamítl (nebo naopak). */
+const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai','david.varhan@yanfeng.com','varhandavid19@gmail.com'];
 const isForcedAdmin = e => ADMIN_EMAILS.includes(String(e||'').trim().toLowerCase());
 const ROLE2LEVEL = {zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
 const LEVEL_LABEL = {basic:'Basic',warehouse:'Warehouse',approver:'Approver',wadmin:'Warehouse Admin',superadmin:'Super Admin'};
