@@ -72,6 +72,16 @@ service cloud.firestore {
       allow read:  if signedIn();
       allow write: if isAdmin();
     }
+    // --- Engineering: scrap (zmetky v eurech proti tržbám) ---
+    match /scrap/{id} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+    match /sc_months/{mesic} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+
     // Záznam v historii importů jde jen založit, ne měnit ani mazat.
     match /dt_imports/{id} {
       allow read:   if signedIn();
