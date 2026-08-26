@@ -84,6 +84,14 @@
   .steps li.on{background:var(--teal-bg);color:var(--teal-dark);font-weight:700;border-color:#bfdedd}
   .steps li.on b{background:var(--teal);color:#fff}
   .steps li.done b{background:var(--green);color:#fff}
+  .kindpick{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-bottom:14px}
+  .kind{display:flex;align-items:center;gap:11px;text-align:left;background:#fff;border:1px solid var(--line);
+    border-radius:10px;padding:13px 15px;font-size:13px;color:var(--text)}
+  .kind:hover{border-color:#b9cbe6}
+  .kind.on{border-color:var(--teal);background:var(--teal-bg);box-shadow:inset 0 0 0 1px var(--teal)}
+  .kind .i{font-size:22px;flex:none}
+  .kind b{display:block;font-size:14px}
+  .kind i{display:block;font-style:normal;font-size:11.5px;color:var(--muted);margin-top:2px}
   .drop{border:2px dashed #b9c8da;border-radius:10px;background:#fbfcfe;padding:30px 18px;text-align:center;color:var(--muted)}
   .drop.hot{border-color:var(--teal);background:var(--teal-bg)}
   .drop .big{font-size:16px;font-weight:700;color:var(--text)}
@@ -303,14 +311,135 @@ function aggregate(list){
   return d;
 }
 
+
+/* ==========================================================
+   Čtení reportu SCRAPU
+   Scrap se váže na projekt a linku a měří se v eurech proti tržbám
+   (scrap € / sales € = procento). Sloupce se zkusí poznat podle názvu,
+   a když se to netrefí, přiřadí se ručně v kroku Kontrola.
+   ========================================================== */
+
+const SCRAP_HEAD = {
+  project:['project','projekt','program','zákazník','zakaznik','customer','produkt','product'],
+  line:   ['line','linka','segment','anlage','stroj','machine','pracoviště','pracoviste','workcenter','work center','cost center','nákladové středisko'],
+  scrap:  ['scrap','scrap eur','scrap €','scrap value','scrap cost','zmetky','zmetkovitost','hodnota zmetků','hodnota zmetku','náklady','naklady'],
+  sales:  ['sales','sales eur','sales €','revenue','turnover','tržby','trzby','obrat','prodej','výroba','vyroba'],
+  period: ['date','datum','month','měsíc','mesic','period','období','obdobi','week','týden','tyden']
+};
+/* Číslo z buňky — zvládne 1234.56, "1 234,56", "1.234,56 €", "(1 234)" */
+function toNum(v){
+  if(v==null||v==='') return null;
+  if(typeof v==='number') return isFinite(v)?v:null;
+  let t=String(v).replace(/[\s ]/g,'').replace(/[€$Kk][ČčcC]?/g,'').trim();
+  if(!t) return null;
+  let neg=false;
+  if(/^\(.*\)$/.test(t)){ neg=true; t=t.slice(1,-1); }
+  if(t.startsWith('-')){ neg=true; t=t.slice(1); }
+  const lc=t.lastIndexOf(','), ld=t.lastIndexOf('.');
+  if(lc>-1 && ld>-1){
+    if(lc>ld) t=t.replace(/\./g,'').replace(',','.');     // 1.234,56
+    else      t=t.replace(/,/g,'');                        // 1,234.56
+  }else if(lc>-1){
+    t = (t.length-lc-1<=2) ? t.replace(',','.') : t.replace(/,/g,'');
+  }else if(ld>-1){
+    if(/^\d{1,3}(\.\d{3})+$/.test(t)) t=t.replace(/\./g,'');   // 1.234 = tisíce
+  }
+  const n=Number(t);
+  if(!isFinite(n)) return null;
+  return neg?-n:n;
+}
+/* Měsíc z buňky — datum, "2026-08", "08/2026" */
+function monthOf(v){
+  const t=engTime(v);
+  if(t) return {month:t.date.slice(0,7), date:t.date};
+  const s=String(v??'').trim();
+  let m=s.match(/^(\d{4})[-\/.](\d{1,2})$/);
+  if(m) return {month:`${m[1]}-${pad2(+m[2])}`, date:''};
+  m=s.match(/^(\d{1,2})[-\/.](\d{4})$/);
+  if(m) return {month:`${m[2]}-${pad2(+m[1])}`, date:''};
+  return null;
+}
+/* Najde řádek hlavičky a nabídne přiřazení sloupců. */
+function scrapDetect(aoa){
+  const norm = s => String(s??'').trim().toLowerCase();
+  let best={score:-1};
+  for(let i=0;i<Math.min(aoa.length,30);i++){
+    const cells=(aoa[i]||[]).map(norm);
+    if(!cells.some(Boolean)) continue;
+    const m={}; let score=0;
+    for(const key of Object.keys(SCRAP_HEAD)){
+      const idx=cells.findIndex(c=>c && SCRAP_HEAD[key].some(h=>c===h || c.startsWith(h+' ') || c.includes(h)));
+      if(idx>=0){ m[key]=idx; score++; }
+    }
+    if(score>best.score) best={score, row:i, map:m, headers:(aoa[i]||[]).map(x=>String(x??''))};
+  }
+  if(best.score<1) return {ok:false, err:'V souboru se nepodařilo najít hlavičku tabulky. Zkontroluj, že první řádky obsahují názvy sloupců.'};
+  return {ok:true, headRow:best.row, map:best.map, headers:best.headers};
+}
+/* Poskládá řádky podle zvoleného přiřazení sloupců. */
+function scrapParse(aoa, headRow, map, fallbackMonth){
+  const out=[], bad=[];
+  if(map.project==null || map.scrap==null)
+    return {ok:false, err:'Musíš určit aspoň sloupec s projektem a sloupec s hodnotou scrapu.'};
+  for(let i=headRow+1;i<aoa.length;i++){
+    const r=aoa[i]||[];
+    const project=String(r[map.project]??'').trim();
+    if(!project) continue;
+    if(/^(celkem|total|sum|součet|soucet|grand total)/i.test(project)) continue;   // souhrnné řádky přeskoč
+    const scrapEur=toNum(r[map.scrap]);
+    if(scrapEur==null){ bad.push(i+1); continue; }
+    const salesEur = map.sales!=null ? toNum(r[map.sales]) : null;
+    const line = map.line!=null ? (String(r[map.line]??'').trim()||'—') : '—';
+    let mo = map.period!=null ? monthOf(r[map.period]) : null;
+    if(!mo && fallbackMonth) mo={month:fallbackMonth, date:''};
+    if(!mo){ bad.push(i+1); continue; }
+    out.push({month:mo.month, date:mo.date, project, line,
+      scrapEur, salesEur:(salesEur==null?0:salesEur),
+      _id:`${mo.date||mo.month}_${slug(project)}_${slug(line)}`});
+  }
+  /* Když stejný klíč padne víckrát (rozpad po vadách apod.), sečti ho — ať se řádky nepřepisují. */
+  const byId={};
+  for(const r of out){
+    const p=byId[r._id];
+    if(p){ p.scrapEur+=r.scrapEur; p.salesEur+=r.salesEur; }
+    else byId[r._id]={...r};
+  }
+  return {ok:true, rows:Object.values(byId), bad};
+}
+/* Měsíční souhrn z jednotlivých řádků */
+function scrapAggregate(list){
+  const d={scrapEur:0, salesEur:0, cnt:0, projects:{}, lines:{}};
+  for(const e of list){
+    const s=Number(e.scrapEur)||0, v=Number(e.salesEur)||0;
+    d.scrapEur+=s; d.salesEur+=v; d.cnt++;
+    const pk=slug(e.project), lk=slug(e.line||'—');
+    d.projects[pk] = d.projects[pk] || {label:e.project, scrapEur:0, salesEur:0};
+    d.lines[lk]    = d.lines[lk]    || {label:e.line||'—', scrapEur:0, salesEur:0};
+    d.projects[pk].scrapEur+=s; d.projects[pk].salesEur+=v;
+    d.lines[lk].scrapEur+=s;    d.lines[lk].salesEur+=v;
+  }
+  return d;
+}
+const eur = v => Math.round(Number(v)||0).toLocaleString('cs-CZ')+' €';
+const pct = (s,v) => (v>0 ? num(s/v*100,2)+' %' : '—');
+const monthCz = m => {
+  const MM=['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
+  const p=String(m||'').split('-');
+  return p.length===2 ? (MM[+p[1]-1]||p[1])+' '+p[0] : (m||'');
+};
+const monthShort = m => { const p=String(m||'').split('-'); return p.length===2 ? (+p[1])+'/'+p[0].slice(2) : (m||''); };
+
 /* ===== stav stránky ===== */
 let me=null, loginBusy=false, loginErr='';
 let engTab='dash';
 let days=[], events=[], history=[];
+let scMonths=[], scLoaded=false;
 let range=7, loaded=false, busy='', errMsg='';
 let evLoaded='', evMore=false;
 let f={seg:'',group:'',shift:'',q:''};
-let imp={step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null};
+const newImp = kind => ({kind:kind||'dt', step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null,
+                         aoa:null, headers:[], headRow:0, map:{}, month:''});
+let imp=newImp('dt');
 let toastMsg=null, toastKind='';
 
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -359,6 +488,7 @@ async function loadDays(force){
     const hs = await getDocs(query(collection(db,'dt_imports'), orderBy('at','desc'), limit(10)));
     history = hs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
     loaded=true;
+    await loadScrap(true);
   }catch(e){ errMsg=ruleHint(e); }
   busy=''; render();
 }
@@ -414,16 +544,65 @@ async function takeFile(file){
   if(!canImport()) return;
   imp.err=''; imp.name=file.name; imp.prog='Čtu soubor…'; render();
   try{
-    const res = engParse(await readFile(file));
-    if(!res.ok){ imp.prog=''; imp.err=res.err; render(); return; }
-    if(!res.rows.length){ imp.prog=''; imp.err='V souboru nejsou žádné prostoje ke zpracování.'; render(); return; }
-    imp.rows=res.rows; imp.bad=res.bad; imp.step=2; imp.prog='';
+    const aoa = await readFile(file);
+    if(imp.kind==='scrap'){
+      const det = scrapDetect(aoa);
+      if(!det.ok){ imp.prog=''; imp.err=det.err; render(); return; }
+      imp.aoa=aoa; imp.headRow=det.headRow; imp.map=det.map; imp.headers=det.headers;
+      imp.month=''; imp.step=2; imp.prog='';
+      reparseScrap();
+    }else{
+      const res = engParse(aoa);
+      if(!res.ok){ imp.prog=''; imp.err=res.err; render(); return; }
+      if(!res.rows.length){ imp.prog=''; imp.err='V souboru nejsou žádné prostoje ke zpracování.'; render(); return; }
+      imp.rows=res.rows; imp.bad=res.bad; imp.step=2; imp.prog='';
+    }
   }catch(e){ imp.prog=''; imp.err=String((e&&e.message)||e); }
   render();
+}
+/* Přepočítá scrap po změně přiřazení sloupců nebo měsíce */
+function reparseScrap(){
+  const res = scrapParse(imp.aoa, imp.headRow, imp.map, imp.month);
+  if(!res.ok){ imp.rows=[]; imp.bad=[]; imp.err=res.err; return; }
+  imp.rows=res.rows; imp.bad=res.bad;
+  imp.err = res.rows.length ? '' : 'Z těchhle sloupců nevznikl ani jeden použitelný řádek. Zkontroluj přiřazení, případně doplň měsíc.';
 }
 
 /* ===== zápis importu ===== */
 async function runImport(){
+  if(imp.kind==='scrap') return runImportScrap();
+  return runImportDt();
+}
+async function runImportScrap(){
+  const list=imp.rows||[];
+  if(!list.length) return;
+  const months=[...new Set(list.map(r=>r.month))].sort();
+  try{
+    for(let i=0;i<list.length;i+=400){
+      const b=writeBatch(db);
+      list.slice(i,i+400).forEach(e=>{ const {_id,...data}=e; b.set(doc(db,'scrap',_id), data); });
+      await b.commit();
+      imp.prog=`Zapisuji řádky… ${Math.min(i+400,list.length)} z ${list.length}`; render();
+    }
+    for(let i=0;i<months.length;i++){
+      const m=months[i];
+      imp.prog=`Počítám souhrn za ${monthCz(m)} (${i+1} z ${months.length})…`; render();
+      const qs = await getDocs(query(collection(db,'scrap'), where('month','==',m)));
+      await setDoc(doc(db,'sc_months',m), Object.assign({month:m, updated:new Date().toISOString()},
+        scrapAggregate(qs.docs.map(x=>x.data()))));
+    }
+    const sumS=list.reduce((a,r)=>a+r.scrapEur,0), sumV=list.reduce((a,r)=>a+r.salesEur,0);
+    await addDoc(collection(db,'dt_imports'), {kind:'scrap', file:imp.name, rows:list.length, bad:imp.bad.length,
+      from:months[0], to:months[months.length-1], days:months.length,
+      at:new Date().toISOString(), by:me.uid, byName:me.name});
+    imp.done={rows:list.length, days:months.length, from:months[0], to:months[months.length-1],
+              scrapEur:sumS, salesEur:sumV};
+    imp.step=3; imp.prog='';
+    scLoaded=false; await loadScrap(true);
+    toast('Import scrapu hotový — '+list.length.toLocaleString('cs-CZ')+' řádků.','ok');
+  }catch(e){ imp.prog=''; imp.err=ruleHint(e); render(); }
+}
+async function runImportDt(){
   const list=imp.rows||[];
   if(!list.length) return;
   const dates=[...new Set(list.map(r=>r.date))].sort();
@@ -443,7 +622,7 @@ async function runImport(){
       await setDoc(doc(db,'dt_days',d), Object.assign({date:d, updated:new Date().toISOString()}, aggregate(qs.docs.map(x=>x.data()))));
     }
     /* 3) záznam do historie */
-    await addDoc(collection(db,'dt_imports'), {file:imp.name, rows:list.length, bad:imp.bad.length,
+    await addDoc(collection(db,'dt_imports'), {kind:'prostoje', file:imp.name, rows:list.length, bad:imp.bad.length,
       from:dates[0], to:dates[dates.length-1], days:dates.length,
       at:new Date().toISOString(), by:me.uid, byName:me.name});
     imp.done={rows:list.length, days:dates.length, from:dates[0], to:dates[dates.length-1]};
@@ -505,6 +684,138 @@ function trend(){
     <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="#c8d3e0"/></svg>`;
 }
 
+
+/* ===== Scrap — načítání, přehled, grafy ===== */
+async function loadScrap(force){
+  if(scLoaded && !force) return;
+  try{
+    const qs = await getDocs(query(collection(db,'sc_months'), orderBy('month','desc'), limit(12)));
+    scMonths = qs.docs.map(d=>Object.assign({month:d.id}, d.data())).sort((a,b)=>a.month.localeCompare(b.month));
+    scLoaded=true;
+  }catch(e){ if(!errMsg) errMsg=ruleHint(e); }
+}
+const scLatest = () => scMonths.length ? scMonths[scMonths.length-1] : null;
+
+function scrapView(){
+  if(!scMonths.length){
+    return `<div class="panel"><div class="body" style="text-align:center;padding:32px 18px">
+      <div style="font-size:34px">🧾</div>
+      <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím tu nejsou žádná data o scrapu</div>
+      <p class="muted" style="max-width:540px;margin:0 auto 14px">Nahraj Excel se scrapem v záložce <b>Import</b> — stačí, když
+        v něm bude projekt, linka, hodnota scrapu v eurech a tržby. Procenta se dopočítají sama.</p>
+      ${canImport()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
+    </div></div>`;
+  }
+  const last=scLatest();
+  const sumS=scMonths.reduce((a,m)=>a+(m.scrapEur||0),0);
+  const sumV=scMonths.reduce((a,m)=>a+(m.salesEur||0),0);
+  const projects=Object.values(last.projects||{}).sort((a,b)=>b.scrapEur-a.scrapEur);
+  const lines=Object.values(last.lines||{}).sort((a,b)=>b.scrapEur-a.scrapEur);
+  const rate = last.salesEur>0 ? last.scrapEur/last.salesEur*100 : null;
+  const prev = scMonths.length>1 ? scMonths[scMonths.length-2] : null;
+  const prevRate = prev && prev.salesEur>0 ? prev.scrapEur/prev.salesEur*100 : null;
+  let delta='';
+  if(rate!=null && prevRate!=null){
+    const d=rate-prevRate;
+    delta = `<span style="color:${d>0?'var(--red)':'var(--green)'};font-weight:700">${d>0?'▲':'▼'} ${num(Math.abs(d),2)} b.</span> proti ${monthShort(prev.month)}`;
+  }
+  const worstP=projects[0], worstL=lines[0];
+  return `
+  <div class="cards">
+    <div class="kcard" style="border-left-color:${rate!=null&&rate>1?'#c0392b':'#1f9254'}">
+      <div class="lbl">Scrap rate — ${monthCz(last.month)}</div>
+      <div class="val">${rate!=null?num(rate,2):'—'}<small> %</small></div>
+      <div class="note">${delta||'z tržeb '+eur(last.salesEur)}</div>
+    </div>
+    <div class="kcard" style="border-left-color:#1b4b8f">
+      <div class="lbl">Scrap v penězích</div>
+      <div class="val" style="font-size:22px">${eur(last.scrapEur)}</div>
+      <div class="note">${monthCz(last.month)} · tržby ${eur(last.salesEur)}</div>
+    </div>
+    <div class="kcard" style="border-left-color:#c0392b">
+      <div class="lbl">Nejhorší projekt</div>
+      <div class="val" style="font-size:17px;line-height:1.25;margin-top:8px">${esc(worstP?worstP.label:'—')}</div>
+      <div class="note">${worstP?eur(worstP.scrapEur)+' · '+pct(worstP.scrapEur,worstP.salesEur):''}</div>
+    </div>
+    <div class="kcard" style="border-left-color:#b7791f">
+      <div class="lbl">Nejhorší linka</div>
+      <div class="val" style="font-size:17px;line-height:1.25;margin-top:8px">${esc(worstL?worstL.label:'—')}</div>
+      <div class="note">${worstL?eur(worstL.scrapEur)+' · '+pct(worstL.scrapEur,worstL.salesEur):''}</div>
+    </div>
+    <div class="kcard" style="border-left-color:#6b7a90">
+      <div class="lbl">Za ${scMonths.length} ${scMonths.length===1?'měsíc':(scMonths.length<5?'měsíce':'měsíců')}</div>
+      <div class="val" style="font-size:22px">${eur(sumS)}</div>
+      <div class="note">průměrně ${pct(sumS,sumV)} z tržeb</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Vývoj scrapu po měsících<span class="right">sloupec = peníze, číslo nad ním = % z tržeb</span></h2>
+    <div class="body">${scrapTrend()}</div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Podle projektu<span class="right">${monthCz(last.month)}</span></h2>
+      <div class="body">${scrapBars(projects)}</div>
+    </div>
+    <div class="panel">
+      <h2>Podle linky<span class="right">${monthCz(last.month)}</span></h2>
+      <div class="body">${scrapBars(lines)}</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Přehled po měsících</h2>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Měsíc</th><th>Scrap</th><th>Tržby</th><th>Scrap rate</th><th>Nejhorší projekt</th></tr></thead>
+      <tbody>${scMonths.slice().reverse().map(m=>{
+        const w=Object.values(m.projects||{}).sort((a,b)=>b.scrapEur-a.scrapEur)[0];
+        const rr=m.salesEur>0?m.scrapEur/m.salesEur*100:null;
+        return `<tr>
+          <td data-label="Měsíc"><b>${monthCz(m.month)}</b></td>
+          <td data-label="Scrap" class="num">${eur(m.scrapEur)}</td>
+          <td data-label="Tržby" class="num">${eur(m.salesEur)}</td>
+          <td data-label="Scrap rate" class="num"><b style="color:${rr!=null&&rr>1?'var(--red)':'inherit'}">${rr!=null?num(rr,2)+' %':'—'}</b></td>
+          <td data-label="Nejhorší projekt">${w?esc(w.label)+' · '+eur(w.scrapEur):'—'}</td>
+        </tr>`;}).join('')}
+      </tbody></table></div>
+  </div>`;
+}
+function scrapBars(items){
+  if(!items.length) return `<div class="empty">Zatím žádná data.</div>`;
+  const max=Math.max(...items.map(i=>i.scrapEur))||1;
+  return `<div class="bars">`+items.slice(0,12).map(i=>`
+    <div class="bar">
+      <div class="nm" title="${esc(i.label)}">${esc(i.label)}</div>
+      <div class="tr"><i style="width:${Math.max(1,i.scrapEur/max*100).toFixed(1)}%;background:#c0392b"></i></div>
+      <div class="vl">${eur(i.scrapEur)}<span class="muted" style="font-weight:400"> · ${pct(i.scrapEur,i.salesEur)}</span></div>
+    </div>`).join('')+`</div>`;
+}
+function scrapTrend(){
+  const mm=scMonths;
+  if(!mm.length) return '';
+  const W=720,H=190,ml=64,mr=10,mt=22,mb=32,iw=W-ml-mr,ih=H-mt-mb;
+  const peak=Math.max(...mm.map(m=>m.scrapEur))||1;
+  const nice=[100,200,500,1000,2000,5000,10000,20000,50000,100000,200000,500000,1000000];
+  const stepV=nice.find(n=>n*3>=peak)||Math.ceil(peak/3);
+  const max=stepV*3, step=iw/mm.length, bw=Math.min(52,step-10);
+  let g='';
+  for(let i=0;i<=3;i++){ const y=mt+ih-ih*i/3;
+    g+=`<line x1="${ml}" y1="${y}" x2="${ml+iw}" y2="${y}" stroke="#eef1f5"/>
+        <text x="${ml-6}" y="${y+3}" text-anchor="end" font-size="10" fill="#6b7a90">${(stepV*i).toLocaleString('cs-CZ')} €</text>`; }
+  const bb=mm.map((m,i)=>{
+    const h=ih*(m.scrapEur||0)/max, x=ml+step*i+(step-bw)/2, y=mt+ih-h;
+    const rr=m.salesEur>0?m.scrapEur/m.salesEur*100:null;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${Math.max(1,h)}" rx="3" fill="#c0392b">
+        <title>${monthCz(m.month)} — ${eur(m.scrapEur)}${rr!=null?', '+num(rr,2)+' % z tržeb':''}</title></rect>
+      ${rr!=null?`<text x="${x+bw/2}" y="${y-6}" text-anchor="middle" font-size="10" font-weight="700" fill="#16233a">${num(rr,2)} %</text>`:''}
+      <text x="${x+bw/2}" y="${mt+ih+15}" text-anchor="middle" font-size="10" fill="#6b7a90">${monthShort(m.month)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Vývoj scrapu po měsících">${g}${bb}
+    <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="#c8d3e0"/></svg>`;
+}
+
 /* ===== obrazovky ===== */
 function emptyView(){
   return `<div class="panel"><div class="body" style="text-align:center;padding:32px 18px">
@@ -546,8 +857,16 @@ function dashView(){
       <div class="val">${unkPct}<small> %</small></div>
       <div class="note">${fmtDur(unk?unk.sec:0)} bez důvodu (00 Unknown)</div>
     </div>
-    <div class="kcard soon"><div class="lbl">Scrap</div><div class="val">—</div>
-      <div class="note">čeká na report ze Symesticu</div></div>
+    ${(function(){
+      const L=scLatest();
+      if(!L) return `<div class="kcard soon"><div class="lbl">Scrap</div><div class="val">—</div>
+        <div class="note">nahraj report scrapu v záložce Import</div></div>`;
+      const rr = L.salesEur>0 ? L.scrapEur/L.salesEur*100 : null;
+      return `<div class="kcard" style="border-left-color:${rr!=null&&rr>1?'#c0392b':'#1f9254'}">
+        <div class="lbl">Scrap rate</div>
+        <div class="val">${rr!=null?num(rr,2):'—'}<small> %</small></div>
+        <div class="note">${monthCz(L.month)} · ${eur(L.scrapEur)}</div></div>`;
+    })()}
     <div class="kcard soon"><div class="lbl">Cycle time linky</div><div class="val">—</div>
       <div class="note">čeká na report ze Symesticu</div></div>
   </div>
@@ -630,21 +949,98 @@ function importView(){
   const s=imp;
   let body='';
   if(s.step===1){
+    const isScrap = s.kind==='scrap';
     body=`<div class="body">
+      <div class="kindpick">
+        <button class="kind ${isScrap?'':'on'}" data-a="imp-kind" data-v="dt">
+          <span class="i">⏱️</span><span><b>Prostoje</b><i>report Downtimes ze Symesticu</i></span></button>
+        <button class="kind ${isScrap?'on':''}" data-a="imp-kind" data-v="scrap">
+          <span class="i">🧾</span><span><b>Scrap</b><i>zmetky v eurech proti tržbám</i></span></button>
+      </div>
       <div class="drop" id="drop">
-        <div class="big">Přetáhni sem report prostojů ze Symesticu</div>
+        <div class="big">Přetáhni sem ${isScrap?'Excel se scrapem':'report prostojů ze Symesticu'}</div>
         <div style="margin:8px 0">nebo <label class="filebtn">Vybrat soubor<input type="file" id="file" accept=".xlsx,.xls,.csv"></label></div>
         <div style="font-size:12px">Formáty <b>.xlsx</b> a <b>.csv</b> · soubor se zpracuje přímo v prohlížeči, nikam se neposílá.</div>
       </div>
       ${s.prog?`<div class="notice" style="margin-top:12px">${esc(s.prog)}</div>`:''}
       ${s.err?`<div class="notice warn" style="margin-top:12px">${esc(s.err)}</div>`:''}
+      ${isScrap?`
+      <div class="notice" style="margin-top:12px"><b>Co v souboru potřebuju:</b> projekt, linku, hodnotu scrapu v eurech
+        a tržby (sales) v eurech. Procento se dopočítá samo. Sloupce se zkusí poznat podle názvu — v dalším kroku je uvidíš
+        a můžeš je přiřadit ručně.</div>
+      <div class="notice" style="margin-top:8px">Když v souboru není datum ani měsíc, v dalším kroku ho jednou vybereš.
+        Opakovaný import stejného měsíce data přepíše, nezdvojí je.</div>`
+      :`
       <div class="notice" style="margin-top:12px"><b>Jak na to:</b> v Symesticu vyjeď report <b>Downtimes</b> za období → export do Excelu → soubor přetáhni sem.
         Sloupce Segment, Reason, Start time, End time, Duration, Net duration a Comment se poznají samy.</div>
       <div class="notice" style="margin-top:8px">Stejný prostoj se nikdy nezaloží dvakrát — každý má vlastní klíč z data, linky a času začátku.
-        Můžeš klidně nahrát překrývající se období nebo tentýž soubor znovu.</div>
+        Můžeš klidně nahrát překrývající se období nebo tentýž soubor znovu.</div>`}
     </div>`;
   }
-  if(s.step===2){
+  if(s.step===2 && s.kind==='scrap'){
+    const rows=s.rows||[];
+    const months=[...new Set(rows.map(r=>r.month))].sort();
+    const projects=[...new Set(rows.map(r=>r.project))];
+    const lines=[...new Set(rows.map(r=>r.line))].filter(x=>x&&x!=='—');
+    const sumS=rows.reduce((a,r)=>a+r.scrapEur,0), sumV=rows.reduce((a,r)=>a+r.salesEur,0);
+    const opt = (key,label,hint) => `
+      <tr><td data-label="Údaj"><b>${label}</b><div class="muted" style="font-size:11px">${hint}</div></td>
+        <td data-label="Sloupec v souboru"><select data-map="${key}">
+          <option value="">— nepoužít —</option>
+          ${s.headers.map((h,i)=>`<option value="${i}" ${s.map[key]===i?'selected':''}>${esc(h||('sloupec '+(i+1)))}</option>`).join('')}
+        </select></td>
+        <td data-label="Stav">${s.map[key]!=null?'<span class="badge b-green">rozpoznáno</span>':'<span class="badge b-grey">nepřiřazeno</span>'}</td></tr>`;
+    body=`<div class="body">
+      <div class="file"><span class="nm">${esc(s.name)}</span>
+        <span class="sz">${rows.length.toLocaleString('cs-CZ')} řádků · ${projects.length} projektů · ${lines.length} linek</span>
+        <button class="btn-ghost" style="margin-left:auto" data-a="imp-reset">Vybrat jiný soubor</button></div>
+      <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius);margin-bottom:12px">
+        <table><thead><tr><th>Údaj</th><th>Sloupec v souboru</th><th>Stav</th></tr></thead><tbody>
+          ${opt('project','Projekt','povinné — podle něj se scrap rozpadá')}
+          ${opt('line','Linka','nepovinné, ale bez něj nebude rozpad po linkách')}
+          ${opt('scrap','Scrap v EUR','povinné — hodnota zmetků')}
+          ${opt('sales','Tržby (sales) v EUR','bez nich se ukáže jen hodnota, ne procento')}
+          ${opt('period','Datum nebo měsíc','když v souboru není, vyber měsíc níž')}
+        </tbody></table>
+      </div>
+      <div class="filters" style="border:1px solid var(--line);border-radius:var(--radius);background:#fafbfd">
+        <label class="muted" style="font-size:12.5px">Měsíc, když ho soubor neobsahuje:</label>
+        <input type="month" id="imp-month" value="${esc(s.month)}" style="min-width:170px">
+      </div>
+      ${s.err?`<div class="notice warn" style="margin-top:12px">${esc(s.err)}</div>`:''}
+      ${rows.length?`
+      <div class="cards" style="margin-top:12px">
+        <div class="kcard" style="border-left-color:#1f9254"><div class="lbl">Načteno</div>
+          <div class="val">${rows.length.toLocaleString('cs-CZ')}</div><div class="note">řádků k uložení</div></div>
+        <div class="kcard" style="border-left-color:#c0392b"><div class="lbl">Scrap celkem</div>
+          <div class="val" style="font-size:20px">${eur(sumS)}</div><div class="note">${sumV>0?'z tržeb '+eur(sumV):'tržby nejsou přiřazené'}</div></div>
+        <div class="kcard" style="border-left-color:#1b4b8f"><div class="lbl">Scrap rate</div>
+          <div class="val">${sumV>0?num(sumS/sumV*100,2):'—'}<small> %</small></div><div class="note">za celý soubor</div></div>
+        <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Měsíce</div>
+          <div class="val" style="font-size:18px;margin-top:8px">${months.map(monthShort).join(', ')||'—'}</div>
+          <div class="note">${s.bad.length?s.bad.length+' řádků se přeskočí':'nic neblokuje import'}</div></div>
+      </div>
+      <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius)">
+        <table><thead><tr><th>Měsíc</th><th>Projekt</th><th>Linka</th><th>Scrap</th><th>Tržby</th><th>%</th></tr></thead>
+        <tbody>${rows.slice(0,8).map(r=>`<tr>
+          <td data-label="Měsíc">${monthShort(r.month)}</td>
+          <td data-label="Projekt"><b>${esc(r.project)}</b></td>
+          <td data-label="Linka">${esc(r.line)}</td>
+          <td data-label="Scrap" class="num">${eur(r.scrapEur)}</td>
+          <td data-label="Tržby" class="num">${r.salesEur?eur(r.salesEur):'—'}</td>
+          <td data-label="%" class="num">${pct(r.scrapEur,r.salesEur)}</td></tr>`).join('')}
+        ${rows.length>8?`<tr><td colspan="6" class="muted" style="text-align:center">… a dalších ${(rows.length-8).toLocaleString('cs-CZ')} řádků</td></tr>`:''}
+        </tbody></table>
+      </div>`:''}
+    </div>
+    <div class="foot">
+      <button class="btn-ghost" data-a="imp-reset">Zpět</button>
+      ${s.prog?`<span class="muted">${esc(s.prog)}</span>`:''}
+      <span style="margin-left:auto"></span>
+      <button class="btn-ok" data-a="imp-run" ${(s.prog||!rows.length)?'disabled':''}>${s.prog?'Importuji…':'Importovat '+rows.length.toLocaleString('cs-CZ')+' řádků'}</button>
+    </div>`;
+  }
+  if(s.step===2 && s.kind!=='scrap'){
     const rows=s.rows||[];
     const dates=[...new Set(rows.map(r=>r.date))].sort();
     const segs=[...new Set(rows.map(r=>r.seg))].sort((a,b)=>a.localeCompare(b,'cs'));
@@ -690,28 +1086,32 @@ function importView(){
     body=`<div class="body" style="text-align:center;padding:30px 18px">
       <div style="font-size:40px;line-height:1;color:#1f9254">✓</div>
       <div style="font-size:18px;font-weight:800;margin:8px 0 6px">Import hotový</div>
-      <div class="muted">Uloženo <b>${(d.rows||0).toLocaleString('cs-CZ')}</b> prostojů za ${d.days} dní (${dayCz(d.from||'')} – ${dayCz(d.to||'')}).</div>
+      <div class="muted">${s.kind==='scrap'
+        ? `Uloženo <b>${(d.rows||0).toLocaleString('cs-CZ')}</b> řádků scrapu za ${d.days} ${d.days===1?'měsíc':(d.days<5?'měsíce':'měsíců')}
+           (${monthCz(d.from||'')} – ${monthCz(d.to||'')}), celkem ${eur(d.scrapEur||0)}.`
+        : `Uloženo <b>${(d.rows||0).toLocaleString('cs-CZ')}</b> prostojů za ${d.days} dní (${dayCz(d.from||'')} – ${dayCz(d.to||'')}).`}</div>
       <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn-primary" data-a="tab" data-v="dash">Zobrazit přehled</button>
+        <button class="btn-primary" data-a="tab" data-v="${s.kind==='scrap'?'scrap':'dash'}">Zobrazit přehled</button>
         <button class="btn-ghost" data-a="imp-reset">Importovat další soubor</button>
       </div>
     </div>`;
   }
-  const stepsHtml = `<ul class="steps">${[['1','Nahrát soubor'],['2','Kontrola'],['3','Hotovo']].map(([n,t],i)=>{
+  const stepsHtml = `<ul class="steps">${[['1','Vybrat a nahrát'],['2','Kontrola'],['3','Hotovo']].map(([n,t],i)=>{
     const idx=i+1; return `<li class="${idx===s.step?'on':''} ${idx<s.step?'done':''}"><b>${idx<s.step?'✓':n}</b>${t}</li>`;}).join('')}</ul>`;
   return stepsHtml + `
-  <div class="panel"><h2>Import ze Symesticu<span class="right">krok ${s.step} ze 3</span></h2>${body}</div>
+  <div class="panel"><h2>Import — ${s.kind==='scrap'?'scrap':'prostoje ze Symesticu'}<span class="right">krok ${s.step} ze 3</span></h2>${body}</div>
   <div class="panel">
     <h2>Historie importů</h2>
     <div class="tblwrap"><table>
-      <thead><tr><th>Kdy</th><th>Kdo</th><th>Soubor</th><th>Prostojů</th><th>Období</th></tr></thead>
+      <thead><tr><th>Kdy</th><th>Co</th><th>Kdo</th><th>Soubor</th><th>Řádků</th><th>Období</th></tr></thead>
       <tbody>${history.map(h=>`<tr>
         <td data-label="Kdy">${esc(String(h.at||'').slice(0,16).replace('T',' '))}</td>
+        <td data-label="Co"><span class="badge ${h.kind==='scrap'?'b-red':'b-teal'}">${h.kind==='scrap'?'scrap':'prostoje'}</span></td>
         <td data-label="Kdo">${esc(h.byName||'')}</td>
         <td data-label="Soubor" class="desc">${esc(h.file||'')}</td>
-        <td data-label="Prostojů" class="num">${(h.rows||0).toLocaleString('cs-CZ')}</td>
-        <td data-label="Období">${dayCz(h.from||'')} – ${dayCz(h.to||'')}</td>
-      </tr>`).join('') || `<tr><td colspan="5" class="empty">Zatím žádný import.</td></tr>`}
+        <td data-label="Řádků" class="num">${(h.rows||0).toLocaleString('cs-CZ')}</td>
+        <td data-label="Období">${h.kind==='scrap'?monthCz(h.from||'')+' – '+monthCz(h.to||''):dayCz(h.from||'')+' – '+dayCz(h.to||'')}</td>
+      </tr>`).join('') || `<tr><td colspan="6" class="empty">Zatím žádný import.</td></tr>`}
       </tbody></table></div>
   </div>`;
 }
@@ -740,15 +1140,20 @@ function render(){
     app.innerHTML = shell(`<div class="notice">Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.</div>`);
     bind(); return;
   }
-  const inner = engTab==='dash' ? dashView() : (engTab==='list' ? listView() : importView());
+  const inner = engTab==='dash' ? dashView()
+              : engTab==='list'  ? listView()
+              : engTab==='scrap' ? scrapView()
+              : importView();
   app.innerHTML = shell(`
     <div class="tabs">
       <button class="tab ${engTab==='dash'?'on':''}" data-a="tab" data-v="dash">Přehled a KPI</button>
       <button class="tab ${engTab==='list'?'on':''}" data-a="tab" data-v="list">Prostoje</button>
-      ${canImport()?`<button class="tab ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import ze Symesticu</button>`:''}
+      <button class="tab ${engTab==='scrap'?'on':''}" data-a="tab" data-v="scrap">Scrap</button>
+      ${canImport()?`<button class="tab ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
       <span class="sp">
-        <span class="muted" style="font-size:11.5px">Období:</span>
-        ${[7,14,30].map(n=>`<button class="rangebtn ${range===n?'on':''}" data-a="range" data-v="${n}">${n} dní</button>`).join('')}
+        ${engTab==='scrap'?'<span class="muted" style="font-size:11.5px">Scrap se počítá po měsících — posledních 12.</span>'
+          :`<span class="muted" style="font-size:11.5px">Období:</span>
+        ${[7,14,30].map(n=>`<button class="rangebtn ${range===n?'on':''}" data-a="range" data-v="${n}">${n} dní</button>`).join('')}`}
         <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
       </span>
     </div>
@@ -794,6 +1199,14 @@ function bind(){
     const el=document.getElementById(id); if(el) el.onchange=()=>{ f[k]=el.value; render(); };
   });
 
+  document.querySelectorAll('[data-map]').forEach(el=>{
+    el.onchange=()=>{ const k=el.dataset.map;
+      if(el.value==='') delete imp.map[k]; else imp.map[k]=Number(el.value);
+      reparseScrap(); render(); };
+  });
+  const mo=document.getElementById('imp-month');
+  if(mo) mo.onchange=()=>{ imp.month=mo.value; reparseScrap(); render(); };
+
   const fi=document.getElementById('file');
   if(fi) fi.onchange=()=>{ if(fi.files&&fi.files[0]) takeFile(fi.files[0]); };
   const dz=document.getElementById('drop');
@@ -808,17 +1221,19 @@ async function act(a,v){
     case 'tab':
       engTab=v;
       if(v==='list') loadEvents();
-      if(v==='imp' && imp.step===3) imp={step:1,name:'',rows:null,bad:[],err:'',prog:'',done:null};
+      if(v==='scrap') loadScrap();
+      if(v==='imp' && imp.step===3) imp=newImp(imp.kind);
       break;
     case 'range':
       range=Number(v)||7; loaded=false; evLoaded='';
       loadDays(true); if(engTab==='list') loadEvents();
       break;
     case 'reload':
-      loaded=false; evLoaded='';
+      loaded=false; evLoaded=''; scLoaded=false;
       loadDays(true); if(engTab==='list') loadEvents();
       break;
-    case 'imp-reset': imp={step:1,name:'',rows:null,bad:[],err:'',prog:'',done:null}; break;
+    case 'imp-reset': imp=newImp(imp.kind); break;
+    case 'imp-kind': imp=newImp(v); break;
     case 'imp-run':
       if(!canImport()) return;
       imp.err=''; imp.prog='Připravuji zápis…'; render();
