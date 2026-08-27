@@ -84,6 +84,44 @@
   .steps li.on{background:var(--teal-bg);color:var(--teal-dark);font-weight:700;border-color:#bfdedd}
   .steps li.on b{background:var(--teal);color:#fff}
   .steps li.done b{background:var(--green);color:#fff}
+  /* ===== Akční plán managementu ===== */
+  textarea{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);
+    background:#fff;color:var(--text);width:100%;resize:vertical}
+  textarea:focus{outline:2px solid #2a5ea3;outline-offset:1px}
+  .legend2{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:8px 13px;border-bottom:1px solid var(--line);
+    background:#fff;font-size:11px;color:var(--muted)}
+  .legend2 i{display:inline-block;width:20px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px;font-style:normal}
+  .tasktbl th.ycol{background:#7a6224}
+  .tasktbl th.gcol{background:#41506b}
+  .tasktbl td.ycol{background:#fdf6e3}
+  .tasktbl td.gcol{background:#f4f6f9}
+  .tasktbl tr.late td{background:#fdecea}
+  .tasktbl tr.late td.gcol{background:#f9dcd8}
+  .tasktbl tr.closed td{opacity:.62}
+  .tasktbl tr.clickable{cursor:pointer}
+  .tasktbl td.desc{min-width:200px;max-width:330px;white-space:normal}
+  .clip{color:#2563a8;font-weight:700;font-size:11px}
+  .ychip{background:#fdf6e3;border:1px solid #f0e0b8;border-radius:4px;padding:1px 6px}
+  .gchip{background:#eef1f5;border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+  .ro.gcell{background:#f4f6f9}
+  .ybox{background:#fdf6e3;border:1px solid #f0e0b8;border-radius:var(--radius);padding:9px 11px}
+  .ybox input{background:#fff}
+  .filelist{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .fileitem{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--line);
+    border-radius:var(--radius);padding:7px 10px;font-size:12.5px;flex-wrap:wrap}
+  .fileitem .ic{flex:none}
+  .fileitem .nm{font-weight:600;word-break:break-word}
+  .filters .btn-new{font-size:13px;padding:9px 16px;border-radius:8px;letter-spacing:0;
+    background:linear-gradient(180deg,#f6821f,#e8590c);color:#fff;font-weight:800;text-transform:none;
+    box-shadow:0 3px 10px rgba(232,89,12,.32)}
+  .filters .btn-new:hover{background:linear-gradient(180deg,#e8590c,#c94f0a)}
+  @media(max-width:680px){
+    .tasktbl td.ycol,.tasktbl td.gcol{background:none}
+    .tasktbl tr.late td{background:none}
+    .tasktbl tr.late{border-left:4px solid var(--red)}
+    .filters .btn-new{width:100%}
+  }
+
   /* ===== Řízení výkonu — okno problem solvingu ===== */
   .btn-danger{background:var(--red);color:#fff;font-weight:700}
   label.check{display:inline-flex;gap:7px;align-items:center;font-size:12.5px;color:#41506b;white-space:nowrap;cursor:pointer;font-weight:600}
@@ -181,6 +219,8 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc,
   query, where, orderBy, limit, writeBatch, runTransaction }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+import { getStorage, ref as sref, uploadBytes, getDownloadURL, deleteObject }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
 
 /* Společný Firebase projekt pro celý portál. Veřejné frontendové klíče —
    je správné je mít v kódu, zabezpečení řeší pravidla Firestore. */
@@ -196,6 +236,7 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+const storage = getStorage(fbApp);   // úložiště na přílohy tasků (stejné jako u nákupu)
 
 /* ===== Kdo modul zatím vidí (jen David) — stejně jako u Externích oprav ===== */
 const OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
@@ -585,6 +626,192 @@ function underThreshold(weeks, wk, cfg){
   return out.sort((a,b)=>a.perf-b.perf);
 }
 
+
+/* ==========================================================
+   AKČNÍ PLÁN MANAGEMENTU
+   Sloupce a chování podle tabulky vedení:
+   bílé = vyplňuje zadavatel · žluté = až při posunu · šedé = dopočítá se samo
+   ========================================================== */
+
+const TASK_AREAS = [
+  {k:'Production',                 p:'PRD'},
+  {k:'Engineering / Maintenance',  p:'ENG'},
+  {k:'Logistics',                  p:'LOG'},
+  {k:'Quality',                    p:'QUA'},
+  {k:'Continuous Improvement',     p:'CI'},
+  {k:'Launch',                     p:'LAU'}
+];
+const TASK_TYPES = ['Operation','System'];
+const TASK_STATUS = [
+  {k:'OPEN',        cls:'b-red',   done:false},
+  {k:'IN PROGRESS', cls:'b-amber', done:false},
+  {k:'DONE',        cls:'b-green', done:true},
+  {k:'CANCELLED',   cls:'b-grey',  done:true}
+];
+const MAX_TASK_FILE = 5*1024*1024;   // 5 MB na soubor, stejně jako u nákupu
+
+const areaPrefix = a => (TASK_AREAS.find(x=>x.k===a)||{p:'GEN'}).p;
+const stDef = k => TASK_STATUS.find(s=>s.k===k) || TASK_STATUS[0];
+const taskDone = t => stDef(t.status).done;
+/* Platný termín = poslední posun, jinak původní */
+const dueValid = t => { const m=(t.moves||[]).filter(x=>x&&x.date); return m.length ? m[m.length-1].date : (t.dueOrig||''); };
+const moveCount = t => (t.moves||[]).filter(x=>x&&x.date).length;
+const taskLate = t => !taskDone(t) && dueValid(t) && dueValid(t) < today();
+const lateDays = t => taskLate(t) ? Math.floor((Date.parse(today())-Date.parse(dueValid(t)))/86400000) : 0;
+const taskSoon = t => !taskDone(t) && !taskLate(t) && dueValid(t) && Math.floor((Date.parse(dueValid(t))-Date.parse(today()))/86400000) <= 7;
+
+/* ---------- načítání a zápis ---------- */
+/* Číslo tasku podle oblasti: ENG-001, LOG-002 … (bez roku, jako v tabulce vedení) */
+async function nextTaskNo(area){
+  const pre=areaPrefix(area), key='seqTask'+pre;
+  const ref=doc(db,'meta','engcfg');
+  const n=await runTransaction(db, async tx=>{
+    const snap=await tx.get(ref);
+    const cur=(((snap.data()||{})[key])||0)+1;
+    const patch={}; patch[key]=cur;
+    if(snap.exists()) tx.update(ref,patch); else tx.set(ref, Object.assign({}, ENGCFG_DEF, patch));
+    return cur;
+  });
+  return pre+'-'+String(n).padStart(3,'0');
+}
+/* Promítne rozpracovanou kopii zpátky do seznamu, aby tabulka ukazovala aktuální stav. */
+function syncTask(t){
+  if(!t||!t._id) return;
+  const i=tasks.findIndex(x=>x._id===t._id);
+  if(i>=0) tasks[i]=JSON.parse(JSON.stringify(t));
+}
+async function loadTasks(force){
+  if(tLoaded && !force) return;
+  busy='Načítám akční plán…'; errMsg=''; render();
+  try{
+    const qs = await getDocs(query(collection(db,'tasks'), orderBy('createdOn','desc'), limit(500)));
+    tasks = qs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    if(!engcfg.plannedHoursPerDay){
+      const cs=await getDoc(doc(db,'meta','engcfg'));
+      engcfg=Object.assign({}, ENGCFG_DEF, cs.exists()?cs.data():{});
+    }
+    tLoaded=true;
+  }catch(e){ errMsg=ruleHint(e); }
+  busy=''; render();
+}
+function emptyTask(){
+  return {_id:null, no:'', area:'Engineering / Maintenance', type:'Operation',
+    createdOn:today(), createdBy:me.name, task:'', output:'', owner:'',
+    dueOrig:'', moves:[], status:'OPEN', closedOn:'', note:'', files:[], hist:[]};
+}
+/* Přečte hodnoty z okna do paměti, ať se při překreslení nic neztratí. */
+function collectTask(){
+  if(!openTask) return null;
+  const g=id=>{const e=document.getElementById(id); return e?e.value.trim():'';};
+  const el=document.getElementById('tk-task'); if(!el) return openTask;
+  Object.assign(openTask,{
+    area:g('tk-area'), type:g('tk-type'), createdOn:g('tk-created'), createdBy:g('tk-by'),
+    task:g('tk-task'), output:g('tk-output'), owner:g('tk-owner'),
+    dueOrig:g('tk-due'), status:g('tk-status'), note:g('tk-note')
+  });
+  moveDraft={date:g('tk-newmove'), why:g('tk-movewhy')};
+  return openTask;
+}
+async function saveTask(){
+  const t=collectTask(); if(!t) return;
+  if(!t.task){ tMsg='Napiš, co se má udělat (sloupec Task).'; render(); return; }
+  if(!t.owner){ tMsg='Každý task musí mít ownera.'; render(); return; }
+  if(!t.dueOrig){ tMsg='Vyplň původní termín.'; render(); return; }
+  const closing = taskDone(t) && !t.closedOn;
+  if(closing) t.closedOn=today();
+  if(!taskDone(t)) t.closedOn='';
+  try{
+    if(!t._id){
+      const no=await nextTaskNo(t.area);
+      const rec={no, area:t.area, type:t.type, createdOn:t.createdOn, createdBy:t.createdBy,
+        task:t.task, output:t.output, owner:t.owner, dueOrig:t.dueOrig, moves:[],
+        status:t.status, closedOn:t.closedOn, note:t.note, files:[],
+        hist:[`${today()} · ${me.name} · task založen`]};
+      const ref=await addDoc(collection(db,'tasks'), rec);
+      /* přílohy vybrané ještě před založením nahrajeme až teď, když máme id */
+      if(pendingTaskFiles.length){
+        const arr=[], hist=rec.hist.slice();
+        for(const f of pendingTaskFiles){
+          try{ arr.push(await uploadTaskFile(ref.id,f)); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name}`); }
+          catch(e){ toast('Příloha '+f.name+' se nenahrála: '+((e&&e.message)||e),'err'); }
+        }
+        if(arr.length){ await updateDoc(ref,{files:arr,hist}); rec.files=arr; rec.hist=hist; }
+        pendingTaskFiles=[];
+      }
+      tasks.unshift(Object.assign({_id:ref.id}, rec));
+      toast('Task '+no+' založen.','ok');
+    }else{
+      const hist=(t.hist||[]).concat(`${today()} · ${me.name} · ${closing?'task uzavřen':'upraveno'}`);
+      const {_id,...data}=t; data.hist=hist;
+      await updateDoc(doc(db,'tasks',t._id), data);
+      t.hist=hist; syncTask(t);
+      toast('Uloženo.','ok');
+    }
+    openTask=null; tMsg='';
+  }catch(e){ tMsg='Uložení selhalo: '+((e&&e.message)||e); }
+  render();
+}
+/* Posun termínu — do žlutých sloupců, s důvodem a stopou v historii */
+async function addMove(){
+  const t=collectTask(); if(!t) return;
+  const date=moveDraft.date, why=moveDraft.why;
+  if(!date){ tMsg='Vyber nový termín.'; render(); return; }
+  if(!why){ tMsg='K posunu termínu napiš důvod — jinak se posouvá bez stopy.'; render(); return; }
+  if(!t._id){ tMsg='Task nejdřív ulož, teprve pak jde posouvat termín.'; render(); return; }
+  const moves=(t.moves||[]).concat({date, why, at:today(), by:me.name});
+  const hist=(t.hist||[]).concat(`${today()} · ${me.name} · posun termínu na ${dateCz(date)} — ${why}`);
+  try{
+    await updateDoc(doc(db,'tasks',t._id), {moves, hist});
+    t.moves=moves; t.hist=hist; syncTask(t); moveDraft={date:'',why:''}; tMsg='';
+  }catch(e){ tMsg='Posun se neuložil: '+((e&&e.message)||e); }
+  render();
+}
+async function uploadTaskFile(taskId, f){
+  const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-80);
+  const path='tasky/'+taskId+'/'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'_'+safe;
+  const s=sref(storage,path);
+  await uploadBytes(s,f,{contentType:f.type||'application/octet-stream'});
+  return {name:f.name, path, url:await getDownloadURL(s), size:f.size, at:today(), by:me.name};
+}
+async function handleTaskFiles(list){
+  const files=[...(list||[])].filter(Boolean); if(!files.length || !openTask) return;
+  const ok=[];
+  for(const f of files){
+    if(f.size>MAX_TASK_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); continue; }
+    ok.push(f);
+  }
+  if(!ok.length) return;
+  collectTask();                                                        // ať se rozepsané hodnoty neztratí
+  if(!openTask._id){ pendingTaskFiles.push(...ok); render(); return; }   // nový task → fronta, nahraje se po založení
+  tMsg='Nahrávám přílohy…'; render();
+  const arr=(openTask.files||[]).slice(), hist=(openTask.hist||[]).slice();
+  let n=0;
+  for(const f of ok){
+    try{ arr.push(await uploadTaskFile(openTask._id,f)); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name}`); n++; }
+    catch(e){ toast('Nenahrálo se: '+f.name+' — '+((e&&e.message)||e),'err'); }
+  }
+  if(n){
+    try{ await updateDoc(doc(db,'tasks',openTask._id), {files:arr, hist}); openTask.files=arr; openTask.hist=hist; syncTask(openTask);
+         toast(n===1?'Příloha nahrána.':n+' přílohy nahrány.','ok'); }
+    catch(e){ toast('Uložení příloh selhalo: '+((e&&e.message)||e),'err'); }
+  }
+  tMsg=''; render();
+}
+async function removeTaskFile(i){
+  if(!openTask) return;
+  collectTask();
+  if(!openTask._id){ pendingTaskFiles.splice(i,1); render(); return; }
+  const files=(openTask.files||[]).slice(), f=files[i];
+  if(!f) return;
+  try{ await deleteObject(sref(storage,f.path)); }catch(e){ /* v úložišti už být nemusí */ }
+  files.splice(i,1);
+  const hist=(openTask.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${f.name}`);
+  try{ await updateDoc(doc(db,'tasks',openTask._id), {files, hist}); openTask.files=files; openTask.hist=hist; syncTask(openTask); }
+  catch(e){ toast('Smazání selhalo: '+((e&&e.message)||e),'err'); }
+  render();
+}
+const fileSize = b => b>=1048576 ? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' kB';
+
 /* ===== stav stránky ===== */
 let me=null, loginBusy=false, loginErr='';
 let engTab='dash';
@@ -592,6 +819,9 @@ let days=[], events=[], history=[];
 let scMonths=[], scLoaded=false;
 let mgDays=[], problems=[], actions=[], engcfg=Object.assign({},ENGCFG_DEF);
 let mgLoaded=false, mgWeek='', openPs=null, psMsg='', mgOwner='', mgOnlyOpen=true;
+let tasks=[], tLoaded=false, openTask=null, tMsg='', tSort='new', tHideClosed=true, pendingTaskFiles=[];
+let tF={area:'',owner:'',status:'',type:'',q:''};
+let moveDraft={date:'',why:''};
 let range=7, loaded=false, busy='', errMsg='';
 let evLoaded='', evMore=false;
 let f={seg:'',group:'',shift:'',q:''};
@@ -605,6 +835,8 @@ const num = (v,d=1)=>(isFinite(v)?Number(v):0).toLocaleString('cs-CZ',{minimumFr
 const today = () => new Date().toISOString().slice(0,10);
 const dateFrom = n => { const d=new Date(); d.setDate(d.getDate()-(n-1)); return d.toISOString().slice(0,10); };
 const dayCz = d => String(d).slice(8,10).replace(/^0/,'')+'. '+String(d).slice(5,7).replace(/^0/,'')+'.';
+/* celé datum i s rokem: 2026-08-24 → 24. 8. 2026 */
+const dateCz = s => { if(!s) return ''; const p=String(s).slice(0,10).split('-'); return p.length===3 ? `${+p[2]}. ${+p[1]}. ${p[0]}` : String(s); };
 function fmtDur(sec){
   if(!sec) return '0 min';
   if(sec<3600) return Math.round(sec/60)+' min';
@@ -1474,6 +1706,217 @@ function problemModal(){
   </div></div>`;
 }
 
+
+/* ---------- obrazovka Akční plán ---------- */
+function visibleTasks(){
+  let r=tasks.slice();
+  if(tF.area)   r=r.filter(t=>t.area===tF.area);
+  if(tF.owner)  r=r.filter(t=>t.owner===tF.owner);
+  if(tF.status) r=r.filter(t=>t.status===tF.status);
+  if(tF.type)   r=r.filter(t=>t.type===tF.type);
+  if(tHideClosed) r=r.filter(t=>!taskDone(t));
+  if(tF.q){ const q=tF.q.toLowerCase();
+    r=r.filter(t=>[t.no,t.task,t.output,t.owner,t.createdBy,t.note].join(' ').toLowerCase().includes(q)); }
+  if(tSort==='review'){
+    /* na review: nejdřív po termínu (nejdéle), pak nejbližší termíny, uzavřené naposled */
+    r.sort((a,b)=>{
+      const da=taskDone(a)?1:0, db2=taskDone(b)?1:0;
+      if(da!==db2) return da-db2;
+      const la=lateDays(a), lb=lateDays(b);
+      if(la!==lb) return lb-la;
+      return String(dueValid(a)||'9999').localeCompare(String(dueValid(b)||'9999'));
+    });
+  }else{
+    r.sort((a,b)=>String(b.createdOn||'').localeCompare(String(a.createdOn||'')) || String(a.no).localeCompare(String(b.no)));
+  }
+  return r;
+}
+function tasksView(){
+  const open=tasks.filter(t=>!taskDone(t));
+  const late=open.filter(taskLate);
+  const soon=open.filter(taskSoon);
+  const closedMonth=tasks.filter(t=>taskDone(t) && String(t.closedOn||'').slice(0,7)===today().slice(0,7));
+  const moved=tasks.filter(t=>moveCount(t)>0);
+  const rows=visibleTasks();
+  const owners=[...new Set(tasks.map(t=>t.owner))].filter(Boolean).sort();
+  const byArea=TASK_AREAS.map(a=>({label:a.k, sec:open.filter(t=>t.area===a.k).length, cnt:late.filter(t=>t.area===a.k).length}))
+                         .filter(x=>x.sec>0);
+  return `
+  <div class="cards">
+    <div class="kcard" style="border-left-color:#1b4b8f"><div class="lbl">Otevřené tasky</div>
+      <div class="val">${open.length}</div><div class="note">celkem ${tasks.length} v plánu</div></div>
+    <div class="kcard" style="border-left-color:${late.length?'#c0392b':'#1f9254'}"><div class="lbl">Po termínu</div>
+      <div class="val">${late.length}</div><div class="note">${late.length?'nejdéle '+Math.max(...late.map(lateDays))+' dní':'nic nevisí'}</div></div>
+    <div class="kcard" style="border-left-color:#b7791f"><div class="lbl">Termín do 7 dní</div>
+      <div class="val">${soon.length}</div><div class="note">hlídat na review</div></div>
+    <div class="kcard" style="border-left-color:#1f9254"><div class="lbl">Uzavřeno tento měsíc</div>
+      <div class="val">${closedMonth.length}</div><div class="note">${moved.length} tasků mělo posun termínu</div></div>
+    <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Posuny termínů</div>
+      <div class="val">${tasks.reduce((a,t)=>a+moveCount(t),0)}</div><div class="note">každý posun má důvod a stopu</div></div>
+  </div>
+
+  ${byArea.length?`<div class="panel"><h2>Otevřené tasky po oblastech<span class="right">červeně = po termínu</span></h2>
+    <div class="body">${byArea.map(a=>{
+      const max=Math.max(...byArea.map(x=>x.sec))||1;
+      return `<div class="bar"><div class="nm">${esc(a.label)}</div>
+        <div class="tr"><i style="width:${Math.max(3,a.sec/max*100).toFixed(0)}%;background:${a.cnt?'#c0392b':'#1b4b8f'}"></i></div>
+        <div class="vl">${a.sec}${a.cnt?` <span style="color:var(--red)">· ${a.cnt} po termínu</span>`:''}</div></div>`;
+    }).join('')}</div></div>`:''}
+
+  <div class="panel">
+    <h2>Akční plán managementu<span class="right">${rows.length} z ${tasks.length} · bílé vyplňuješ ty, žluté až při posunu, šedé se dopočítá</span></h2>
+    <div class="filters">
+      <button class="btn-new" data-a="tk-new">+ Nový task</button>
+      <input class="grow" id="tk-q" placeholder="Hledat v tasku, výstupu, ownerovi…" value="${esc(tF.q)}">
+      <select id="tk-farea"><option value="">Všechna oddělení</option>${TASK_AREAS.map(a=>`<option ${tF.area===a.k?'selected':''}>${esc(a.k)}</option>`).join('')}</select>
+      <select id="tk-fowner"><option value="">Všichni owneři</option>${owners.map(o=>`<option ${tF.owner===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
+      <select id="tk-fstatus"><option value="">Všechny stavy</option>${TASK_STATUS.map(s=>`<option ${tF.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
+      <select id="tk-ftype"><option value="">Typ: vše</option>${TASK_TYPES.map(t=>`<option ${tF.type===t?'selected':''}>${t}</option>`).join('')}</select>
+      <button class="btn-ghost" data-a="tk-all">Vše</button>
+      <button class="${tSort==='review'?'btn-teal':'btn-ghost'}" data-a="tk-review">Seřadit na review</button>
+      <label class="check"><input type="checkbox" id="tk-hide" ${tHideClosed?'checked':''}> skrýt uzavřené</label>
+      <button class="btn-ghost" data-a="tk-export">⭳ Export CSV</button>
+    </div>
+    <div class="legend2">
+      <span><i style="background:#fff;border:1px solid var(--line)"></i>bílé — vyplňuješ ty</span>
+      <span><i style="background:#fdf6e3;border:1px solid #f0e0b8"></i>žluté — až při posunu</span>
+      <span><i style="background:#eef1f5;border:1px solid var(--line)"></i>šedé — dopočítá se samo</span>
+      <span><i style="background:#fdecea;border:1px solid #f5cfca"></i>řádek po termínu</span>
+    </div>
+    <div class="tblwrap"><table class="tasktbl">
+      <thead><tr>
+        <th>Č.</th><th>1 · Oblast</th><th>Typ</th><th>Zadáno</th><th>Zadal</th>
+        <th>2 · Task</th><th>3 · Očekávaný výstup – důkaz</th><th>4 · Owner</th>
+        <th>5 · Termín původní</th><th class="ycol">Posuny</th><th class="gcol">Platný termín</th>
+        <th class="gcol">Posunů</th><th>Stav</th><th class="gcol">Po termínu</th><th>Uzavřeno</th><th></th>
+      </tr></thead>
+      <tbody>${rows.map(t=>{
+        const dv=dueValid(t), mc=moveCount(t), late=taskLate(t);
+        return `<tr class="clickable ${late?'late':''} ${taskDone(t)?'closed':''}" data-a="tk-open" data-v="${t._id}">
+          <td data-label="Č."><b>${esc(t.no)}</b>${(t.files&&t.files.length)?` <span class="clip" title="Přílohy">📎${t.files.length}</span>`:''}</td>
+          <td data-label="Oblast">${esc(t.area)}</td>
+          <td data-label="Typ">${esc(t.type)}</td>
+          <td data-label="Zadáno">${dateCz(t.createdOn)}</td>
+          <td data-label="Zadal">${esc(t.createdBy||'')}</td>
+          <td data-label="Task" class="desc">${esc(t.task)}</td>
+          <td data-label="Výstup" class="desc muted">${esc(t.output||'')}</td>
+          <td data-label="Owner"><b>${esc(t.owner||'')}</b></td>
+          <td data-label="Termín původní">${dateCz(t.dueOrig)}</td>
+          <td data-label="Posuny" class="ycol">${mc?(t.moves||[]).map(m=>dateCz(m.date)).join('<br>'):'<span class="muted">—</span>'}</td>
+          <td data-label="Platný termín" class="gcol"><b${late?' style="color:var(--red)"':''}>${dateCz(dv)}</b></td>
+          <td data-label="Posunů" class="gcol num">${mc}</td>
+          <td data-label="Stav"><span class="badge ${stDef(t.status).cls}">${esc(t.status)}</span></td>
+          <td data-label="Po termínu" class="gcol num">${late?`<b style="color:var(--red)">${lateDays(t)} dní</b>`:'<span class="muted">—</span>'}</td>
+          <td data-label="Uzavřeno">${t.closedOn?dateCz(t.closedOn):'<span class="muted">—</span>'}</td>
+          <td data-label=""><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button></td>
+        </tr>`;}).join('') || `<tr><td colspan="16" class="empty">Zatím žádný task. Založ ho tlačítkem <b>+ Nový task</b>.</td></tr>`}
+      </tbody></table></div>
+  </div>`;
+}
+
+function taskModal(){
+  const t=openTask; if(!t) return '';
+  const isNew=!t._id;
+  const dv=dueValid(t), mc=moveCount(t);
+  const files=isNew ? pendingTaskFiles.map(f=>({name:f.name,size:f.size,pending:true})) : (t.files||[]);
+  return `
+  <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Task akčního plánu">
+    <h3>${isNew?'Nový task':esc(t.no)+' — '+esc(t.area)}<button class="x" data-a="tk-close" aria-label="Zavřít">✕</button></h3>
+    <div class="robar">
+      bílé vyplňuješ ty · <span class="ychip">žluté</span> až při posunu termínu · <span class="gchip">šedé</span> se dopočítá samo
+      ${!isNew&&taskLate(t)?`<span class="badge b-red" style="margin-left:auto">po termínu ${lateDays(t)} dní</span>`:''}
+    </div>
+    <div class="form">
+      <div class="f"><label>1 · Oblast <span style="color:var(--red)">*</span></label>
+        <select id="tk-area">${TASK_AREAS.map(a=>`<option ${t.area===a.k?'selected':''}>${esc(a.k)}</option>`).join('')}</select>
+        <div class="muted" style="font-size:11px">podle ní se generuje číslo (${areaPrefix(t.area)}-…)</div></div>
+      <div class="f"><label>Typ</label>
+        <select id="tk-type">${TASK_TYPES.map(x=>`<option ${t.type===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="f"><label>Zadáno</label><input id="tk-created" type="date" value="${esc(t.createdOn||'')}"></div>
+      <div class="f"><label>Zadal</label><input id="tk-by" value="${esc(t.createdBy||'')}"></div>
+
+      <div class="f span4"><label>2 · Task <span style="color:var(--red)">*</span></label>
+        <textarea id="tk-task" rows="3" placeholder="Co se má udělat">${esc(t.task||'')}</textarea></div>
+      <div class="f span4"><label>3 · Očekávaný výstup – důkaz</label>
+        <textarea id="tk-output" rows="4" placeholder="Podle čeho poznáme, že je to hotové">${esc(t.output||'')}</textarea></div>
+
+      <div class="f span2"><label>4 · Owner <span style="color:var(--red)">*</span></label>
+        <input id="tk-owner" list="tk-owners" value="${esc(t.owner||'')}" placeholder="Kdo za to odpovídá">
+        <datalist id="tk-owners">${[...new Set(tasks.map(x=>x.owner).concat(engcfg.engineers||[], engcfg.coordinators||[]))].filter(Boolean)
+          .map(o=>`<option>${esc(o)}</option>`).join('')}</datalist></div>
+      <div class="f"><label>5 · Termín původní <span style="color:var(--red)">*</span></label>
+        <input id="tk-due" type="date" value="${esc(t.dueOrig||'')}"></div>
+      <div class="f"><label>Stav</label>
+        <select id="tk-status">${TASK_STATUS.map(s=>`<option ${t.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select></div>
+
+      <div class="sect">Posuny termínu — žluté, každý s důvodem</div>
+      <div class="f span2"><label>Platný termín</label>
+        <div class="ro gcell"${taskLate(t)?' style="color:var(--red);font-weight:700"':''}>${dv?dateCz(dv):'—'}</div></div>
+      <div class="f"><label>Počet posunů</label><div class="ro gcell">${mc}</div></div>
+      <div class="f"><label>Uzavřeno</label><div class="ro gcell">${t.closedOn?dateCz(t.closedOn):'—'}</div></div>
+      <div class="f span4">
+        ${mc?`<div class="tblwrap" style="border:1px solid #f0e0b8;border-radius:var(--radius);background:#fdf6e3">
+          <table><thead><tr><th>Posun</th><th>Nový termín</th><th>Důvod</th><th>Kdy a kdo</th></tr></thead>
+          <tbody>${(t.moves||[]).map((m,i)=>`<tr>
+            <td data-label="Posun">${i+1}.</td><td data-label="Nový termín"><b>${dateCz(m.date)}</b></td>
+            <td data-label="Důvod" class="desc">${esc(m.why||'')}</td>
+            <td data-label="Kdy a kdo" class="muted">${dateCz(m.at)} · ${esc(m.by||'')}</td></tr>`).join('')}
+          </tbody></table></div>`:`<div class="muted" style="font-size:12px">Termín se zatím neposouval.</div>`}
+      </div>
+      ${isNew?'':`<div class="f span4"><label>Posunout termín</label>
+        <div class="addrow ybox">
+          <input id="tk-newmove" type="date" value="${esc(moveDraft.date)}">
+          <input id="tk-movewhy" value="${esc(moveDraft.why)}" placeholder="Důvod posunu — bez něj to nejde uložit">
+          <button class="btn-primary" data-a="tk-addmove">Posunout</button>
+        </div></div>`}
+
+      <div class="sect">Přílohy</div>
+      <div class="f span4">
+        <div class="drop" id="tk-drop" style="padding:16px">
+          <div style="font-size:13px">Přetáhni sem soubory nebo
+            <label class="filebtn" style="display:inline-block">vyber<input type="file" id="tk-file" multiple></label></div>
+          <div class="muted" style="font-size:11.5px;margin-top:5px">do 5 MB na soubor${isNew?' · nahrají se po založení tasku':''}</div>
+        </div>
+        ${files.length?`<div class="filelist">${files.map((f,i)=>`
+          <div class="fileitem">
+            <span class="ic">📎</span>
+            <span class="nm">${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>`:esc(f.name)}</span>
+            <span class="muted">${fileSize(f.size||0)}${f.pending?' · čeká na nahrání':''}</span>
+            <button class="btn-ghost" style="margin-left:auto;padding:2px 8px;font-size:11px" data-a="tk-delfile" data-v="${i}">Odebrat</button>
+          </div>`).join('')}</div>`:''}
+      </div>
+
+      <div class="f span4"><label>Poznámka</label>
+        <textarea id="tk-note" rows="2" placeholder="Cokoli dalšího">${esc(t.note||'')}</textarea></div>
+    </div>
+    ${(t.hist||[]).length?`<div class="hist">${(t.hist||[]).slice().reverse().slice(0,8).map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
+    <div class="foot">
+      ${tMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(tMsg)}</span>`
+            :`<span class="muted" style="font-size:11.5px">${isNew?'Číslo se přidělí po uložení.':'Změny se zapíšou do historie.'}</span>`}
+      <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-ok" data-a="tk-save">${isNew?'Založit task':'Uložit'}</button>
+        <button class="btn-ghost" data-a="tk-close">Zavřít</button>
+      </span>
+    </div>
+  </div></div>`;
+}
+
+function exportTasksCsv(){
+  const rows=visibleTasks();
+  const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  const head=['Č.','Oblast','Typ','Zadáno','Zadal','Task','Očekávaný výstup – důkaz','Owner',
+    'Termín původní','Posun 1','Posun 2','Posun 3','Platný termín','Posunů','Stav','Po termínu (dní)','Uzavřeno'];
+  const csv=[line(head)].concat(rows.map(t=>{
+    const m=(t.moves||[]).map(x=>x.date);
+    return line([t.no,t.area,t.type,t.createdOn,t.createdBy,t.task,t.output,t.owner,t.dueOrig,
+      m[0]||'',m[1]||'',m[2]||'',dueValid(t),moveCount(t),t.status,taskLate(t)?lateDays(t):'',t.closedOn||'']);
+  })).join('\n');
+  const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url; a.download='akcni_plan_'+today()+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
 /* ===== obrazovky ===== */
 function emptyView(){
   return `<div class="panel"><div class="body" style="text-align:center;padding:32px 18px">
@@ -1798,7 +2241,8 @@ function render(){
     app.innerHTML = shell(`<div class="notice">Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.</div>`);
     bind(); return;
   }
-  const inner = engTab==='mgmt'  ? mgmtView()
+  const inner = engTab==='tasks' ? tasksView()
+              : engTab==='mgmt'  ? mgmtView()
               : engTab==='dash'  ? dashView()
               : engTab==='list'  ? listView()
               : engTab==='scrap' ? scrapView()
@@ -1806,12 +2250,14 @@ function render(){
   app.innerHTML = shell(`
     <div class="tabs">
       <button class="tab ${engTab==='mgmt'?'on':''}" data-a="tab" data-v="mgmt">Řízení</button>
+      <button class="tab ${engTab==='tasks'?'on':''}" data-a="tab" data-v="tasks">Akční plán</button>
       <button class="tab ${engTab==='dash'?'on':''}" data-a="tab" data-v="dash">Přehled a KPI</button>
       <button class="tab ${engTab==='list'?'on':''}" data-a="tab" data-v="list">Prostoje</button>
       <button class="tab ${engTab==='scrap'?'on':''}" data-a="tab" data-v="scrap">Scrap</button>
       ${canImport()?`<button class="tab ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
       <span class="sp">
-        ${engTab==='mgmt'?'<span class="muted" style="font-size:11.5px">Řízení počítá po týdnech z posledních 12 týdnů.</span>'
+        ${engTab==='tasks'?'<span class="muted" style="font-size:11.5px">Akční plán je nezávislý na období — vidíš všechny tasky.</span>'
+          :engTab==='mgmt'?'<span class="muted" style="font-size:11.5px">Řízení počítá po týdnech z posledních 12 týdnů.</span>'
           :engTab==='scrap'?'<span class="muted" style="font-size:11.5px">Scrap se počítá po měsících — posledních 12.</span>'
           :`<span class="muted" style="font-size:11.5px">Období:</span>
         ${[7,14,30].map(n=>`<button class="rangebtn ${range===n?'on':''}" data-a="range" data-v="${n}">${n} dní</button>`).join('')}`}
@@ -1820,7 +2266,8 @@ function render(){
     </div>
     ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
     ${busy?`<div class="notice">${esc(busy)}</div>`:''}
-    ${inner}`) + (openPs?problemModal():'') + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
+    ${inner}`) + (openPs?problemModal():'') + (openTask?taskModal():'')
+    + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
   bind();
 }
 function shell(inner){
@@ -1868,12 +2315,29 @@ function bind(){
   const mo=document.getElementById('imp-month');
   if(mo) mo.onchange=()=>{ imp.month=mo.value; reparseScrap(); render(); };
 
+  const tq=document.getElementById('tk-q');
+  if(tq) tq.oninput=()=>{ tF.q=tq.value; const pos=tq.selectionStart; render();
+    const n=document.getElementById('tk-q'); if(n){ n.focus(); n.setSelectionRange(pos,pos); } };
+  [['tk-farea','area'],['tk-fowner','owner'],['tk-fstatus','status'],['tk-ftype','type']].forEach(([id,k])=>{
+    const el=document.getElementById(id); if(el) el.onchange=()=>{ tF[k]=el.value; render(); };
+  });
+  const th=document.getElementById('tk-hide');
+  if(th) th.onchange=()=>{ tHideClosed=th.checked; render(); };
+  const tfi=document.getElementById('tk-file');
+  if(tfi) tfi.onchange=()=>{ if(tfi.files&&tfi.files.length) handleTaskFiles(tfi.files); };
+  const tdz=document.getElementById('tk-drop');
+  if(tdz){
+    ['dragenter','dragover'].forEach(ev=>tdz.addEventListener(ev,e=>{e.preventDefault();tdz.classList.add('hot');}));
+    ['dragleave','drop'].forEach(ev=>tdz.addEventListener(ev,e=>{e.preventDefault();tdz.classList.remove('hot');}));
+    tdz.addEventListener('drop',e=>{ if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length) handleTaskFiles(e.dataTransfer.files); });
+  }
+
   const mo2=document.getElementById('mg-owner');
   if(mo2) mo2.onchange=()=>{ mgOwner=mo2.value; render(); };
   const oo=document.getElementById('mg-onlyopen');
   if(oo) oo.onchange=()=>{ mgOnlyOpen=oo.checked; render(); };
   const ovl=document.getElementById('ovl');
-  if(ovl) ovl.onclick=e=>{ if(e.target.id==='ovl'){ openPs=null; psMsg=''; render(); } };
+  if(ovl) ovl.onclick=e=>{ if(e.target.id==='ovl'){ openPs=null; psMsg=''; openTask=null; tMsg=''; render(); } };
 
   const fi=document.getElementById('file');
   if(fi) fi.onchange=()=>{ if(fi.files&&fi.files[0]) takeFile(fi.files[0]); };
@@ -1890,6 +2354,7 @@ async function act(a,v){
       engTab=v;
       if(v==='list') loadEvents();
       if(v==='mgmt') loadMgmt();
+      if(v==='tasks') loadTasks();
       if(v==='scrap') loadScrap();
       if(v==='imp' && imp.step===3) imp=newImp(imp.kind);
       break;
@@ -1898,10 +2363,22 @@ async function act(a,v){
       loadDays(true); if(engTab==='list') loadEvents();
       break;
     case 'reload':
-      loaded=false; evLoaded=''; scLoaded=false; mgLoaded=false;
+      loaded=false; evLoaded=''; scLoaded=false; mgLoaded=false; tLoaded=false;
       if(engTab==='mgmt') loadMgmt(true);
+      if(engTab==='tasks') loadTasks(true);
       loadDays(true); if(engTab==='list') loadEvents();
       break;
+    /* ----- akční plán ----- */
+    case 'tk-new': openTask=emptyTask(); pendingTaskFiles=[]; moveDraft={date:'',why:''}; tMsg=''; break;
+    case 'tk-open': openTask=JSON.parse(JSON.stringify(tasks.find(x=>x._id===v)||{})); moveDraft={date:'',why:''}; tMsg=''; break;
+    case 'tk-close': openTask=null; pendingTaskFiles=[]; moveDraft={date:'',why:''}; tMsg=''; break;
+    case 'tk-save': await saveTask(); return;
+    case 'tk-addmove': await addMove(); return;
+    case 'tk-delfile': await removeTaskFile(Number(v)); return;
+    case 'tk-review': tSort = tSort==='review'?'new':'review'; break;
+    case 'tk-all': tF={area:'',owner:'',status:'',type:'',q:''}; tHideClosed=false; break;
+    case 'tk-export': exportTasksCsv(); return;
+
     /* ----- řízení výkonu ----- */
     case 'mg-week': mgWeek=v; break;
     case 'mg-open': openPs=v; psMsg=''; break;
