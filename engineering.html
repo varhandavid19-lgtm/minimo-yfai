@@ -106,6 +106,11 @@
   .ro.gcell{background:#f4f6f9}
   .ybox{background:#fdf6e3;border:1px solid #f0e0b8;border-radius:var(--radius);padding:9px 11px}
   .ybox input{background:#fff}
+  .ownerbox{border:1px solid var(--line);border-radius:var(--radius);background:#fff;overflow:hidden}
+  .ochips{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--line);background:#fafbfd;min-height:37px;align-items:center}
+  .ochip{background:var(--teal-bg);border:1px solid #bfdedd;color:var(--teal-dark);border-radius:20px;padding:2px 10px;font-size:11.5px;font-weight:700}
+  .olist{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px;padding:9px 10px;max-height:150px;overflow-y:auto}
+  .olist .check{font-weight:500;font-size:12.5px}
   .filelist{margin-top:10px;display:flex;flex-direction:column;gap:6px}
   .fileitem{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--line);
     border-radius:var(--radius);padding:7px 10px;font-size:12.5px;flex-wrap:wrap}
@@ -634,12 +639,15 @@ function underThreshold(weeks, wk, cfg){
    ========================================================== */
 
 const TASK_AREAS = [
-  {k:'Production',                 p:'PRD'},
-  {k:'Engineering / Maintenance',  p:'ENG'},
-  {k:'Logistics',                  p:'LOG'},
-  {k:'Quality',                    p:'QUA'},
-  {k:'Continuous Improvement',     p:'CI'},
-  {k:'Launch',                     p:'LAU'}
+  {k:'IMM',                       p:'IMM'},
+  {k:'Assembly MFA2',             p:'MFA2'},
+  {k:'Assembly SK336/PO455/W206', p:'SK336'},
+  {k:'Assembly OV51/64',          p:'OV51'},
+  {k:'Assembly MBEAM',            p:'MBEAM'},
+  {k:'Slush',                     p:'SLUSH'},
+  {k:'Foaming',                   p:'FOAM'},
+  {k:'GB/DP',                     p:'GBDP'},
+  {k:'Gclass',                    p:'GCLS'}
 ];
 const TASK_TYPES = ['Operation','System'];
 const TASK_STATUS = [
@@ -651,6 +659,17 @@ const TASK_STATUS = [
 const MAX_TASK_FILE = 5*1024*1024;   // 5 MB na soubor, stejně jako u nákupu
 
 const areaPrefix = a => (TASK_AREAS.find(x=>x.k===a)||{p:'GEN'}).p;
+/* Owner může být víc lidí. Starší tasky mají jedno jméno v poli owner. */
+const taskOwners = t => (t && Array.isArray(t.owners) && t.owners.length) ? t.owners
+                       : ((t && t.owner) ? [t.owner] : []);
+const ownersLabel = t => taskOwners(t).join(', ');
+/* Nabídka jmen: lidé z Nastavení minima + kdokoli už u tasků je */
+function ownerChoices(extra){
+  const set=new Set(people.map(p=>p.name).filter(Boolean));
+  tasks.forEach(t=>taskOwners(t).forEach(o=>set.add(o)));
+  (extra||[]).forEach(o=>o&&set.add(o));
+  return [...set].sort((a,b)=>a.localeCompare(b,'cs'));
+}
 const stDef = k => TASK_STATUS.find(s=>s.k===k) || TASK_STATUS[0];
 const taskDone = t => stDef(t.status).done;
 /* Platný termín = poslední posun, jinak původní */
@@ -686,6 +705,10 @@ async function loadTasks(force){
   try{
     const qs = await getDocs(query(collection(db,'tasks'), orderBy('createdOn','desc'), limit(500)));
     tasks = qs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    /* lidé pro rozbalovátko ownerů — spravují se v Nastavení celého minima */
+    const us = await getDocs(collection(db,'users'));
+    people = us.docs.map(d=>({uid:d.id, name:(d.data().name||d.data().email||d.id)}))
+                    .sort((a,b)=>a.name.localeCompare(b.name,'cs'));
     if(!engcfg.plannedHoursPerDay){
       const cs=await getDoc(doc(db,'meta','engcfg'));
       engcfg=Object.assign({}, ENGCFG_DEF, cs.exists()?cs.data():{});
@@ -695,8 +718,8 @@ async function loadTasks(force){
   busy=''; render();
 }
 function emptyTask(){
-  return {_id:null, no:'', area:'Engineering / Maintenance', type:'Operation',
-    createdOn:today(), createdBy:me.name, task:'', output:'', owner:'',
+  return {_id:null, no:'', area:TASK_AREAS[0].k, type:'Operation',
+    createdOn:today(), createdBy:me.name, task:'', output:'', owners:[],
     dueOrig:'', moves:[], status:'OPEN', closedOn:'', note:'', files:[], hist:[]};
 }
 /* Přečte hodnoty z okna do paměti, ať se při překreslení nic neztratí. */
@@ -706,7 +729,8 @@ function collectTask(){
   const el=document.getElementById('tk-task'); if(!el) return openTask;
   Object.assign(openTask,{
     area:g('tk-area'), type:g('tk-type'), createdOn:g('tk-created'), createdBy:g('tk-by'),
-    task:g('tk-task'), output:g('tk-output'), owner:g('tk-owner'),
+    task:g('tk-task'), output:g('tk-output'),
+    owners:[...document.querySelectorAll('[data-own]')].filter(c=>c.checked).map(c=>c.dataset.own),
     dueOrig:g('tk-due'), status:g('tk-status'), note:g('tk-note')
   });
   moveDraft={date:g('tk-newmove'), why:g('tk-movewhy')};
@@ -715,7 +739,7 @@ function collectTask(){
 async function saveTask(){
   const t=collectTask(); if(!t) return;
   if(!t.task){ tMsg='Napiš, co se má udělat (sloupec Task).'; render(); return; }
-  if(!t.owner){ tMsg='Každý task musí mít ownera.'; render(); return; }
+  if(!taskOwners(t).length){ tMsg='Vyber aspoň jednoho ownera.'; render(); return; }
   if(!t.dueOrig){ tMsg='Vyplň původní termín.'; render(); return; }
   const closing = taskDone(t) && !t.closedOn;
   if(closing) t.closedOn=today();
@@ -724,7 +748,7 @@ async function saveTask(){
     if(!t._id){
       const no=await nextTaskNo(t.area);
       const rec={no, area:t.area, type:t.type, createdOn:t.createdOn, createdBy:t.createdBy,
-        task:t.task, output:t.output, owner:t.owner, dueOrig:t.dueOrig, moves:[],
+        task:t.task, output:t.output, owners:t.owners, dueOrig:t.dueOrig, moves:[],
         status:t.status, closedOn:t.closedOn, note:t.note, files:[],
         hist:[`${today()} · ${me.name} · task založen`]};
       const ref=await addDoc(collection(db,'tasks'), rec);
@@ -819,7 +843,7 @@ let days=[], events=[], history=[];
 let scMonths=[], scLoaded=false;
 let mgDays=[], problems=[], actions=[], engcfg=Object.assign({},ENGCFG_DEF);
 let mgLoaded=false, mgWeek='', openPs=null, psMsg='', mgOwner='', mgOnlyOpen=true;
-let tasks=[], tLoaded=false, openTask=null, tMsg='', tSort='new', tHideClosed=true, pendingTaskFiles=[];
+let tasks=[], people=[], tLoaded=false, openTask=null, tMsg='', tSort='new', tHideClosed=true, pendingTaskFiles=[];
 let tF={area:'',owner:'',status:'',type:'',q:''};
 let moveDraft={date:'',why:''};
 let range=7, loaded=false, busy='', errMsg='';
@@ -1711,12 +1735,12 @@ function problemModal(){
 function visibleTasks(){
   let r=tasks.slice();
   if(tF.area)   r=r.filter(t=>t.area===tF.area);
-  if(tF.owner)  r=r.filter(t=>t.owner===tF.owner);
+  if(tF.owner)  r=r.filter(t=>taskOwners(t).includes(tF.owner));
   if(tF.status) r=r.filter(t=>t.status===tF.status);
   if(tF.type)   r=r.filter(t=>t.type===tF.type);
   if(tHideClosed) r=r.filter(t=>!taskDone(t));
   if(tF.q){ const q=tF.q.toLowerCase();
-    r=r.filter(t=>[t.no,t.task,t.output,t.owner,t.createdBy,t.note].join(' ').toLowerCase().includes(q)); }
+    r=r.filter(t=>[t.no,t.task,t.output,ownersLabel(t),t.createdBy,t.note].join(' ').toLowerCase().includes(q)); }
   if(tSort==='review'){
     /* na review: nejdřív po termínu (nejdéle), pak nejbližší termíny, uzavřené naposled */
     r.sort((a,b)=>{
@@ -1738,7 +1762,7 @@ function tasksView(){
   const closedMonth=tasks.filter(t=>taskDone(t) && String(t.closedOn||'').slice(0,7)===today().slice(0,7));
   const moved=tasks.filter(t=>moveCount(t)>0);
   const rows=visibleTasks();
-  const owners=[...new Set(tasks.map(t=>t.owner))].filter(Boolean).sort();
+  const owners=ownerChoices();
   const byArea=TASK_AREAS.map(a=>({label:a.k, sec:open.filter(t=>t.area===a.k).length, cnt:late.filter(t=>t.area===a.k).length}))
                          .filter(x=>x.sec>0);
   return `
@@ -1800,7 +1824,7 @@ function tasksView(){
           <td data-label="Zadal">${esc(t.createdBy||'')}</td>
           <td data-label="Task" class="desc">${esc(t.task)}</td>
           <td data-label="Výstup" class="desc muted">${esc(t.output||'')}</td>
-          <td data-label="Owner"><b>${esc(t.owner||'')}</b></td>
+          <td data-label="Owner"><b>${esc(ownersLabel(t))}</b></td>
           <td data-label="Termín původní">${dateCz(t.dueOrig)}</td>
           <td data-label="Posuny" class="ycol">${mc?(t.moves||[]).map(m=>dateCz(m.date)).join('<br>'):'<span class="muted">—</span>'}</td>
           <td data-label="Platný termín" class="gcol"><b${late?' style="color:var(--red)"':''}>${dateCz(dv)}</b></td>
@@ -1840,10 +1864,17 @@ function taskModal(){
       <div class="f span4"><label>3 · Očekávaný výstup – důkaz</label>
         <textarea id="tk-output" rows="4" placeholder="Podle čeho poznáme, že je to hotové">${esc(t.output||'')}</textarea></div>
 
-      <div class="f span2"><label>4 · Owner <span style="color:var(--red)">*</span></label>
-        <input id="tk-owner" list="tk-owners" value="${esc(t.owner||'')}" placeholder="Kdo za to odpovídá">
-        <datalist id="tk-owners">${[...new Set(tasks.map(x=>x.owner).concat(engcfg.engineers||[], engcfg.coordinators||[]))].filter(Boolean)
-          .map(o=>`<option>${esc(o)}</option>`).join('')}</datalist></div>
+      <div class="f span2"><label>4 · Owner <span style="color:var(--red)">*</span> <span class="muted" style="font-weight:400">— může jich být víc</span></label>
+        ${(function(){
+          const sel=taskOwners(t), all=ownerChoices(sel);
+          return `<div class="ownerbox">
+            <div class="ochips">${sel.length?sel.map(o=>`<span class="ochip">${esc(o)}</span>`).join('')
+              :'<span class="muted" style="font-size:12px">Nikdo zatím není vybraný</span>'}</div>
+            <div class="olist">${all.length?all.map(o=>`<label class="check"><input type="checkbox" data-own="${esc(o)}" ${sel.includes(o)?'checked':''}> ${esc(o)}</label>`).join('')
+              :'<span class="muted" style="font-size:12px">Zatím tu nikdo není — lidi přidáš v Nastavení minima.</span>'}</div>
+          </div>`;
+        })()}
+        <div class="muted" style="font-size:11px">Seznam se bere z uživatelů v Nastavení celého minima.</div></div>
       <div class="f"><label>5 · Termín původní <span style="color:var(--red)">*</span></label>
         <input id="tk-due" type="date" value="${esc(t.dueOrig||'')}"></div>
       <div class="f"><label>Stav</label>
@@ -1908,7 +1939,7 @@ function exportTasksCsv(){
     'Termín původní','Posun 1','Posun 2','Posun 3','Platný termín','Posunů','Stav','Po termínu (dní)','Uzavřeno'];
   const csv=[line(head)].concat(rows.map(t=>{
     const m=(t.moves||[]).map(x=>x.date);
-    return line([t.no,t.area,t.type,t.createdOn,t.createdBy,t.task,t.output,t.owner,t.dueOrig,
+    return line([t.no,t.area,t.type,t.createdOn,t.createdBy,t.task,t.output,ownersLabel(t),t.dueOrig,
       m[0]||'',m[1]||'',m[2]||'',dueValid(t),moveCount(t),t.status,taskLate(t)?lateDays(t):'',t.closedOn||'']);
   })).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
@@ -2323,6 +2354,11 @@ function bind(){
   });
   const th=document.getElementById('tk-hide');
   if(th) th.onchange=()=>{ tHideClosed=th.checked; render(); };
+  document.querySelectorAll('[data-own]').forEach(c=>{
+    c.onchange=()=>{ collectTask(); render(); };
+  });
+  const tka=document.getElementById('tk-area');
+  if(tka) tka.onchange=()=>{ collectTask(); render(); };   // ať nápověda ukazuje správnou předponu čísla
   const tfi=document.getElementById('tk-file');
   if(tfi) tfi.onchange=()=>{ if(tfi.files&&tfi.files.length) handleTaskFiles(tfi.files); };
   const tdz=document.getElementById('tk-drop');

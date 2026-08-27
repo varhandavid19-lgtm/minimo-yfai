@@ -101,7 +101,13 @@ spouští problem solving na úrovni Process Engineera.
 Tabulka tasků přesně podle sloupců, které chce vedení: číslo, oblast, typ, zadáno,
 zadal, task, očekávaný výstup–důkaz, owner, termín původní, posuny, platný termín,
 počet posunů, stav, po termínu, uzavřeno.
-- Číslo je `PREFIX-XXX` podle oblasti (ENG, LOG, PRD, QUA, CI, LAU) — čítače
+- Oblast je linka nebo proces (IMM, Assembly MFA2, Assembly SK336/PO455/W206,
+  Assembly OV51/64, Assembly MBEAM, Slush, Foaming, GB/DP, Gclass).
+- Owner může být víc lidí — pole `owners`. Jména se berou z kolekce `users`,
+  tedy z Nastavení celého minima. Starší tasky s jedním jménem v poli `owner`
+  se pořád zobrazí správně (`taskOwners()`).
+- Číslo je `PREFIX-XXX` podle oblasti (IMM, MFA2, SK336, OV51, MBEAM, SLUSH,
+  FOAM, GBDP, GCLS) — čítače
   `seqTask<PREFIX>` v `meta/engcfg`, generují se TRANSAKCÍ.
 - Platný termín, počet posunů a „po termínu" se NIKDY neukládají, počítají se
   z `dueOrig` a pole `moves`. Nepřidávej je do dokumentu.
@@ -129,12 +135,17 @@ počet posunů, stav, po termínu, uzavřeno.
 - Podbarvení řádků tabulky podle stavu (nový = bílý). Neruš bez vyžádání.
 
 ## Pracovní postup
-- Po každé úpravě založ pull request s krátkým českým popisem, co a proč se mění.
-- V PR napiš, na co si mám dát po sloučení pozor (a že web naběhne za 1–2 min,
-  a ať dám Ctrl+F5).
-- Když měníš datový model nebo role, uprav i `firestore.rules` a v PR mě upozorni,
-  že je musím RUČNĚ publikovat ve Firebase konzoli (Firestore → Rules → Publish).
-  Do Firebase konzole nevidíš, publikaci musí udělat člověk.
+- **Změny commituj rovnou do `main` a pushni.** Nezakládej pull request a nenech
+  mě nic mergovat — web se z `main` sám vystaví za 1–2 minuty. PR dělej jen tehdy,
+  když si o něj výslovně řeknu, nebo když jde o riskantní zásah, který chci
+  vidět předem.
+- Po pushnutí napiš česky, co se změnilo a na co si dát pozor (a ať dám Ctrl+F5).
+- **Než pushneš, změnu vyzkoušej.** Na to je v repozitáři testovací postroj
+  s falešným Firebase (Playwright) — proklikej celý průchod, ne jen syntaxi.
+- Když měníš datový model nebo role, uprav i `firestore.rules` (a `storage.rules`,
+  když jde o přílohy) a **pošli mi text pravidel do chatu** s tím, že je musím
+  RUČNĚ publikovat ve Firebase konzoli. Do konzole nevidíš, publikaci dělá člověk.
+  Firestore → Rules a Storage → Rules jsou dvě různá místa.
 - Nikdy neměň víc věcí najednou, než o kolik jsem požádal. Drobné, přehledné změny.
 
 ## Když si nejsi jistý
