@@ -104,6 +104,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // --- Engineering: akční plán managementu ---
+    // Tasky vidí každý přihlášený, zakládá a upravuje je správce.
+    match /tasks/{id} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+
     // Záznam v historii importů jde jen založit, ne měnit ani mazat.
     match /dt_imports/{id} {
       allow read:   if signedIn();

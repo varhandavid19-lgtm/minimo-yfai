@@ -59,6 +59,7 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   a jejich měsíční souhrny
 - kolekce `problems` a `actions` — problem solving (5× Proč, kořenová příčina,
   ověření účinnosti) a opatření k nim (corrective / preventive, owner, termín)
+- kolekce `tasks` — akční plán managementu (tasky s posuny termínů a přílohami)
 - dokument `meta/engcfg` — nastavení standardu řízení výkonu a čítače čísel
 - Úrovně uživatelů: `basic`, `warehouse`, `approver`, `wadmin`, `superadmin`,
   s můstkem na staré role (`zadavatel`, `skladnik`, `schvalovatel`, `admin`).
@@ -95,6 +96,22 @@ spouští problem solving na úrovni Process Engineera.
 - Corrective a preventive opatření se rozlišují polem `type` — nemíchej je.
 - Rozepsané hodnoty v okně problému se před každým překreslením přenesou do
   paměti funkcí `collectPs()`. Bez toho by se text ztratil při odmítnutém uložení.
+
+## Akční plán managementu (záložka Akční plán)
+Tabulka tasků přesně podle sloupců, které chce vedení: číslo, oblast, typ, zadáno,
+zadal, task, očekávaný výstup–důkaz, owner, termín původní, posuny, platný termín,
+počet posunů, stav, po termínu, uzavřeno.
+- Číslo je `PREFIX-XXX` podle oblasti (ENG, LOG, PRD, QUA, CI, LAU) — čítače
+  `seqTask<PREFIX>` v `meta/engcfg`, generují se TRANSAKCÍ.
+- Platný termín, počet posunů a „po termínu" se NIKDY neukládají, počítají se
+  z `dueOrig` a pole `moves`. Nepřidávej je do dokumentu.
+- Posun termínu jde uložit jen s důvodem — každý posun má datum, důvod, kdo a kdy.
+- Barvy drží legendu z Excelu: bílé vyplňuje uživatel, žluté jsou posuny,
+  šedé se dopočítají.
+- Přílohy jdou do Firebase Storage pod `tasky/<idTasku>/…`, stejně jako nákup
+  ukládá do `nabidky/<idPožadavku>/…`. Limit 5 MB na soubor.
+- Rozepsané hodnoty v okně se před překreslením ukládají do paměti
+  (`collectTask()`, `moveDraft`) — bez toho by se text ztratil při odmítnutém uložení.
 
 ## Chování, které se NESMÍ rozbít
 - KAŽDÝ nově založený požadavek má VŽDY stav „nový", pro všechny role bez výjimky
