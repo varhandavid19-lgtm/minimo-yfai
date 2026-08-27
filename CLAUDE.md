@@ -55,6 +55,11 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   jen tyhle malé dokumenty, ne jednotlivé prostoje — jinak by aplikace prožrala
   bezplatný limit čtení ve Firestore. Souhrn se po importu vždy přepočítá z databáze.
 - kolekce `dt_imports` — historie importů (kdo, kdy, jaký soubor, kolik řádků)
+- kolekce `scrap` a `sc_months` — zmetky v eurech proti tržbám (projekt × linka)
+  a jejich měsíční souhrny
+- kolekce `problems` a `actions` — problem solving (5× Proč, kořenová příčina,
+  ověření účinnosti) a opatření k nim (corrective / preventive, owner, termín)
+- dokument `meta/engcfg` — nastavení standardu řízení výkonu a čítače čísel
 - Úrovně uživatelů: `basic`, `warehouse`, `approver`, `wadmin`, `superadmin`,
   s můstkem na staré role (`zadavatel`, `skladnik`, `schvalovatel`, `admin`).
   Práva jsou v kódu a SOUČASNĚ vynucená bezpečnostními pravidly Firestore
@@ -74,6 +79,22 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
 - KPI: prostoje po linkách, changeover time, podíl nezařazených prostojů.
   Scrap a cycle time čekají na odpovídající report ze Symesticu — dlaždice pro ně
   v přehledu už jsou a hlásí, že data zatím nejsou.
+
+## Řízení výkonu linek (záložka Řízení v modulu Engineering)
+Standard vyžádaný vedením: týdenní výkon linky pod prahem (výchozí 90 %) povinně
+spouští problem solving na úrovni Process Engineera.
+- Výkon = (plánovaný čas − prostoje) ÷ plánovaný čas. Plánovaný čas je
+  `plannedHoursPerDay` × počet dní, ze kterých máme data — proto neúplný týden
+  povinnou analýzu automaticky nespouští (`w.dayCount >= 5`).
+- Nastavení standardu je v dokumentu `meta/engcfg` (práh, opakování, eskalace,
+  ověření účinnosti, ownery, vyloučené skupiny důvodů). Tam jsou i čítače
+  `seqPs` a `seqAct` pro čísla PS-rok-XXX a AK-rok-XXX — generují se TRANSAKCÍ.
+- Problém nelze uzavřít, dokud nemá kořenovou příčinu, aspoň jedno preventivní
+  opatření, všechna opatření hotová a vyplněné ověření účinnosti. Tohle je jádro
+  zadání, NERUŠ to.
+- Corrective a preventive opatření se rozlišují polem `type` — nemíchej je.
+- Rozepsané hodnoty v okně problému se před každým překreslením přenesou do
+  paměti funkcí `collectPs()`. Bez toho by se text ztratil při odmítnutém uložení.
 
 ## Chování, které se NESMÍ rozbít
 - KAŽDÝ nově založený požadavek má VŽDY stav „nový", pro všechny role bez výjimky

@@ -89,6 +89,21 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // --- Engineering: řízení výkonu (problem solving a opatření) ---
+    // Nastavení standardu (práh výkonu, ownery, čítače čísel PS a AK).
+    match /meta/engcfg {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+    match /problems/{id} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+    match /actions/{id} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+
     // Záznam v historii importů jde jen založit, ne měnit ani mazat.
     match /dt_imports/{id} {
       allow read:   if signedIn();

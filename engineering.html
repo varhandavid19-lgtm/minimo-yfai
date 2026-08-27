@@ -84,6 +84,41 @@
   .steps li.on{background:var(--teal-bg);color:var(--teal-dark);font-weight:700;border-color:#bfdedd}
   .steps li.on b{background:var(--teal);color:#fff}
   .steps li.done b{background:var(--green);color:#fff}
+  /* ===== Řízení výkonu — okno problem solvingu ===== */
+  .btn-danger{background:var(--red);color:#fff;font-weight:700}
+  label.check{display:inline-flex;gap:7px;align-items:center;font-size:12.5px;color:#41506b;white-space:nowrap;cursor:pointer;font-weight:600}
+  label.check input{width:16px;height:16px;min-width:0;margin:0;flex:none}
+  .overlay{position:fixed;inset:0;background:rgba(12,26,48,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto;z-index:60}
+  .modal{background:#fff;border-radius:10px;width:100%;max-width:1060px;margin:auto;box-shadow:0 18px 50px rgba(0,0,0,.3)}
+  .modal h3{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:14px 18px;font-size:16px;
+    border-radius:10px 10px 0 0;display:flex;align-items:center;gap:10px}
+  .modal h3 .x{margin-left:auto;background:transparent;border:0;color:#fff;font-size:20px;line-height:1;padding:0 4px}
+  .robar{padding:9px 16px;background:#eef1f5;border-bottom:1px solid var(--line);font-size:12px;color:#41506b;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .form{padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .f{display:flex;flex-direction:column;gap:4px}
+  .f label{font-size:12.5px;font-weight:700;color:#41506b}
+  .f .ro{background:#fafbfd;border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;min-height:35px}
+  .f.span2{grid-column:span 2}.f.span3{grid-column:span 3}.f.span4{grid-column:span 4}
+  .sect{grid-column:span 4;font-size:11px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--teal-dark);
+    border-bottom:2px solid var(--teal-bg);padding-bottom:5px;margin-top:6px}
+  .why{grid-column:span 4;display:flex;flex-direction:column;gap:8px}
+  .why .row{display:flex;gap:10px;align-items:center}
+  .why .n{flex:none;width:74px;font-size:11px;font-weight:800;color:#fff;background:var(--teal);border-radius:4px;padding:7px 8px;text-align:center}
+  .why .n.root{background:var(--red)}
+  .why .t{flex:1}
+  .addrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .addrow input,.addrow select{width:auto;min-width:130px}
+  .addrow input#na-text{flex:1;min-width:220px}
+  .hist{padding:0 18px 14px;font-size:11px;color:var(--muted)}
+  .hist div{padding:3px 0;border-top:1px dotted var(--line)}
+  @media(max-width:900px){.form{grid-template-columns:repeat(2,1fr)}.f.span3,.f.span4,.sect,.why{grid-column:span 2}}
+  @media(max-width:680px){
+    .form{grid-template-columns:1fr;padding:14px}
+    .f.span2,.f.span3,.f.span4,.sect,.why{grid-column:span 1}
+    .overlay{padding:8px}
+    .why .row{flex-wrap:wrap}.why .n{width:100%}
+    .addrow input,.addrow select,.addrow button{width:100%}
+  }
   .kindpick{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-bottom:14px}
   .kind{display:flex;align-items:center;gap:11px;text-align:left;background:#fff;border:1px solid var(--line);
     border-radius:10px;padding:13px 15px;font-size:13px;color:var(--text)}
@@ -143,8 +178,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
-  query, where, orderBy, limit, writeBatch }
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc,
+  query, where, orderBy, limit, writeBatch, runTransaction }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
 /* Společný Firebase projekt pro celý portál. Veřejné frontendové klíče —
@@ -429,11 +464,132 @@ const monthCz = m => {
 };
 const monthShort = m => { const p=String(m||'').split('-'); return p.length===2 ? (+p[1])+'/'+p[0].slice(2) : (m||''); };
 
+
+/* ==========================================================
+   ŘÍZENÍ VÝKONU LINEK — standard podle zadání vedení
+   Týdenní výkon linky pod prahem (výchozí 90 %) automaticky zakládá
+   povinný problem solving na úrovni Process Engineera.
+   Drží se pořadí: analýza (5× Proč) → opatření s ownerem a termínem
+   → ověření účinnosti → teprve pak lze problém uzavřít.
+   ========================================================== */
+
+const ENGCFG_DEF = {
+  plannedHoursPerDay: 22.5,   // plánovaný výrobní čas na linku a den (3 směny po 7,5 h)
+  perLine: {},                // výjimky: slug linky -> hodin/den
+  threshold: 90,              // výkon pod tímhle % spouští problem solving
+  repeatWeeks: 2,             // tolik týdnů po sobě pod prahem = opakovaný problém
+  escalationDays: 7,          // akce po termínu déle než tolik dní = eskalace na manažera
+  effectivenessDays: 28,      // za kolik dní se ověřuje účinnost opatření
+  excludeGroups: [],          // skupiny důvodů, které se do výkonu nepočítají
+  engineers: [],              // Process Engineers (owner technické analýzy)
+  coordinators: [],           // Coordinators (owner follow-upu akcí)
+  manager: ''                 // Engineering Manager (eskalace)
+};
+
+const PS_STATUS = [
+  {k:'nový',       cls:'b-red',   d:'čeká na Process Engineera'},
+  {k:'analýza',    cls:'b-amber', d:'běží 5× Proč / A3'},
+  {k:'opatření',   cls:'b-blue',  d:'opatření se plní'},
+  {k:'ověřování',  cls:'b-teal',  d:'čeká na ověření účinnosti'},
+  {k:'uzavřeno',   cls:'b-green', d:'ověřeno a uzavřeno'}
+];
+const AC_STATUS = [{k:'nová',cls:'b-blue'},{k:'v řešení',cls:'b-amber'},{k:'hotová',cls:'b-green'},{k:'zrušená',cls:'b-grey'}];
+const AC_TYPE = [{k:'corrective',label:'Corrective — odstraní následek'},{k:'preventive',label:'Preventive — zabrání opakování'}];
+const psDef = k => PS_STATUS.find(s=>s.k===k) || PS_STATUS[0];
+
+/* ---------- týdny (ISO) ---------- */
+function isoWeekOf(iso){
+  const [y,m,d]=String(iso).slice(0,10).split('-').map(Number);
+  const t=new Date(Date.UTC(y,m-1,d));
+  const day=t.getUTCDay()||7;
+  t.setUTCDate(t.getUTCDate()+4-day);
+  const ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  const wk=Math.ceil((((t-ys)/86400000)+1)/7);
+  return `${t.getUTCFullYear()}-W${pad2(wk)}`;
+}
+function weekMonday(wk){
+  const [y,w]=String(wk).split('-W').map(Number);
+  const jan4=new Date(Date.UTC(y,0,4));
+  const day=jan4.getUTCDay()||7;
+  const mon=new Date(jan4); mon.setUTCDate(jan4.getUTCDate()-day+1+(w-1)*7);
+  return mon;
+}
+function weekLabel(wk){
+  const mon=weekMonday(wk), sun=new Date(mon); sun.setUTCDate(mon.getUTCDate()+6);
+  const f=d=>d.getUTCDate()+'. '+(d.getUTCMonth()+1)+'.';
+  return `${String(wk).split('-W')[1]}. týden (${f(mon)} – ${f(sun)})`;
+}
+const weekShort = wk => String(wk).split('-W')[1]+'. t.';
+const weekPrev = (wk,n)=>{ const mon=weekMonday(wk); mon.setUTCDate(mon.getUTCDate()-7*(n||1)); return isoWeekOf(mon.toISOString()); };
+
+/* ---------- výkon linek po týdnech ---------- */
+/* Vstup: denní souhrny dt_days. Výstup: {week: {lineSlug: {label, sec, days, planned, perf}}} */
+function weeklyPerf(dayDocs, cfg){
+  const ex = new Set(cfg.excludeGroups||[]);
+  const weeks={};
+  for(const d of dayDocs){
+    const wk=isoWeekOf(d.date);
+    const w = weeks[wk] || (weeks[wk]={week:wk, days:new Set(), lines:{}, sec:0, groups:{}, reasons:{}});
+    w.days.add(d.date);
+    for(const [k,v] of Object.entries(d.groups||{})){
+      const g=w.groups[k]||(w.groups[k]={label:v.label||k,sec:0,cnt:0});
+      g.sec+=v.sec||0; g.cnt+=v.cnt||0;
+    }
+    for(const [k,v] of Object.entries(d.reasons||{})){
+      const r=w.reasons[k]||(w.reasons[k]={label:v.label||k,sec:0,cnt:0});
+      r.sec+=v.sec||0; r.cnt+=v.cnt||0;
+    }
+    for(const [k,v] of Object.entries(d.segs||{})){
+      const l=w.lines[k]||(w.lines[k]={slug:k, label:v.label||k, sec:0, cnt:0, days:new Set()});
+      l.sec+=v.sec||0; l.cnt+=v.cnt||0; l.days.add(d.date);
+      w.sec+=v.sec||0;
+    }
+  }
+  /* Vyloučené skupiny se odečtou poměrně — v denním souhrnu není rozpad skupina×linka. */
+  for(const w of Object.values(weeks)){
+    let exSec=0;
+    for(const [k,v] of Object.entries(w.groups)) if(ex.has(v.label)) exSec+=v.sec;
+    const ratio = w.sec>0 ? Math.max(0,(w.sec-exSec)/w.sec) : 1;
+    w.dayCount=w.days.size;
+    for(const l of Object.values(w.lines)){
+      l.dayCount=l.days.size;
+      l.countedSec = l.sec*ratio;
+      const hpd = (cfg.perLine&&cfg.perLine[l.slug]!=null) ? Number(cfg.perLine[l.slug]) : Number(cfg.plannedHoursPerDay)||0;
+      l.planned = hpd*3600*w.dayCount;               // plánujeme jen za dny, ze kterých máme data
+      l.perf = l.planned>0 ? Math.max(0, (l.planned-l.countedSec)/l.planned*100) : null;
+      delete l.days;
+    }
+    delete w.days;
+  }
+  return weeks;
+}
+const sortedWeeks = obj => Object.keys(obj).sort();
+const dnu = n => n+' '+(n===1?'den':(n>=2&&n<=4?'dny':'dní'));
+
+/* Linky, které v daném týdnu spadly pod práh — a jak dlouho po sobě */
+function underThreshold(weeks, wk, cfg){
+  const w=weeks[wk]; if(!w) return [];
+  const out=[];
+  for(const l of Object.values(w.lines)){
+    if(l.perf==null || l.perf>=cfg.threshold) continue;
+    let streak=1;
+    for(let i=1;i<8;i++){
+      const pw=weeks[weekPrev(wk,i)];
+      const pl=pw && pw.lines[l.slug];
+      if(pl && pl.perf!=null && pl.perf<cfg.threshold) streak++; else break;
+    }
+    out.push(Object.assign({}, l, {streak, repeated: streak>=(cfg.repeatWeeks||2)}));
+  }
+  return out.sort((a,b)=>a.perf-b.perf);
+}
+
 /* ===== stav stránky ===== */
 let me=null, loginBusy=false, loginErr='';
 let engTab='dash';
 let days=[], events=[], history=[];
 let scMonths=[], scLoaded=false;
+let mgDays=[], problems=[], actions=[], engcfg=Object.assign({},ENGCFG_DEF);
+let mgLoaded=false, mgWeek='', openPs=null, psMsg='', mgOwner='', mgOnlyOpen=true;
 let range=7, loaded=false, busy='', errMsg='';
 let evLoaded='', evMore=false;
 let f={seg:'',group:'',shift:'',q:''};
@@ -627,7 +783,7 @@ async function runImportDt(){
       at:new Date().toISOString(), by:me.uid, byName:me.name});
     imp.done={rows:list.length, days:dates.length, from:dates[0], to:dates[dates.length-1]};
     imp.step=3; imp.prog='';
-    loaded=false; evLoaded='';
+    loaded=false; evLoaded=''; mgLoaded=false;     // řízení se přepočítá z čerstvých dat
     await loadDays(true);
     toast('Import hotový — '+list.length.toLocaleString('cs-CZ')+' prostojů.','ok');
   }catch(e){ imp.prog=''; imp.err=ruleHint(e); render(); }
@@ -814,6 +970,506 @@ function scrapTrend(){
   }).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Vývoj scrapu po měsících">${g}${bb}
     <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="#c8d3e0"/></svg>`;
+}
+
+
+/* ---------- načítání dat pro Řízení ---------- */
+async function loadMgmt(force){
+  if(mgLoaded && !force) return;
+  busy='Načítám data pro řízení…'; render();
+  try{
+    const from=dateFrom(84);
+    const qs = await getDocs(query(collection(db,'dt_days'), where('date','>=',from), orderBy('date','desc')));
+    mgDays = qs.docs.map(d=>Object.assign({date:d.id}, d.data()));
+    const cs = await getDoc(doc(db,'meta','engcfg'));
+    engcfg = Object.assign({}, ENGCFG_DEF, cs.exists()?cs.data():{});
+    const ps = await getDocs(query(collection(db,'problems'), orderBy('opened','desc'), limit(200)));
+    problems = ps.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    const ac = await getDocs(query(collection(db,'actions'), orderBy('due','asc'), limit(500)));
+    actions = ac.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    mgLoaded=true;
+  }catch(e){ errMsg=ruleHint(e); }
+  busy=''; render();
+}
+async function saveEngcfg(patch){
+  engcfg=Object.assign({}, engcfg, patch);
+  try{ await setDoc(doc(db,'meta','engcfg'), engcfg, {merge:true}); toast('Nastavení uloženo.','ok'); }
+  catch(e){ toast('Nastavení se neuložilo: '+((e&&e.message)||e),'err'); }
+}
+async function nextNo(field, prefix){
+  const ref=doc(db,'meta','engcfg');
+  const year=new Date().getFullYear();
+  const n=await runTransaction(db, async tx=>{
+    const s=await tx.get(ref);
+    const cur=(((s.data()||{})[field])||0)+1;
+    const patch={}; patch[field]=cur;
+    if(s.exists()) tx.update(ref,patch); else tx.set(ref, Object.assign({}, ENGCFG_DEF, patch));
+    return cur;
+  });
+  return `${prefix}-${year}-${String(n).padStart(3,'0')}`;
+}
+
+/* ---------- pomocné nad problémy a akcemi ---------- */
+const actsOf = pid => actions.filter(a=>a.problemId===pid);
+const openActs = list => list.filter(a=>a.status!=='hotová' && a.status!=='zrušená');
+const isOverdue = a => a.status!=='hotová' && a.status!=='zrušená' && a.due && a.due < today();
+const overdueDays = a => isOverdue(a) ? Math.floor((Date.parse(today())-Date.parse(a.due))/86400000) : 0;
+const problemFor = (wk,slug) => problems.find(p=>p.week===wk && p.lineSlug===slug);
+function needsEscalation(p){
+  if(p.status==='uzavřeno') return false;
+  const worst=Math.max(0,...actsOf(p._id).map(overdueDays));
+  return worst > (engcfg.escalationDays||7);
+}
+function canClose(p){
+  const acts=actsOf(p._id);
+  if(!p.rootCause) return 'Nejdřív doplň kořenovou příčinu.';
+  if(!acts.length) return 'Problém nejde uzavřít bez jediného opatření.';
+  if(!acts.some(a=>a.type==='preventive')) return 'Chybí preventivní opatření — bez něj se problém vrátí.';
+  if(openActs(acts).length) return 'Nejdřív dokonči nebo zruš všechna opatření.';
+  if(!p.effResult) return 'Před uzavřením musíš vyplnit ověření účinnosti.';
+  return '';
+}
+
+/* ---------- zakládání a ukládání ---------- */
+async function createProblem(wk, line, trigger){
+  try{
+    const no=await nextNo('seqPs','PS');
+    const eff=new Date(); eff.setDate(eff.getDate()+(engcfg.effectivenessDays||28));
+    const rec={no, week:wk, line:line.label, lineSlug:line.slug,
+      title:`${line.label} — výkon ${num(line.perf,1)} % v ${weekShort(wk)}`,
+      trigger: trigger||'výkon pod prahem', status:'nový',
+      owner:(engcfg.engineers||[])[0]||'', coordinator:(engcfg.coordinators||[])[0]||'',
+      opened:today(), downtimeSec:Math.round(line.sec||0), perf:line.perf==null?null:+line.perf.toFixed(1),
+      immediate:'', whys:['','','','',''], rootCause:'',
+      effCheckDue:eff.toISOString().slice(0,10), effResult:'', escalated:false,
+      hist:[`${today()} · ${me.name} · problém založen (${trigger||'výkon pod prahem'})`]};
+    const ref=await addDoc(collection(db,'problems'), rec);
+    problems.unshift(Object.assign({_id:ref.id}, rec));
+    openPs=ref.id; render();
+    toast('Založeno '+no+'.','ok');
+  }catch(e){ toast('Nepovedlo se založit: '+((e&&e.message)||e),'err'); }
+}
+/* Přenese rozepsané hodnoty z okna do paměti, aby se při překreslení neztratily. */
+function collectPs(){
+  const p=problems.find(x=>x._id===openPs); if(!p) return null;
+  const el=document.getElementById('ps-root'); if(!el) return p;   // okno není vykreslené
+  const g=id=>{const e=document.getElementById(id); return e?e.value.trim():'';};
+  Object.assign(p,{
+    owner:g('ps-owner'), coordinator:g('ps-coord'),
+    immediate:g('ps-immediate'), rootCause:g('ps-root'),
+    whys:[0,1,2,3,4].map(i=>g('ps-why'+i)),
+    effCheckDue:g('ps-effdue'), effResult:g('ps-effres'),
+    status:g('ps-status')||p.status
+  });
+  return p;
+}
+async function saveProblem(){
+  const p=collectPs(); if(!p) return;
+  const next={
+    owner:p.owner, coordinator:p.coordinator,
+    immediate:p.immediate, rootCause:p.rootCause, whys:p.whys,
+    effCheckDue:p.effCheckDue, effResult:p.effResult, status:p.status
+  };
+  if(next.status==='uzavřeno'){
+    const why=canCloseWith(p);
+    if(why){ psMsg=why; render(); return; }
+    next.closedAt=today();
+  }
+  const hist=(p.hist||[]).slice();
+  hist.push(`${today()} · ${me.name} · ${next.status==='uzavřeno'?'problém uzavřen':'upraveno'}`);
+  next.hist=hist;
+  try{
+    await updateDoc(doc(db,'problems',p._id), next);
+    Object.assign(p,next); psMsg=''; openPs=null;
+    toast('Uloženo.','ok');
+  }catch(e){ psMsg='Uložení selhalo: '+((e&&e.message)||e); render(); }
+}
+function canCloseWith(p){
+  const acts=actsOf(p._id);
+  if(!p.rootCause) return 'Bez kořenové příčiny problém uzavřít nejde.';
+  if(!acts.length) return 'Problém nejde uzavřít bez jediného opatření.';
+  if(!acts.some(a=>a.type==='preventive')) return 'Chybí preventivní opatření (preventive) — bez něj se problém vrátí.';
+  if(openActs(acts).length) return 'Nejdřív dokonči nebo zruš všechna opatření.';
+  if(!p.effResult) return 'Před uzavřením vyplň ověření účinnosti.';
+  return '';
+}
+async function addAction(){
+  const p=collectPs(); if(!p) return;
+  const g=id=>{const el=document.getElementById(id); return el?el.value.trim():'';};
+  const text=g('na-text');
+  if(!text){ psMsg='Napiš, co se má udělat.'; render(); return; }
+  const owner=g('na-owner'), due=g('na-due'), type=g('na-type')||'corrective';
+  if(!owner || !due){ psMsg='Každé opatření musí mít ownera a termín.'; render(); return; }
+  try{
+    const no=await nextNo('seqAct','AK');
+    const rec={no, problemId:p._id, problemNo:p.no, line:p.line, text, type, owner, due,
+      status:'nová', created:today(), createdBy:me.name,
+      hist:[`${today()} · ${me.name} · opatření založeno`]};
+    const ref=await addDoc(collection(db,'actions'), rec);
+    actions.push(Object.assign({_id:ref.id}, rec));
+    psMsg='';
+    if(p.status==='nový'||p.status==='analýza'){
+      await updateDoc(doc(db,'problems',p._id),{status:'opatření'}); p.status='opatření';
+    }
+    render();
+  }catch(e){ psMsg='Opatření se neuložilo: '+((e&&e.message)||e); render(); }
+}
+async function setActionStatus(id, st){
+  const a=actions.find(x=>x._id===id); if(!a) return;
+  if(openPs) collectPs();
+  const patch={status:st, hist:(a.hist||[]).concat(`${today()} · ${me.name} · stav ${a.status} → ${st}`)};
+  if(st==='hotová') patch.closedAt=today();
+  try{ await updateDoc(doc(db,'actions',id), patch); Object.assign(a,patch);
+    const p=problems.find(x=>x._id===a.problemId);
+    if(p && p.status==='opatření' && !openActs(actsOf(p._id)).length){
+      await updateDoc(doc(db,'problems',p._id),{status:'ověřování'}); p.status='ověřování';
+      toast('Všechna opatření hotová — '+p.no+' čeká na ověření účinnosti.','ok');
+    }
+    render();
+  }catch(e){ toast('Změna se neuložila: '+((e&&e.message)||e),'err'); }
+}
+async function toggleEscalation(id){
+  if(openPs) collectPs();
+  const p=problems.find(x=>x._id===id); if(!p) return;
+  const v=!p.escalated;
+  const h=(p.hist||[]).concat(`${today()} · ${me.name} · ${v?'eskalováno na Engineering Managera':'eskalace zrušena'}`);
+  try{ await updateDoc(doc(db,'problems',id),{escalated:v, hist:h}); p.escalated=v; p.hist=h; render(); }
+  catch(e){ toast(((e&&e.message)||e),'err'); }
+}
+
+/* ---------- obrazovka Řízení ---------- */
+function mgmtView(){
+  if(!mgDays.length){
+    return `<div class="panel"><div class="body" style="text-align:center;padding:32px 18px">
+      <div style="font-size:34px">🎯</div>
+      <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím není z čeho řídit</div>
+      <p class="muted" style="max-width:540px;margin:0 auto 14px">Nahraj prostoje ze Symesticu a tahle stránka sama spočítá
+        týdenní výkon linek, označí ty pod ${engcfg.threshold} % a založí k nim povinný problem solving.</p>
+      ${canImport()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
+    </div></div>`;
+  }
+  const weeks=weeklyPerf(mgDays, engcfg);
+  const wks=sortedWeeks(weeks);
+  const cur=mgWeek && weeks[mgWeek] ? mgWeek : wks[wks.length-1];
+  const w=weeks[cur], prevW=weeks[weekPrev(cur,1)];
+  const lines=Object.values(w.lines).sort((a,b)=>(a.perf??999)-(b.perf??999));
+  const complete = w.dayCount>=5;                 // standard mluví o TÝDENNÍM výkonu
+  const under=underThreshold(weeks,cur,engcfg);
+  const avg=lines.filter(l=>l.perf!=null).reduce((a,l,_,arr)=>a+l.perf/arr.length,0);
+  const openPs2=problems.filter(p=>p.status!=='uzavřeno');
+  const waiting=problems.filter(p=>p.status==='ověřování');
+  const od=actions.filter(isOverdue);
+  const toEscalate=openPs2.filter(p=>p.escalated||needsEscalation(p));
+  const missing=complete ? under.filter(l=>!problemFor(cur,l.slug)) : [];
+
+  return `
+  <div class="tabs" style="margin-bottom:10px">
+    <span class="muted" style="font-size:12px">Týden:</span>
+    ${wks.slice(-8).map(k=>`<button class="rangebtn ${k===cur?'on':''}" data-a="mg-week" data-v="${k}">${weekShort(k)}</button>`).join('')}
+    <span class="muted" style="font-size:11.5px;margin-left:6px">${weekLabel(cur)} · ${dnu(w.dayCount)} dat</span>
+  </div>
+
+  <div class="cards">
+    <div class="kcard" style="border-left-color:${avg>=engcfg.threshold?'#1f9254':'#c0392b'}">
+      <div class="lbl">Průměrný výkon linek</div>
+      <div class="val">${num(avg,1)}<small> %</small></div>
+      <div class="note">práh ${engcfg.threshold} % · ${lines.length} linek</div>
+    </div>
+    <div class="kcard" style="border-left-color:${under.length?'#c0392b':'#1f9254'}">
+      <div class="lbl">Linky pod prahem</div>
+      <div class="val">${under.length}</div>
+      <div class="note">${under.filter(l=>l.repeated).length} opakovaně · ${missing.length} bez analýzy</div>
+    </div>
+    <div class="kcard" style="border-left-color:#b7791f">
+      <div class="lbl">Otevřené problémy</div>
+      <div class="val">${openPs2.length}</div>
+      <div class="note">${waiting.length} čeká na ověření účinnosti</div>
+    </div>
+    <div class="kcard" style="border-left-color:${od.length?'#c0392b':'#1f9254'}">
+      <div class="lbl">Opatření po termínu</div>
+      <div class="val">${od.length}</div>
+      <div class="note">z ${openActs(actions).length} otevřených</div>
+    </div>
+    <div class="kcard" style="border-left-color:${toEscalate.length?'#c0392b':'#6b7a90'}">
+      <div class="lbl">K eskalaci</div>
+      <div class="val">${toEscalate.length}</div>
+      <div class="note">po termínu déle než ${engcfg.escalationDays} dní</div>
+    </div>
+  </div>
+
+  ${!complete?`<div class="notice">Tenhle týden má zatím jen ${dnu(w.dayCount)} dat, takže se ještě nedá brát jako <b>týdenní</b> výkon.
+    Povinný problem solving se u něj automaticky nevyžaduje — založit ho ale samozřejmě můžeš.</div>`:''}
+  ${missing.length?`<div class="notice warn" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <b>Standard vyžaduje analýzu:</b>
+    <span>${missing.length} ${missing.length===1?'linka je':'linek je'} v ${weekShort(cur)} pod ${engcfg.threshold} % a nemá založený problem solving.</span>
+    <button class="btn-danger" style="margin-left:auto" data-a="mg-createall" data-v="${cur}">Založit pro všechny</button>
+  </div>`:''}
+
+  <div class="panel">
+    <h2>Týdenní výkon linek<span class="right">výkon = (plánovaný čas − prostoje) ÷ plánovaný čas</span></h2>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Linka</th><th>Výkon</th><th>Minulý týden</th><th>Změna</th><th>Prostoje</th><th>Dní dat</th><th>Problem solving</th></tr></thead>
+      <tbody>${lines.map(l=>{
+        const pv=prevW&&prevW.lines[l.slug];
+        const d=(l.perf!=null&&pv&&pv.perf!=null)?l.perf-pv.perf:null;
+        const low=l.perf!=null&&l.perf<engcfg.threshold;
+        const u=under.find(x=>x.slug===l.slug);
+        const p=problemFor(cur,l.slug);
+        return `<tr class="${low?'long':''}">
+          <td data-label="Linka"><b>${esc(l.label)}</b>${u&&u.repeated?` <span class="badge b-red">opakovaně ${u.streak}×</span>`:''}</td>
+          <td data-label="Výkon" class="num"><b style="color:${low?'var(--red)':'var(--green)'}">${l.perf!=null?num(l.perf,1)+' %':'—'}</b></td>
+          <td data-label="Minulý týden" class="num">${pv&&pv.perf!=null?num(pv.perf,1)+' %':'—'}</td>
+          <td data-label="Změna" class="num">${d==null?'—':`<span style="color:${d>=0?'var(--green)':'var(--red)'};font-weight:700">${d>=0?'▲':'▼'} ${num(Math.abs(d),1)}</span>`}</td>
+          <td data-label="Prostoje" class="num">${fmtDur(l.sec)}</td>
+          <td data-label="Dní dat" class="num">${l.dayCount}</td>
+          <td data-label="Problem solving">${p
+            ? `<button class="btn-ghost" data-a="mg-open" data-v="${p._id}">${p.no} · ${p.status}</button>`
+            : (low?`<button class="btn-danger" data-a="mg-create" data-v="${cur}|${l.slug}">Založit 5× Proč</button>`:'<span class="muted">—</span>')}</td>
+        </tr>`;}).join('')}
+      </tbody></table></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Pareto ztrát<span class="right">${weekShort(cur)} · podle skupiny důvodu</span></h2>
+      <div class="body">${bars(Object.values(w.groups).sort((a,b)=>b.sec-a.sec).map(g=>Object.assign({},g,{color:GROUP_COLOR[g.label]||'#6b7a90'})))}</div>
+    </div>
+    <div class="panel">
+      <h2>Trend výkonu po týdnech<span class="right">průměr přes linky</span></h2>
+      <div class="body">${perfTrend(weeks,wks)}</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Denní ENG review<span class="right">poslední den s daty</span></h2>
+    <div class="body">${dailyReview()}</div>
+  </div>
+
+  <div class="panel">
+    <h2>Otevřené problémy<span class="right">${openPs2.length} · Process Engineer je owner analýzy</span></h2>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Číslo</th><th>Linka / týden</th><th>Stav</th><th>Owner analýzy</th><th>Coordinator</th><th>Opatření</th><th>Nejbližší termín</th><th></th></tr></thead>
+      <tbody>${openPs2.map(p=>{
+        const acts=actsOf(p._id), op=openActs(acts);
+        const nearest=op.map(a=>a.due).filter(Boolean).sort()[0]||'';
+        const late=op.some(isOverdue);
+        return `<tr class="${late?'long':''}">
+          <td data-label="Číslo"><b>${p.no}</b>${(p.escalated||needsEscalation(p))?' <span class="badge b-red">eskalace</span>':''}</td>
+          <td data-label="Linka" class="desc">${esc(p.line)} · ${weekShort(p.week)}${p.trigger==='opakovaný problém'?' <span class="badge b-amber">opakovaný</span>':''}</td>
+          <td data-label="Stav"><span class="badge ${psDef(p.status).cls}">${p.status}</span></td>
+          <td data-label="Owner">${esc(p.owner||'—')}</td>
+          <td data-label="Coordinator">${esc(p.coordinator||'—')}</td>
+          <td data-label="Opatření">${acts.length-op.length}/${acts.length} hotovo</td>
+          <td data-label="Termín">${nearest?(late?`<b style="color:var(--red)">${dayCz(nearest)}</b>`:dayCz(nearest)):'—'}</td>
+          <td data-label=""><button class="btn-ghost" data-a="mg-open" data-v="${p._id}">Otevřít</button></td>
+        </tr>`;}).join('') || `<tr><td colspan="8" class="empty">Žádný otevřený problém.</td></tr>`}
+      </tbody></table></div>
+  </div>
+
+  <div class="panel">
+    <h2>Follow-up opatření<span class="right">owner follow-upu je Coordinator</span></h2>
+    <div class="filters">
+      <select id="mg-owner"><option value="">Všichni řešitelé</option>${
+        [...new Set(actions.map(a=>a.owner))].filter(Boolean).sort().map(o=>`<option ${mgOwner===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
+      <label class="check"><input type="checkbox" id="mg-onlyopen" ${mgOnlyOpen?'checked':''}> jen otevřená</label>
+    </div>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Číslo</th><th>Opatření</th><th>Typ</th><th>Problém</th><th>Owner</th><th>Termín</th><th>Stav</th><th></th></tr></thead>
+      <tbody>${actions
+        .filter(a=>!mgOwner||a.owner===mgOwner)
+        .filter(a=>!mgOnlyOpen||openActs([a]).length)
+        .map(a=>`<tr class="${isOverdue(a)?'long':''}">
+          <td data-label="Číslo"><b>${a.no}</b></td>
+          <td data-label="Opatření" class="desc">${esc(a.text)}</td>
+          <td data-label="Typ"><span class="badge ${a.type==='preventive'?'b-teal':'b-grey'}">${a.type==='preventive'?'preventive':'corrective'}</span></td>
+          <td data-label="Problém">${esc(a.problemNo||'')}</td>
+          <td data-label="Owner">${esc(a.owner||'—')}</td>
+          <td data-label="Termín">${isOverdue(a)?`<b style="color:var(--red)">${dayCz(a.due)} (${overdueDays(a)} dní)</b>`:dayCz(a.due)}</td>
+          <td data-label="Stav"><span class="badge ${(AC_STATUS.find(s=>s.k===a.status)||AC_STATUS[0]).cls}">${a.status}</span></td>
+          <td data-label="">${openActs([a]).length?`<button class="btn-ok" style="padding:3px 9px;font-size:11px" data-a="mg-adone" data-v="${a._id}">Hotovo</button>`:'<span class="muted">—</span>'}</td>
+        </tr>`).join('') || `<tr><td colspan="8" class="empty">Žádná opatření.</td></tr>`}
+      </tbody></table></div>
+  </div>
+
+  ${mgmtSettings()}`;
+}
+
+function perfTrend(weeks,wks){
+  const list=wks.slice(-10).map(k=>{
+    const ls=Object.values(weeks[k].lines).filter(l=>l.perf!=null);
+    return {week:k, avg: ls.length? ls.reduce((a,l)=>a+l.perf,0)/ls.length : 0,
+            under: ls.filter(l=>l.perf<engcfg.threshold).length};
+  });
+  if(!list.length) return '';
+  const W=720,H=190,ml=42,mr=10,mt=18,mb=34,iw=W-ml-mr,ih=H-mt-mb;
+  const step=iw/list.length, bw=Math.min(48,step-10);
+  let g='';
+  for(let i=0;i<=4;i++){ const y=mt+ih-ih*i/4;
+    g+=`<line x1="${ml}" y1="${y}" x2="${ml+iw}" y2="${y}" stroke="#eef1f5"/>
+        <text x="${ml-6}" y="${y+3}" text-anchor="end" font-size="10" fill="#6b7a90">${i*25} %</text>`; }
+  const ty=mt+ih-ih*(engcfg.threshold/100);
+  const bb=list.map((d,i)=>{
+    const h=ih*d.avg/100, x=ml+step*i+(step-bw)/2, y=mt+ih-h;
+    const ok=d.avg>=engcfg.threshold;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${Math.max(1,h)}" rx="3" fill="${ok?'#1f9254':'#c0392b'}">
+        <title>${weekLabel(d.week)} — průměr ${num(d.avg,1)} %, ${d.under} linek pod prahem</title></rect>
+      <text x="${x+bw/2}" y="${y-5}" text-anchor="middle" font-size="10" font-weight="700" fill="#16233a">${num(d.avg,0)}</text>
+      <text x="${x+bw/2}" y="${mt+ih+15}" text-anchor="middle" font-size="10" fill="#6b7a90">${weekShort(d.week)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Trend výkonu po týdnech">${g}${bb}
+    <line x1="${ml}" y1="${ty}" x2="${ml+iw}" y2="${ty}" stroke="#b7791f" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <text x="${ml+iw}" y="${ty-5}" text-anchor="end" font-size="10" font-weight="700" fill="#b7791f">práh ${engcfg.threshold} %</text>
+    <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="#c8d3e0"/></svg>`;
+}
+
+function dailyReview(){
+  const d=mgDays.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
+  if(!d) return `<div class="empty">Zatím žádná data.</div>`;
+  const segs=Object.values(d.segs||{}).sort((a,b)=>b.sec-a.sec).slice(0,5);
+  const rs=Object.values(d.reasons||{}).sort((a,b)=>b.sec-a.sec).slice(0,5);
+  const breakdowns=Object.values(d.groups||{}).find(g=>g.label==='Porucha stroje');
+  const todayActs=openActs(actions).filter(a=>a.due && a.due<=today()).slice(0,6);
+  const fresh=problems.filter(p=>p.status!=='uzavřeno' && p.immediate).slice(0,4);
+  return `
+  <div class="cards" style="margin-bottom:12px">
+    <div class="kcard" style="border-left-color:#1b4b8f"><div class="lbl">${dayCz(d.date)} — prostoje</div>
+      <div class="val" style="font-size:22px">${fmtDur(d.sec||0)}</div><div class="note">${d.cnt||0} událostí</div></div>
+    <div class="kcard" style="border-left-color:#c0392b"><div class="lbl">Z toho poruchy strojů</div>
+      <div class="val" style="font-size:22px">${fmtDur(breakdowns?breakdowns.sec:0)}</div>
+      <div class="note">${breakdowns?breakdowns.cnt+'× zásah':'žádná porucha'}</div></div>
+    <div class="kcard" style="border-left-color:${todayActs.length?'#b7791f':'#1f9254'}"><div class="lbl">Immediate actions na dnes</div>
+      <div class="val">${todayActs.length}</div><div class="note">opatření s termínem dnes nebo dřív</div></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="muted" style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nejhorší linky dne</div>
+      ${bars(segs,'#1b4b8f')}
+    </div>
+    <div>
+      <div class="muted" style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nejčastější důvody dne</div>
+      ${bars(rs,'#41506b')}
+    </div>
+  </div>
+  ${fresh.length?`<div style="margin-top:12px">
+    <div class="muted" style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Okamžitá opatření u otevřených problémů</div>
+    ${fresh.map(p=>`<div style="padding:6px 0;border-bottom:1px dotted var(--line);font-size:12.5px">
+      <b>${p.no}</b> · ${esc(p.line)} — ${esc(p.immediate)}</div>`).join('')}
+  </div>`:''}`;
+}
+
+function mgmtSettings(){
+  const c=engcfg;
+  return `
+  <div class="panel">
+    <h2>Nastavení standardu<span class="right">podle toho se počítá výkon a spouští problem solving</span></h2>
+    <div class="form">
+      <div class="f"><label>Plánovaný výrobní čas na linku a den</label>
+        <input id="cf-hpd" type="number" step="0.5" min="1" max="24" value="${c.plannedHoursPerDay}"><div class="muted" style="font-size:11px">hodin — výchozí 22,5 = 3 směny po 7,5 h</div></div>
+      <div class="f"><label>Práh výkonu</label>
+        <input id="cf-thr" type="number" step="1" min="1" max="100" value="${c.threshold}"><div class="muted" style="font-size:11px">% — pod tím se povinně zakládá 5× Proč</div></div>
+      <div class="f"><label>Opakovaný problém</label>
+        <input id="cf-rep" type="number" step="1" min="2" max="8" value="${c.repeatWeeks}"><div class="muted" style="font-size:11px">týdnů pod prahem po sobě</div></div>
+      <div class="f"><label>Eskalace na manažera</label>
+        <input id="cf-esc" type="number" step="1" min="1" max="60" value="${c.escalationDays}"><div class="muted" style="font-size:11px">dní po termínu opatření</div></div>
+      <div class="f"><label>Ověření účinnosti za</label>
+        <input id="cf-eff" type="number" step="1" min="7" max="180" value="${c.effectivenessDays}"><div class="muted" style="font-size:11px">dní od založení problému</div></div>
+      <div class="f"><label>Engineering Manager</label><input id="cf-mgr" value="${esc(c.manager||'')}"></div>
+      <div class="f span2"><label>Process Engineers</label><input id="cf-eng" value="${esc((c.engineers||[]).join(', '))}">
+        <div class="muted" style="font-size:11px">jména oddělená čárkou — owner technické analýzy</div></div>
+      <div class="f span2"><label>Coordinators</label><input id="cf-coo" value="${esc((c.coordinators||[]).join(', '))}">
+        <div class="muted" style="font-size:11px">owner follow-upu otevřených akcí</div></div>
+      <div class="f span4"><label>Do výkonu nepočítat tyhle skupiny důvodů</label>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;padding:4px 0">
+          ${['Lidé a přestávky','Organizace výroby','Systém a data','Přestavba a seřízení','Materiál a logistika'].map(g=>
+            `<label class="check"><input type="checkbox" data-exg="${esc(g)}" ${(c.excludeGroups||[]).includes(g)?'checked':''}> ${esc(g)}</label>`).join('')}
+        </div>
+        <div class="muted" style="font-size:11px">Vyloučený čas se z prostojů odečte, než se spočítá výkon.</div></div>
+    </div>
+    <div class="foot"><span class="muted">Změny se projeví hned na téhle stránce.</span>
+      <span style="margin-left:auto"></span><button class="btn-ok" data-a="mg-savecfg">Uložit nastavení</button></div>
+  </div>`;
+}
+
+/* ---------- okno problému ---------- */
+function problemModal(){
+  const p=problems.find(x=>x._id===openPs); if(!p) return '';
+  const acts=actsOf(p._id);
+  const engs=(engcfg.engineers||[]), coos=(engcfg.coordinators||[]);
+  const sel=(id,val,list)=>`<select id="${id}"><option value="">— nevybráno —</option>${
+    list.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}${
+    val&&!list.includes(val)?`<option selected>${esc(val)}</option>`:''}</select>`;
+  const blocked=canCloseWith(p);
+  return `
+  <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Problem solving">
+    <h3>${p.no} — ${esc(p.title)}<button class="x" data-a="mg-close" aria-label="Zavřít">✕</button></h3>
+    <div class="robar">
+      <b>${esc(p.line)}</b> · ${weekLabel(p.week)} · výkon ${p.perf!=null?num(p.perf,1)+' %':'—'} · prostoje ${fmtDur(p.downtimeSec||0)}
+      · spouštěč: ${esc(p.trigger)} ${(p.escalated||needsEscalation(p))?'<span class="badge b-red">eskalace na Engineering Managera</span>':''}
+    </div>
+    <div class="form">
+      <div class="f"><label>Stav</label>
+        <select id="ps-status">${PS_STATUS.map(s=>`<option ${p.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
+        <div class="muted" style="font-size:11px">${psDef(p.status).d}</div></div>
+      <div class="f"><label>Owner technické analýzy <span style="color:var(--red)">*</span></label>${sel('ps-owner',p.owner,engs)}
+        <div class="muted" style="font-size:11px">Process Engineer</div></div>
+      <div class="f"><label>Owner follow-upu</label>${sel('ps-coord',p.coordinator,coos)}
+        <div class="muted" style="font-size:11px">Coordinator</div></div>
+      <div class="f"><label>Otevřeno</label><div class="ro">${dayCz(p.opened)}</div></div>
+
+      <div class="f span4"><label>Okamžité opatření (co jsme udělali hned)</label>
+        <input id="ps-immediate" value="${esc(p.immediate||'')}" placeholder="např. výměna dílu, snížená rychlost, 100% kontrola"></div>
+
+      <div class="sect">5× Proč — cesta ke kořenové příčině</div>
+      <div class="why">${[0,1,2,3,4].map(i=>`
+        <div class="row"><div class="n ${i===4?'root':''}">${i+1}. Proč</div>
+          <input class="t" id="ps-why${i}" value="${esc((p.whys||[])[i]||'')}" placeholder="${i===0?'Proč linka stála?':'Proč?'}"></div>`).join('')}
+      </div>
+      <div class="f span4"><label>Kořenová příčina <span style="color:var(--red)">*</span></label>
+        <input id="ps-root" value="${esc(p.rootCause||'')}" placeholder="bez ní nejde problém uzavřít"></div>
+
+      <div class="sect">Opatření — každé musí mít ownera a termín</div>
+      <div class="f span4">
+        <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius)">
+          <table><thead><tr><th>Číslo</th><th>Opatření</th><th>Typ</th><th>Owner</th><th>Termín</th><th>Stav</th><th></th></tr></thead>
+          <tbody>${acts.map(a=>`<tr class="${isOverdue(a)?'long':''}">
+            <td data-label="Číslo"><b>${a.no}</b></td>
+            <td data-label="Opatření" class="desc">${esc(a.text)}</td>
+            <td data-label="Typ"><span class="badge ${a.type==='preventive'?'b-teal':'b-grey'}">${a.type==='preventive'?'preventive':'corrective'}</span></td>
+            <td data-label="Owner">${esc(a.owner)}</td>
+            <td data-label="Termín">${isOverdue(a)?`<b style="color:var(--red)">${dayCz(a.due)}</b>`:dayCz(a.due)}</td>
+            <td data-label="Stav"><span class="badge ${(AC_STATUS.find(s=>s.k===a.status)||AC_STATUS[0]).cls}">${a.status}</span></td>
+            <td data-label="">${openActs([a]).length?`<button class="btn-ok" style="padding:3px 9px;font-size:11px" data-a="mg-adone" data-v="${a._id}">Hotovo</button>`:''}</td>
+          </tr>`).join('') || `<tr><td colspan="7" class="empty">Zatím žádné opatření. Corrective odstraní následek, preventive zabrání opakování — mít obojí je součást standardu.</td></tr>`}
+          </tbody></table>
+        </div>
+      </div>
+      <div class="f span4"><label>Nové opatření</label>
+        <div class="addrow">
+          <input id="na-text" placeholder="Co se udělá">
+          <select id="na-type">${AC_TYPE.map(t=>`<option value="${t.k}">${t.label}</option>`).join('')}</select>
+          <input id="na-owner" placeholder="Owner" list="ownerlist">
+          <datalist id="ownerlist">${[...new Set(engs.concat(coos))].map(o=>`<option>${esc(o)}</option>`).join('')}</datalist>
+          <input id="na-due" type="date" value="">
+          <button class="btn-primary" data-a="mg-addaction">+ Přidat</button>
+        </div>
+      </div>
+
+      <div class="sect">Ověření účinnosti — bez něj problém neuzavřeš</div>
+      <div class="f"><label>Ověřit do</label><input id="ps-effdue" type="date" value="${esc(p.effCheckDue||'')}"></div>
+      <div class="f span3"><label>Výsledek ověření</label>
+        <input id="ps-effres" value="${esc(p.effResult||'')}" placeholder="např. 4 týdny bez opakování, výkon linky zpět nad 90 %"></div>
+    </div>
+    ${(p.hist||[]).length?`<div class="hist">${(p.hist||[]).slice().reverse().slice(0,6).map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
+    <div class="foot">
+      ${psMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(psMsg)}</span>`
+        :`<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:'Problém je připravený k uzavření.'}</span>`}
+      <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat na manažera'}</button>
+        <button class="btn-ok" data-a="mg-save">Uložit</button>
+        <button class="btn-ghost" data-a="mg-close">Zavřít</button>
+      </span>
+    </div>
+  </div></div>`;
 }
 
 /* ===== obrazovky ===== */
@@ -1140,18 +1796,21 @@ function render(){
     app.innerHTML = shell(`<div class="notice">Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.</div>`);
     bind(); return;
   }
-  const inner = engTab==='dash' ? dashView()
+  const inner = engTab==='mgmt'  ? mgmtView()
+              : engTab==='dash'  ? dashView()
               : engTab==='list'  ? listView()
               : engTab==='scrap' ? scrapView()
               : importView();
   app.innerHTML = shell(`
     <div class="tabs">
+      <button class="tab ${engTab==='mgmt'?'on':''}" data-a="tab" data-v="mgmt">Řízení</button>
       <button class="tab ${engTab==='dash'?'on':''}" data-a="tab" data-v="dash">Přehled a KPI</button>
       <button class="tab ${engTab==='list'?'on':''}" data-a="tab" data-v="list">Prostoje</button>
       <button class="tab ${engTab==='scrap'?'on':''}" data-a="tab" data-v="scrap">Scrap</button>
       ${canImport()?`<button class="tab ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
       <span class="sp">
-        ${engTab==='scrap'?'<span class="muted" style="font-size:11.5px">Scrap se počítá po měsících — posledních 12.</span>'
+        ${engTab==='mgmt'?'<span class="muted" style="font-size:11.5px">Řízení počítá po týdnech z posledních 12 týdnů.</span>'
+          :engTab==='scrap'?'<span class="muted" style="font-size:11.5px">Scrap se počítá po měsících — posledních 12.</span>'
           :`<span class="muted" style="font-size:11.5px">Období:</span>
         ${[7,14,30].map(n=>`<button class="rangebtn ${range===n?'on':''}" data-a="range" data-v="${n}">${n} dní</button>`).join('')}`}
         <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
@@ -1159,7 +1818,7 @@ function render(){
     </div>
     ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
     ${busy?`<div class="notice">${esc(busy)}</div>`:''}
-    ${inner}`) + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
+    ${inner}`) + (openPs?problemModal():'') + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
   bind();
 }
 function shell(inner){
@@ -1207,6 +1866,13 @@ function bind(){
   const mo=document.getElementById('imp-month');
   if(mo) mo.onchange=()=>{ imp.month=mo.value; reparseScrap(); render(); };
 
+  const mo2=document.getElementById('mg-owner');
+  if(mo2) mo2.onchange=()=>{ mgOwner=mo2.value; render(); };
+  const oo=document.getElementById('mg-onlyopen');
+  if(oo) oo.onchange=()=>{ mgOnlyOpen=oo.checked; render(); };
+  const ovl=document.getElementById('ovl');
+  if(ovl) ovl.onclick=e=>{ if(e.target.id==='ovl'){ openPs=null; psMsg=''; render(); } };
+
   const fi=document.getElementById('file');
   if(fi) fi.onchange=()=>{ if(fi.files&&fi.files[0]) takeFile(fi.files[0]); };
   const dz=document.getElementById('drop');
@@ -1221,6 +1887,7 @@ async function act(a,v){
     case 'tab':
       engTab=v;
       if(v==='list') loadEvents();
+      if(v==='mgmt') loadMgmt();
       if(v==='scrap') loadScrap();
       if(v==='imp' && imp.step===3) imp=newImp(imp.kind);
       break;
@@ -1229,9 +1896,43 @@ async function act(a,v){
       loadDays(true); if(engTab==='list') loadEvents();
       break;
     case 'reload':
-      loaded=false; evLoaded=''; scLoaded=false;
+      loaded=false; evLoaded=''; scLoaded=false; mgLoaded=false;
+      if(engTab==='mgmt') loadMgmt(true);
       loadDays(true); if(engTab==='list') loadEvents();
       break;
+    /* ----- řízení výkonu ----- */
+    case 'mg-week': mgWeek=v; break;
+    case 'mg-open': openPs=v; psMsg=''; break;
+    case 'mg-close': openPs=null; psMsg=''; break;
+    case 'mg-save': await saveProblem(); break;
+    case 'mg-addaction': await addAction(); return;
+    case 'mg-adone': await setActionStatus(v,'hotová'); return;
+    case 'mg-escalate': await toggleEscalation(v); return;
+    case 'mg-create':{
+      const [wk,slug]=String(v).split('|');
+      const weeks=weeklyPerf(mgDays, engcfg);
+      const line=(weeks[wk]&&weeks[wk].lines[slug]);
+      if(!line) return;
+      const u=underThreshold(weeks,wk,engcfg).find(x=>x.slug===slug);
+      await createProblem(wk, line, u&&u.repeated?'opakovaný problém':'výkon pod prahem');
+      return;
+    }
+    case 'mg-createall':{
+      const weeks=weeklyPerf(mgDays, engcfg);
+      const miss=underThreshold(weeks,v,engcfg).filter(l=>!problemFor(v,l.slug));
+      for(const l of miss) await createProblem(v, l, l.repeated?'opakovaný problém':'výkon pod prahem');
+      openPs=null; render(); return;
+    }
+    case 'mg-savecfg':{
+      const n=id=>{const el=document.getElementById(id); return el?Number(el.value):null;};
+      const t=id=>{const el=document.getElementById(id); return el?el.value.trim():'';};
+      const list=id=>t(id).split(',').map(x=>x.trim()).filter(Boolean);
+      const ex=[...document.querySelectorAll('[data-exg]')].filter(c=>c.checked).map(c=>c.dataset.exg);
+      await saveEngcfg({plannedHoursPerDay:n('cf-hpd')||22.5, threshold:n('cf-thr')||90,
+        repeatWeeks:n('cf-rep')||2, escalationDays:n('cf-esc')||7, effectivenessDays:n('cf-eff')||28,
+        manager:t('cf-mgr'), engineers:list('cf-eng'), coordinators:list('cf-coo'), excludeGroups:ex});
+      break;
+    }
     case 'imp-reset': imp=newImp(imp.kind); break;
     case 'imp-kind': imp=newImp(v); break;
     case 'imp-run':
