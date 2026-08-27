@@ -109,7 +109,9 @@ počet posunů, stav, po termínu, uzavřeno.
 - Barvy drží legendu z Excelu: bílé vyplňuje uživatel, žluté jsou posuny,
   šedé se dopočítají.
 - Přílohy jdou do Firebase Storage pod `tasky/<idTasku>/…`, stejně jako nákup
-  ukládá do `nabidky/<idPožadavku>/…`. Limit 5 MB na soubor.
+  ukládá do `nabidky/<idPožadavku>/…`. Limit 5 MB na soubor. Pravidla úložiště
+  jsou v `storage.rules` a publikují se JINDE než pravidla Firestore
+  (Firebase konzole → Storage → Rules).
 - Rozepsané hodnoty v okně se před překreslením ukládají do paměti
   (`collectTask()`, `moveDraft`) — bez toho by se text ztratil při odmítnutém uložení.
 

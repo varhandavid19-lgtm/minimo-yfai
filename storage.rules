@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// ==========================================================
+//  PRAVIDLA ÚLOŽIŠTĚ SOUBORŮ (Firebase Storage)
+//
+//  POZOR: publikuje se jinde než pravidla Firestore —
+//  Firebase konzole → Storage → záložka Rules → Publish.
+//
+//  nabidky/ — přílohy nákupních požadavků (nabídky dodavatelů)
+//  tasky/   — přílohy tasků v akčním plánu Engineeringu
+// ==========================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // --- Nákupní požadavky ---
+    match /nabidky/{requestId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024;   // max 5 MB na soubor
+    }
+
+    // --- Engineering: akční plán ---
+    match /tasky/{taskId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024;   // max 5 MB na soubor
+    }
+  }
+}
