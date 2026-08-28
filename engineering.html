@@ -2020,7 +2020,7 @@ function taskModal(){
             ${sel.length?`<div class="ochips">${sel.map(o=>
               `<span class="ochip">${esc(o)}<button data-a="tk-ownrm" data-v="${esc(o)}" title="Odebrat">✕</button></span>`).join('')}</div>`:''}
             <input id="tk-ownq" value="${esc(ownQ)}" autocomplete="off" placeholder="${sel.length?'Přidat dalšího — začni psát jméno':'Začni psát jméno…'}">
-            ${q||sugg.length?`<div class="osugg">${sugg.length
+            ${q?`<div class="osugg">${sugg.length
               ? sugg.map(o=>`<button class="osug" data-a="tk-ownadd" data-v="${esc(o)}">${esc(o)}</button>`).join('')
               : '<div class="muted" style="padding:7px 10px;font-size:12px">Nikdo takový tu není. Lidi se přidávají v Nastavení celého minima.</div>'}</div>`:''}
           </div>`;
@@ -2517,8 +2517,18 @@ function bind(){
   const th=document.getElementById('tk-hide');
   if(th) th.onchange=()=>{ tHideClosed=th.checked; render(); };
   const oq=document.getElementById('tk-ownq');
-  if(oq) oq.oninput=()=>{ ownQ=oq.value; collectTask(); render();
-    const n=document.getElementById('tk-ownq'); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } };
+  if(oq){
+    oq.oninput=()=>{ ownQ=oq.value; collectTask(); render();
+      const n=document.getElementById('tk-ownq'); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } };
+    oq.onkeydown=e=>{
+      if(e.key==='Escape'){ e.stopPropagation(); ownQ=''; collectTask(); render(); }
+      if(e.key==='Enter'){                       // Enter vezme první návrh
+        e.preventDefault();
+        const first=document.querySelector('.osug');
+        if(first) first.click();
+      }
+    };
+  }
   const tka=document.getElementById('tk-area');
   if(tka) tka.onchange=()=>{ collectTask(); render(); };   // ať se přenačtou stroje k oblasti
   const tfi=document.getElementById('tk-file');
@@ -2641,6 +2651,13 @@ function loginErrMsg(code){
     'auth/operation-not-allowed':'Přihlašování e-mailem není ve Firebase zapnuté.'};
   return m[code]||('Přihlášení se nezdařilo ('+code+').');
 }
+
+/* Klik mimo našeptávač ownerů ho zavře, ať nepřekrývá políčka pod sebou. */
+document.addEventListener('mousedown', e=>{
+  if(!ownQ) return;
+  if(e.target.closest && e.target.closest('.ownerpick')) return;
+  ownQ=''; collectTask(); render();
+});
 
 render();
 </script>
