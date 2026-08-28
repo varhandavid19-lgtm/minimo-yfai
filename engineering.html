@@ -16,7 +16,7 @@
   button:disabled{opacity:.45;cursor:not-allowed}
   input,select{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;color:var(--text);width:100%}
   input:focus,select:focus,button:focus-visible,a:focus-visible{outline:2px solid #2a5ea3;outline-offset:1px}
-  main{padding:14px 18px 40px;max-width:1560px;margin:0 auto}
+  main{padding:14px 16px 40px}          /* přes celou šířku obrazovky */
   .btn-primary{background:var(--navy-2);color:#fff}
   .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b}
   .btn-ok{background:var(--green);color:#fff}
@@ -99,18 +99,29 @@
   .tasktbl tr.late td.gcol{background:#f9dcd8}
   .tasktbl tr.closed td{opacity:.62}
   .tasktbl tr.clickable{cursor:pointer}
-  .tasktbl td.desc{min-width:200px;max-width:330px;white-space:normal}
+  .tasktbl{font-size:12px}
+  .tasktbl th,.tasktbl td{padding:7px 8px}
+  .tasktbl td.desc{min-width:150px;max-width:none;white-space:normal}
+  .tasktbl td.nowrap{white-space:nowrap}
   .clip{color:#2563a8;font-weight:700;font-size:11px}
   .ychip{background:#fdf6e3;border:1px solid #f0e0b8;border-radius:4px;padding:1px 6px}
   .gchip{background:#eef1f5;border:1px solid var(--line);border-radius:4px;padding:1px 6px}
   .ro.gcell{background:#f4f6f9}
   .ybox{background:#fdf6e3;border:1px solid #f0e0b8;border-radius:var(--radius);padding:9px 11px}
   .ybox input{background:#fff}
-  .ownerbox{border:1px solid var(--line);border-radius:var(--radius);background:#fff;overflow:hidden}
-  .ochips{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--line);background:#fafbfd;min-height:37px;align-items:center}
-  .ochip{background:var(--teal-bg);border:1px solid #bfdedd;color:var(--teal-dark);border-radius:20px;padding:2px 10px;font-size:11.5px;font-weight:700}
-  .olist{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px;padding:9px 10px;max-height:150px;overflow-y:auto}
-  .olist .check{font-weight:500;font-size:12.5px}
+  .machgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+  .ownerpick{position:relative}
+  .ochips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+  .ochip{background:var(--teal-bg);border:1px solid #bfdedd;color:var(--teal-dark);border-radius:20px;
+    padding:3px 6px 3px 11px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px}
+  .ochip button{background:none;border:0;color:var(--teal-dark);font-size:12px;line-height:1;padding:0 3px;cursor:pointer;opacity:.7}
+  .ochip button:hover{opacity:1}
+  .osugg{position:absolute;left:0;right:0;top:100%;z-index:5;background:#fff;border:1px solid var(--line);
+    border-radius:0 0 var(--radius) var(--radius);box-shadow:0 8px 20px rgba(16,35,58,.16);max-height:210px;overflow-y:auto}
+  .osug{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid #eef1f5;
+    padding:8px 11px;font-size:13px;color:var(--text);border-radius:0}
+  .osug:last-child{border-bottom:0}
+  .osug:hover,.osug:focus{background:var(--teal-bg);color:var(--teal-dark);font-weight:700}
   .filelist{margin-top:10px;display:flex;flex-direction:column;gap:6px}
   .fileitem{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--line);
     border-radius:var(--radius);padding:7px 10px;font-size:12.5px;flex-wrap:wrap}
@@ -529,6 +540,7 @@ const ENGCFG_DEF = {
   escalationDays: 7,          // akce po termínu déle než tolik dní = eskalace na manažera
   effectivenessDays: 28,      // za kolik dní se ověřuje účinnost opatření
   excludeGroups: [],          // skupiny důvodů, které se do výkonu nepočítají
+  machines: {},               // stroje podle oblasti pro akční plán
   engineers: [],              // Process Engineers (owner technické analýzy)
   coordinators: [],           // Coordinators (owner follow-upu akcí)
   manager: ''                 // Engineering Manager (eskalace)
@@ -659,6 +671,15 @@ const TASK_STATUS = [
 const MAX_TASK_FILE = 5*1024*1024;   // 5 MB na soubor, stejně jako u nákupu
 
 const areaPrefix = a => (TASK_AREAS.find(x=>x.k===a)||{p:'GEN'}).p;
+/* Stroje k oblasti — co si David nastaví v Nastavení standardu.
+   Když u oblasti nic nemá, nabídnou se linky, které přišly z importu prostojů. */
+function machinesFor(area){
+  const cfgList=((engcfg.machines||{})[area]||[]).filter(Boolean);
+  if(cfgList.length) return cfgList;
+  const seen=new Set();
+  mgDays.forEach(d=>Object.values(d.segs||{}).forEach(v=>v.label&&seen.add(v.label)));
+  return [...seen].sort((a,b)=>a.localeCompare(b,'cs'));
+}
 /* Owner může být víc lidí. Starší tasky mají jedno jméno v poli owner. */
 const taskOwners = t => (t && Array.isArray(t.owners) && t.owners.length) ? t.owners
                        : ((t && t.owner) ? [t.owner] : []);
@@ -680,18 +701,16 @@ const lateDays = t => taskLate(t) ? Math.floor((Date.parse(today())-Date.parse(d
 const taskSoon = t => !taskDone(t) && !taskLate(t) && dueValid(t) && Math.floor((Date.parse(dueValid(t))-Date.parse(today()))/86400000) <= 7;
 
 /* ---------- načítání a zápis ---------- */
-/* Číslo tasku podle oblasti: ENG-001, LOG-002 … (bez roku, jako v tabulce vedení) */
-async function nextTaskNo(area){
-  const pre=areaPrefix(area), key='seqTask'+pre;
+/* Číslo tasku je prosté pořadové číslo — 1, 2, 3 … */
+async function nextTaskNo(){
   const ref=doc(db,'meta','engcfg');
   const n=await runTransaction(db, async tx=>{
     const snap=await tx.get(ref);
-    const cur=(((snap.data()||{})[key])||0)+1;
-    const patch={}; patch[key]=cur;
-    if(snap.exists()) tx.update(ref,patch); else tx.set(ref, Object.assign({}, ENGCFG_DEF, patch));
+    const cur=(((snap.data()||{}).seqTask)||0)+1;
+    if(snap.exists()) tx.update(ref,{seqTask:cur}); else tx.set(ref, Object.assign({}, ENGCFG_DEF, {seqTask:cur}));
     return cur;
   });
-  return pre+'-'+String(n).padStart(3,'0');
+  return String(n);
 }
 /* Promítne rozpracovanou kopii zpátky do seznamu, aby tabulka ukazovala aktuální stav. */
 function syncTask(t){
@@ -701,10 +720,12 @@ function syncTask(t){
 }
 async function loadTasks(force){
   if(tLoaded && !force) return;
-  busy='Načítám akční plán…'; errMsg=''; render();
+  errMsg=''; busy='Načítám akční plán…'; render();
   try{
     const qs = await getDocs(query(collection(db,'tasks'), orderBy('createdOn','desc'), limit(500)));
     tasks = qs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    /* denní souhrny kvůli nabídce strojů, když si je David ještě nevypsal v nastavení */
+    if(!mgLoaded) await loadMgmt();
     /* lidé pro rozbalovátko ownerů — spravují se v Nastavení celého minima */
     const us = await getDocs(collection(db,'users'));
     people = us.docs.map(d=>({uid:d.id, name:(d.data().name||d.data().email||d.id)}))
@@ -718,7 +739,7 @@ async function loadTasks(force){
   busy=''; render();
 }
 function emptyTask(){
-  return {_id:null, no:'', area:TASK_AREAS[0].k, type:'Operation',
+  return {_id:null, no:'', area:TASK_AREAS[0].k, machine:'', type:'Operation',
     createdOn:today(), createdBy:me.name, task:'', output:'', owners:[],
     dueOrig:'', moves:[], status:'OPEN', closedOn:'', note:'', files:[], hist:[]};
 }
@@ -728,9 +749,9 @@ function collectTask(){
   const g=id=>{const e=document.getElementById(id); return e?e.value.trim():'';};
   const el=document.getElementById('tk-task'); if(!el) return openTask;
   Object.assign(openTask,{
-    area:g('tk-area'), type:g('tk-type'), createdOn:g('tk-created'), createdBy:g('tk-by'),
+    area:g('tk-area'), machine:g('tk-machine'), type:g('tk-type'), createdOn:g('tk-created'), createdBy:g('tk-by'),
     task:g('tk-task'), output:g('tk-output'),
-    owners:[...document.querySelectorAll('[data-own]')].filter(c=>c.checked).map(c=>c.dataset.own),
+    owners:taskOwners(openTask),
     dueOrig:g('tk-due'), status:g('tk-status'), note:g('tk-note')
   });
   moveDraft={date:g('tk-newmove'), why:g('tk-movewhy')};
@@ -746,8 +767,8 @@ async function saveTask(){
   if(!taskDone(t)) t.closedOn='';
   try{
     if(!t._id){
-      const no=await nextTaskNo(t.area);
-      const rec={no, area:t.area, type:t.type, createdOn:t.createdOn, createdBy:t.createdBy,
+      const no=await nextTaskNo();
+      const rec={no, area:t.area, machine:t.machine||'', type:t.type, createdOn:t.createdOn, createdBy:t.createdBy,
         task:t.task, output:t.output, owners:t.owners, dueOrig:t.dueOrig, moves:[],
         status:t.status, closedOn:t.closedOn, note:t.note, files:[],
         hist:[`${today()} · ${me.name} · task založen`]};
@@ -845,6 +866,8 @@ let mgDays=[], problems=[], actions=[], engcfg=Object.assign({},ENGCFG_DEF);
 let mgLoaded=false, mgWeek='', openPs=null, psMsg='', mgOwner='', mgOnlyOpen=true;
 let tasks=[], people=[], tLoaded=false, openTask=null, tMsg='', tSort='new', tHideClosed=true, pendingTaskFiles=[];
 let tF={area:'',owner:'',status:'',type:'',q:''};
+let ownQ='';
+let psF={status:'',line:'',owner:'',q:''}, psHideClosed=true;
 let moveDraft={date:'',why:''};
 let range=7, loaded=false, busy='', errMsg='';
 let evLoaded='', evMore=false;
@@ -1636,6 +1659,14 @@ function mgmtSettings(){
         <div class="muted" style="font-size:11px">jména oddělená čárkou — owner technické analýzy</div></div>
       <div class="f span2"><label>Coordinators</label><input id="cf-coo" value="${esc((c.coordinators||[]).join(', '))}">
         <div class="muted" style="font-size:11px">owner follow-upu otevřených akcí</div></div>
+      <div class="sect">Stroje podle oblasti — nabízejí se v akčním plánu</div>
+      <div class="f span4">
+        <div class="machgrid">${TASK_AREAS.map(a=>`
+          <div class="f"><label>${esc(a.k)}</label>
+            <input data-mach="${esc(a.k)}" value="${esc(((c.machines||{})[a.k]||[]).join(', '))}" placeholder="stroje oddělené čárkou"></div>`).join('')}
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:6px">Když u oblasti nic nevyplníš, nabídnou se linky, které přišly z importu prostojů.</div>
+      </div>
       <div class="f span4"><label>Do výkonu nepočítat tyhle skupiny důvodů</label>
         <div style="display:flex;gap:14px;flex-wrap:wrap;padding:4px 0">
           ${['Lidé a přestávky','Organizace výroby','Systém a data','Přestavba a seřízení','Materiál a logistika'].map(g=>
@@ -1731,6 +1762,116 @@ function problemModal(){
 }
 
 
+
+/* ---------- obrazovka Problem solving (5× proč / A3) ---------- */
+function psVisible(){
+  let r=problems.slice();
+  if(psF.status) r=r.filter(p=>p.status===psF.status);
+  if(psF.line)   r=r.filter(p=>p.line===psF.line);
+  if(psF.owner)  r=r.filter(p=>p.owner===psF.owner);
+  if(psHideClosed) r=r.filter(p=>p.status!=='uzavřeno');
+  if(psF.q){ const q=psF.q.toLowerCase();
+    r=r.filter(p=>[p.no,p.title,p.line,p.owner,p.coordinator,p.rootCause,(p.whys||[]).join(' ')].join(' ').toLowerCase().includes(q)); }
+  /* nejdřív to, co hoří: eskalace, pak po termínu, pak podle stáří */
+  return r.sort((a,b)=>{
+    const ea=(a.escalated||needsEscalation(a))?0:1, eb=(b.escalated||needsEscalation(b))?0:1;
+    if(ea!==eb) return ea-eb;
+    const la=openActs(actsOf(a._id)).some(isOverdue)?0:1, lb=openActs(actsOf(b._id)).some(isOverdue)?0:1;
+    if(la!==lb) return la-lb;
+    return String(a.opened||'').localeCompare(String(b.opened||''));
+  });
+}
+function psView(){
+  if(!problems.length){
+    return `<div class="panel"><div class="body" style="text-align:center;padding:32px 18px">
+      <div style="font-size:34px">🔎</div>
+      <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím žádný problem solving</div>
+      <p class="muted" style="max-width:560px;margin:0 auto 14px">Zakládá se v záložce <b>Řízení</b> tlačítkem
+        <b>Založit 5× proč</b> u linky, která spadla pod práh výkonu. Tady pak uvidíš všechny otevřené analýzy pohromadě.</p>
+      <button class="btn-primary" data-a="tab" data-v="mgmt">Přejít na Řízení</button>
+    </div></div>`;
+  }
+  const rows=psVisible();
+  const open=problems.filter(p=>p.status!=='uzavřeno');
+  const analysis=open.filter(p=>p.status==='nový'||p.status==='analýza');
+  const inAction=open.filter(p=>p.status==='opatření');
+  const verify=open.filter(p=>p.status==='ověřování');
+  const esc2=open.filter(p=>p.escalated||needsEscalation(p));
+  const lines=[...new Set(problems.map(p=>p.line))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
+  const owners=[...new Set(problems.map(p=>p.owner))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
+  return `
+  <div class="cards">
+    <div class="kcard" style="border-left-color:#1b4b8f"><div class="lbl">Otevřené analýzy</div>
+      <div class="val">${open.length}</div><div class="note">celkem ${problems.length} od začátku</div></div>
+    <div class="kcard" style="border-left-color:#c0392b"><div class="lbl">Čeká na 5× proč</div>
+      <div class="val">${analysis.length}</div><div class="note">bez kořenové příčiny</div></div>
+    <div class="kcard" style="border-left-color:#b7791f"><div class="lbl">V opatřeních</div>
+      <div class="val">${inAction.length}</div><div class="note">${openActs(actions).length} otevřených opatření</div></div>
+    <div class="kcard" style="border-left-color:#0d7377"><div class="lbl">Čeká na ověření</div>
+      <div class="val">${verify.length}</div><div class="note">effectiveness check</div></div>
+    <div class="kcard" style="border-left-color:${esc2.length?'#c0392b':'#1f9254'}"><div class="lbl">K eskalaci</div>
+      <div class="val">${esc2.length}</div><div class="note">na Engineering Managera</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Problem solving — 5× proč a A3<span class="right">${rows.length} z ${problems.length} · klikni na řádek pro detail</span></h2>
+    <div class="filters">
+      <input class="grow" id="ps-q" placeholder="Hledat v problému, lince, příčině…" value="${esc(psF.q)}">
+      <select id="ps-fline"><option value="">Všechny linky</option>${lines.map(l=>`<option ${psF.line===l?'selected':''}>${esc(l)}</option>`).join('')}</select>
+      <select id="ps-fowner"><option value="">Všichni owneři</option>${owners.map(o=>`<option ${psF.owner===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
+      <select id="ps-fstatus"><option value="">Všechny stavy</option>${PS_STATUS.map(x=>`<option ${psF.status===x.k?'selected':''}>${x.k}</option>`).join('')}</select>
+      <label class="check"><input type="checkbox" id="ps-hide" ${psHideClosed?'checked':''}> skrýt uzavřené</label>
+      <button class="btn-ghost" data-a="ps-export">⭳ Export CSV</button>
+    </div>
+    <div class="tblwrap"><table class="tasktbl">
+      <thead><tr>
+        <th>Č.</th><th>Linka</th><th>Týden</th><th>Spouštěč</th><th>Problém</th>
+        <th>Výkon</th><th>Prostoje</th><th>Stav</th><th>Owner analýzy</th><th>Coordinator</th>
+        <th>Kořenová příčina</th><th>Opatření</th><th>Nejbližší termín</th><th>Ověřit do</th><th></th>
+      </tr></thead>
+      <tbody>${rows.map(p=>{
+        const acts=actsOf(p._id), op=openActs(acts);
+        const nearest=op.map(a=>a.due).filter(Boolean).sort()[0]||'';
+        const late=op.some(isOverdue);
+        const esk=p.escalated||needsEscalation(p);
+        return `<tr class="clickable ${esk||late?'late':''} ${p.status==='uzavřeno'?'closed':''}" data-a="mg-open" data-v="${p._id}">
+          <td data-label="Č." class="nowrap"><b>${esc(p.no)}</b>${esk?' <span class="badge b-red">eskalace</span>':''}</td>
+          <td data-label="Linka" class="nowrap"><b>${esc(p.line)}</b></td>
+          <td data-label="Týden" class="nowrap">${weekShort(p.week)}</td>
+          <td data-label="Spouštěč">${p.trigger==='opakovaný problém'?'<span class="badge b-amber">opakovaný</span>':esc(p.trigger||'')}</td>
+          <td data-label="Problém" class="desc">${esc(p.title)}</td>
+          <td data-label="Výkon" class="num">${p.perf!=null?num(p.perf,1)+' %':'—'}</td>
+          <td data-label="Prostoje" class="num nowrap">${fmtDur(p.downtimeSec||0)}</td>
+          <td data-label="Stav"><span class="badge ${psDef(p.status).cls}">${esc(p.status)}</span></td>
+          <td data-label="Owner">${esc(p.owner||'—')}</td>
+          <td data-label="Coordinator">${esc(p.coordinator||'—')}</td>
+          <td data-label="Kořenová příčina" class="desc">${p.rootCause?esc(p.rootCause):'<span class="badge b-red">chybí</span>'}</td>
+          <td data-label="Opatření" class="num nowrap">${acts.length-op.length}/${acts.length}${acts.some(a=>a.type==='preventive')?'':' <span class="badge b-amber" title="chybí preventivní opatření">P!</span>'}</td>
+          <td data-label="Nejbližší termín" class="nowrap">${nearest?(late?`<b style="color:var(--red)">${dateCz(nearest)}</b>`:dateCz(nearest)):'—'}</td>
+          <td data-label="Ověřit do" class="nowrap">${p.effResult?'<span class="badge b-green">ověřeno</span>':(p.effCheckDue?dateCz(p.effCheckDue):'—')}</td>
+          <td data-label=""><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button></td>
+        </tr>`;}).join('') || `<tr><td colspan="15" class="empty">Nic neodpovídá filtru.</td></tr>`}
+      </tbody></table></div>
+  </div>`;
+}
+function exportPsCsv(){
+  const rows=psVisible();
+  const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  const head=['Č.','Linka','Týden','Spouštěč','Problém','Výkon %','Prostoje (min)','Stav','Owner analýzy','Coordinator',
+    'Okamžité opatření','1. proč','2. proč','3. proč','4. proč','5. proč','Kořenová příčina',
+    'Opatření hotovo','Opatření celkem','Ověřit do','Výsledek ověření','Eskalace'];
+  const csv=[line(head)].concat(rows.map(p=>{
+    const acts=actsOf(p._id), w=p.whys||[];
+    return line([p.no,p.line,p.week,p.trigger,p.title,p.perf!=null?num(p.perf,1):'',Math.round((p.downtimeSec||0)/60),
+      p.status,p.owner,p.coordinator,p.immediate,w[0]||'',w[1]||'',w[2]||'',w[3]||'',w[4]||'',p.rootCause,
+      acts.length-openActs(acts).length,acts.length,p.effCheckDue,p.effResult,(p.escalated||needsEscalation(p))?'ano':'']);
+  })).join('\n');
+  const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url; a.download='problem_solving_'+today()+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
 /* ---------- obrazovka Akční plán ---------- */
 function visibleTasks(){
   let r=tasks.slice();
@@ -1740,7 +1881,7 @@ function visibleTasks(){
   if(tF.type)   r=r.filter(t=>t.type===tF.type);
   if(tHideClosed) r=r.filter(t=>!taskDone(t));
   if(tF.q){ const q=tF.q.toLowerCase();
-    r=r.filter(t=>[t.no,t.task,t.output,ownersLabel(t),t.createdBy,t.note].join(' ').toLowerCase().includes(q)); }
+    r=r.filter(t=>[t.no,t.task,t.output,ownersLabel(t),t.createdBy,t.note,t.machine,t.area].join(' ').toLowerCase().includes(q)); }
   if(tSort==='review'){
     /* na review: nejdřív po termínu (nejdéle), pak nejbližší termíny, uzavřené naposled */
     r.sort((a,b)=>{
@@ -1809,7 +1950,7 @@ function tasksView(){
     </div>
     <div class="tblwrap"><table class="tasktbl">
       <thead><tr>
-        <th>Č.</th><th>1 · Oblast</th><th>Typ</th><th>Zadáno</th><th>Zadal</th>
+        <th>Č.</th><th>1 · Oblast</th><th>Stroj</th><th>Typ</th><th>Zadáno</th><th>Zadal</th>
         <th>2 · Task</th><th>3 · Očekávaný výstup – důkaz</th><th>4 · Owner</th>
         <th>5 · Termín původní</th><th class="ycol">Posuny</th><th class="gcol">Platný termín</th>
         <th class="gcol">Posunů</th><th>Stav</th><th class="gcol">Po termínu</th><th>Uzavřeno</th><th></th>
@@ -1818,9 +1959,10 @@ function tasksView(){
         const dv=dueValid(t), mc=moveCount(t), late=taskLate(t);
         return `<tr class="clickable ${late?'late':''} ${taskDone(t)?'closed':''}" data-a="tk-open" data-v="${t._id}">
           <td data-label="Č."><b>${esc(t.no)}</b>${(t.files&&t.files.length)?` <span class="clip" title="Přílohy">📎${t.files.length}</span>`:''}</td>
-          <td data-label="Oblast">${esc(t.area)}</td>
+          <td data-label="Oblast" class="nowrap">${esc(t.area)}</td>
+          <td data-label="Stroj">${esc(t.machine||'')||'<span class="muted">—</span>'}</td>
           <td data-label="Typ">${esc(t.type)}</td>
-          <td data-label="Zadáno">${dateCz(t.createdOn)}</td>
+          <td data-label="Zadáno" class="nowrap">${dateCz(t.createdOn)}</td>
           <td data-label="Zadal">${esc(t.createdBy||'')}</td>
           <td data-label="Task" class="desc">${esc(t.task)}</td>
           <td data-label="Výstup" class="desc muted">${esc(t.output||'')}</td>
@@ -1833,7 +1975,7 @@ function tasksView(){
           <td data-label="Po termínu" class="gcol num">${late?`<b style="color:var(--red)">${lateDays(t)} dní</b>`:'<span class="muted">—</span>'}</td>
           <td data-label="Uzavřeno">${t.closedOn?dateCz(t.closedOn):'<span class="muted">—</span>'}</td>
           <td data-label=""><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button></td>
-        </tr>`;}).join('') || `<tr><td colspan="16" class="empty">Zatím žádný task. Založ ho tlačítkem <b>+ Nový task</b>.</td></tr>`}
+        </tr>`;}).join('') || `<tr><td colspan="17" class="empty">Zatím žádný task. Založ ho tlačítkem <b>+ Nový task</b>.</td></tr>`}
       </tbody></table></div>
   </div>`;
 }
@@ -1853,11 +1995,15 @@ function taskModal(){
     <div class="form">
       <div class="f"><label>1 · Oblast <span style="color:var(--red)">*</span></label>
         <select id="tk-area">${TASK_AREAS.map(a=>`<option ${t.area===a.k?'selected':''}>${esc(a.k)}</option>`).join('')}</select>
-        <div class="muted" style="font-size:11px">podle ní se generuje číslo (${areaPrefix(t.area)}-…)</div></div>
+        <div class="muted" style="font-size:11px">linka nebo proces</div></div>
+      <div class="f"><label>Stroj</label>
+        <input id="tk-machine" list="tk-machines" value="${esc(t.machine||'')}" placeholder="Začni psát nebo vyber">
+        <datalist id="tk-machines">${machinesFor(t.area).map(m=>`<option>${esc(m)}</option>`).join('')}</datalist>
+        <div class="muted" style="font-size:11px">seznam si doplníš v Řízení → Nastavení standardu</div></div>
       <div class="f"><label>Typ</label>
         <select id="tk-type">${TASK_TYPES.map(x=>`<option ${t.type===x?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="f"><label>Zadáno</label><input id="tk-created" type="date" value="${esc(t.createdOn||'')}"></div>
-      <div class="f"><label>Zadal</label><input id="tk-by" value="${esc(t.createdBy||'')}"></div>
+      <div class="f span2"><label>Zadal</label><input id="tk-by" value="${esc(t.createdBy||'')}"></div>
 
       <div class="f span4"><label>2 · Task <span style="color:var(--red)">*</span></label>
         <textarea id="tk-task" rows="3" placeholder="Co se má udělat">${esc(t.task||'')}</textarea></div>
@@ -1866,15 +2012,19 @@ function taskModal(){
 
       <div class="f span2"><label>4 · Owner <span style="color:var(--red)">*</span> <span class="muted" style="font-weight:400">— může jich být víc</span></label>
         ${(function(){
-          const sel=taskOwners(t), all=ownerChoices(sel);
-          return `<div class="ownerbox">
-            <div class="ochips">${sel.length?sel.map(o=>`<span class="ochip">${esc(o)}</span>`).join('')
-              :'<span class="muted" style="font-size:12px">Nikdo zatím není vybraný</span>'}</div>
-            <div class="olist">${all.length?all.map(o=>`<label class="check"><input type="checkbox" data-own="${esc(o)}" ${sel.includes(o)?'checked':''}> ${esc(o)}</label>`).join('')
-              :'<span class="muted" style="font-size:12px">Zatím tu nikdo není — lidi přidáš v Nastavení minima.</span>'}</div>
+          const sel=taskOwners(t);
+          const q=ownQ.trim().toLowerCase();
+          const sugg=ownerChoices(sel).filter(o=>!sel.includes(o))
+            .filter(o=>!q || o.toLowerCase().includes(q)).slice(0,8);
+          return `<div class="ownerpick">
+            ${sel.length?`<div class="ochips">${sel.map(o=>
+              `<span class="ochip">${esc(o)}<button data-a="tk-ownrm" data-v="${esc(o)}" title="Odebrat">✕</button></span>`).join('')}</div>`:''}
+            <input id="tk-ownq" value="${esc(ownQ)}" autocomplete="off" placeholder="${sel.length?'Přidat dalšího — začni psát jméno':'Začni psát jméno…'}">
+            ${q||sugg.length?`<div class="osugg">${sugg.length
+              ? sugg.map(o=>`<button class="osug" data-a="tk-ownadd" data-v="${esc(o)}">${esc(o)}</button>`).join('')
+              : '<div class="muted" style="padding:7px 10px;font-size:12px">Nikdo takový tu není. Lidi se přidávají v Nastavení celého minima.</div>'}</div>`:''}
           </div>`;
-        })()}
-        <div class="muted" style="font-size:11px">Seznam se bere z uživatelů v Nastavení celého minima.</div></div>
+        })()}</div>
       <div class="f"><label>5 · Termín původní <span style="color:var(--red)">*</span></label>
         <input id="tk-due" type="date" value="${esc(t.dueOrig||'')}"></div>
       <div class="f"><label>Stav</label>
@@ -1935,11 +2085,11 @@ function taskModal(){
 function exportTasksCsv(){
   const rows=visibleTasks();
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
-  const head=['Č.','Oblast','Typ','Zadáno','Zadal','Task','Očekávaný výstup – důkaz','Owner',
+  const head=['Č.','Oblast','Stroj','Typ','Zadáno','Zadal','Task','Očekávaný výstup – důkaz','Owner',
     'Termín původní','Posun 1','Posun 2','Posun 3','Platný termín','Posunů','Stav','Po termínu (dní)','Uzavřeno'];
   const csv=[line(head)].concat(rows.map(t=>{
     const m=(t.moves||[]).map(x=>x.date);
-    return line([t.no,t.area,t.type,t.createdOn,t.createdBy,t.task,t.output,ownersLabel(t),t.dueOrig,
+    return line([t.no,t.area,t.machine||'',t.type,t.createdOn,t.createdBy,t.task,t.output,ownersLabel(t),t.dueOrig,
       m[0]||'',m[1]||'',m[2]||'',dueValid(t),moveCount(t),t.status,taskLate(t)?lateDays(t):'',t.closedOn||'']);
   })).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
@@ -2272,7 +2422,8 @@ function render(){
     app.innerHTML = shell(`<div class="notice">Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.</div>`);
     bind(); return;
   }
-  const inner = engTab==='tasks' ? tasksView()
+  const inner = engTab==='ps'    ? psView()
+              : engTab==='tasks' ? tasksView()
               : engTab==='mgmt'  ? mgmtView()
               : engTab==='dash'  ? dashView()
               : engTab==='list'  ? listView()
@@ -2281,13 +2432,15 @@ function render(){
   app.innerHTML = shell(`
     <div class="tabs">
       <button class="tab ${engTab==='mgmt'?'on':''}" data-a="tab" data-v="mgmt">Řízení</button>
+      <button class="tab ${engTab==='ps'?'on':''}" data-a="tab" data-v="ps">Problem solving</button>
       <button class="tab ${engTab==='tasks'?'on':''}" data-a="tab" data-v="tasks">Akční plán</button>
       <button class="tab ${engTab==='dash'?'on':''}" data-a="tab" data-v="dash">Přehled a KPI</button>
       <button class="tab ${engTab==='list'?'on':''}" data-a="tab" data-v="list">Prostoje</button>
       <button class="tab ${engTab==='scrap'?'on':''}" data-a="tab" data-v="scrap">Scrap</button>
       ${canImport()?`<button class="tab ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
       <span class="sp">
-        ${engTab==='tasks'?'<span class="muted" style="font-size:11.5px">Akční plán je nezávislý na období — vidíš všechny tasky.</span>'
+        ${engTab==='ps'?'<span class="muted" style="font-size:11.5px">Problem solving zakládáš v Řízení u linky pod prahem.</span>'
+          :engTab==='tasks'?'<span class="muted" style="font-size:11.5px">Akční plán je nezávislý na období — vidíš všechny tasky.</span>'
           :engTab==='mgmt'?'<span class="muted" style="font-size:11.5px">Řízení počítá po týdnech z posledních 12 týdnů.</span>'
           :engTab==='scrap'?'<span class="muted" style="font-size:11.5px">Scrap se počítá po měsících — posledních 12.</span>'
           :`<span class="muted" style="font-size:11.5px">Období:</span>
@@ -2346,6 +2499,15 @@ function bind(){
   const mo=document.getElementById('imp-month');
   if(mo) mo.onchange=()=>{ imp.month=mo.value; reparseScrap(); render(); };
 
+  const pq=document.getElementById('ps-q');
+  if(pq) pq.oninput=()=>{ psF.q=pq.value; const pos=pq.selectionStart; render();
+    const n=document.getElementById('ps-q'); if(n){ n.focus(); n.setSelectionRange(pos,pos); } };
+  [['ps-fline','line'],['ps-fowner','owner'],['ps-fstatus','status']].forEach(([id,k])=>{
+    const el=document.getElementById(id); if(el) el.onchange=()=>{ psF[k]=el.value; render(); };
+  });
+  const ph=document.getElementById('ps-hide');
+  if(ph) ph.onchange=()=>{ psHideClosed=ph.checked; render(); };
+
   const tq=document.getElementById('tk-q');
   if(tq) tq.oninput=()=>{ tF.q=tq.value; const pos=tq.selectionStart; render();
     const n=document.getElementById('tk-q'); if(n){ n.focus(); n.setSelectionRange(pos,pos); } };
@@ -2354,11 +2516,11 @@ function bind(){
   });
   const th=document.getElementById('tk-hide');
   if(th) th.onchange=()=>{ tHideClosed=th.checked; render(); };
-  document.querySelectorAll('[data-own]').forEach(c=>{
-    c.onchange=()=>{ collectTask(); render(); };
-  });
+  const oq=document.getElementById('tk-ownq');
+  if(oq) oq.oninput=()=>{ ownQ=oq.value; collectTask(); render();
+    const n=document.getElementById('tk-ownq'); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } };
   const tka=document.getElementById('tk-area');
-  if(tka) tka.onchange=()=>{ collectTask(); render(); };   // ať nápověda ukazuje správnou předponu čísla
+  if(tka) tka.onchange=()=>{ collectTask(); render(); };   // ať se přenačtou stroje k oblasti
   const tfi=document.getElementById('tk-file');
   if(tfi) tfi.onchange=()=>{ if(tfi.files&&tfi.files.length) handleTaskFiles(tfi.files); };
   const tdz=document.getElementById('tk-drop');
@@ -2390,6 +2552,7 @@ async function act(a,v){
       engTab=v;
       if(v==='list') loadEvents();
       if(v==='mgmt') loadMgmt();
+      if(v==='ps') loadMgmt();
       if(v==='tasks') loadTasks();
       if(v==='scrap') loadScrap();
       if(v==='imp' && imp.step===3) imp=newImp(imp.kind);
@@ -2400,20 +2563,27 @@ async function act(a,v){
       break;
     case 'reload':
       loaded=false; evLoaded=''; scLoaded=false; mgLoaded=false; tLoaded=false;
-      if(engTab==='mgmt') loadMgmt(true);
+      if(engTab==='mgmt'||engTab==='ps') loadMgmt(true);
       if(engTab==='tasks') loadTasks(true);
       loadDays(true); if(engTab==='list') loadEvents();
       break;
     /* ----- akční plán ----- */
-    case 'tk-new': openTask=emptyTask(); pendingTaskFiles=[]; moveDraft={date:'',why:''}; tMsg=''; break;
-    case 'tk-open': openTask=JSON.parse(JSON.stringify(tasks.find(x=>x._id===v)||{})); moveDraft={date:'',why:''}; tMsg=''; break;
-    case 'tk-close': openTask=null; pendingTaskFiles=[]; moveDraft={date:'',why:''}; tMsg=''; break;
+    case 'tk-ownadd':{ collectTask(); const o=openTask&&taskOwners(openTask);
+      if(o && !o.includes(v)) openTask.owners=o.concat(v);
+      ownQ=''; break; }
+    case 'tk-ownrm':{ collectTask();
+      if(openTask) openTask.owners=taskOwners(openTask).filter(x=>x!==v);
+      break; }
+    case 'tk-new': openTask=emptyTask(); pendingTaskFiles=[]; moveDraft={date:'',why:''}; ownQ=''; tMsg=''; break;
+    case 'tk-open': openTask=JSON.parse(JSON.stringify(tasks.find(x=>x._id===v)||{})); moveDraft={date:'',why:''}; ownQ=''; tMsg=''; break;
+    case 'tk-close': openTask=null; pendingTaskFiles=[]; moveDraft={date:'',why:''}; ownQ=''; tMsg=''; break;
     case 'tk-save': await saveTask(); return;
     case 'tk-addmove': await addMove(); return;
     case 'tk-delfile': await removeTaskFile(Number(v)); return;
     case 'tk-review': tSort = tSort==='review'?'new':'review'; break;
     case 'tk-all': tF={area:'',owner:'',status:'',type:'',q:''}; tHideClosed=false; break;
     case 'tk-export': exportTasksCsv(); return;
+    case 'ps-export': exportPsCsv(); return;
 
     /* ----- řízení výkonu ----- */
     case 'mg-week': mgWeek=v; break;
@@ -2443,9 +2613,14 @@ async function act(a,v){
       const t=id=>{const el=document.getElementById(id); return el?el.value.trim():'';};
       const list=id=>t(id).split(',').map(x=>x.trim()).filter(Boolean);
       const ex=[...document.querySelectorAll('[data-exg]')].filter(c=>c.checked).map(c=>c.dataset.exg);
+      const machines={};
+      document.querySelectorAll('[data-mach]').forEach(el=>{
+        const list=el.value.split(',').map(x=>x.trim()).filter(Boolean);
+        if(list.length) machines[el.dataset.mach]=list;
+      });
       await saveEngcfg({plannedHoursPerDay:n('cf-hpd')||22.5, threshold:n('cf-thr')||90,
         repeatWeeks:n('cf-rep')||2, escalationDays:n('cf-esc')||7, effectivenessDays:n('cf-eff')||28,
-        manager:t('cf-mgr'), engineers:list('cf-eng'), coordinators:list('cf-coo'), excludeGroups:ex});
+        manager:t('cf-mgr'), engineers:list('cf-eng'), coordinators:list('cf-coo'), excludeGroups:ex, machines});
       break;
     }
     case 'imp-reset': imp=newImp(imp.kind); break;
