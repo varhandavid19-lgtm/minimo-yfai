@@ -1642,43 +1642,26 @@ function mgmtSettings(){
   const c=engcfg;
   return `
   <div class="panel">
-    <h2>Nastavení standardu<span class="right">podle toho se počítá výkon a spouští problem solving</span></h2>
-    <div class="form">
-      <div class="f"><label>Plánovaný výrobní čas na linku a den</label>
-        <input id="cf-hpd" type="number" step="0.5" min="1" max="24" value="${c.plannedHoursPerDay}"><div class="muted" style="font-size:11px">hodin — výchozí 22,5 = 3 směny po 7,5 h</div></div>
-      <div class="f"><label>Práh výkonu</label>
-        <input id="cf-thr" type="number" step="1" min="1" max="100" value="${c.threshold}"><div class="muted" style="font-size:11px">% — pod tím se povinně zakládá 5× proč</div></div>
-      <div class="f"><label>Opakovaný problém</label>
-        <input id="cf-rep" type="number" step="1" min="2" max="8" value="${c.repeatWeeks}"><div class="muted" style="font-size:11px">týdnů pod prahem po sobě</div></div>
-      <div class="f"><label>Eskalace na manažera</label>
-        <input id="cf-esc" type="number" step="1" min="1" max="60" value="${c.escalationDays}"><div class="muted" style="font-size:11px">dní po termínu opatření</div></div>
-      <div class="f"><label>Ověření účinnosti za</label>
-        <input id="cf-eff" type="number" step="1" min="7" max="180" value="${c.effectivenessDays}"><div class="muted" style="font-size:11px">dní od založení problému</div></div>
-      <div class="f"><label>Engineering Manager</label><input id="cf-mgr" value="${esc(c.manager||'')}"></div>
-      <div class="f span2"><label>Process Engineers</label><input id="cf-eng" value="${esc((c.engineers||[]).join(', '))}">
-        <div class="muted" style="font-size:11px">jména oddělená čárkou — owner technické analýzy</div></div>
-      <div class="f span2"><label>Coordinators</label><input id="cf-coo" value="${esc((c.coordinators||[]).join(', '))}">
-        <div class="muted" style="font-size:11px">owner follow-upu otevřených akcí</div></div>
-      <div class="sect">Stroje podle oblasti — nabízejí se v akčním plánu</div>
-      <div class="f span4">
-        <div class="machgrid">${TASK_AREAS.map(a=>`
-          <div class="f"><label>${esc(a.k)}</label>
-            <input data-mach="${esc(a.k)}" value="${esc(((c.machines||{})[a.k]||[]).join(', '))}" placeholder="stroje oddělené čárkou"></div>`).join('')}
-        </div>
-        <div class="muted" style="font-size:11px;margin-top:6px">Když u oblasti nic nevyplníš, nabídnou se linky, které přišly z importu prostojů.</div>
+    <h2>Nastavení standardu<span class="right">spravuje se v modulu Nastavení</span></h2>
+    <div class="body">
+      <div class="notice" style="margin:0">
+        Práh výkonu, plánovaný čas, ownery, stroje i vyloučené skupiny důvodů najdeš
+        na hlavní stránce pod dlaždicí <b>⚙️ Nastavení</b> → sekce <b>Engineering — řízení výkonu</b>.
+        <a href="nastaveni.html" style="margin-left:6px;font-weight:700">Otevřít nastavení →</a>
       </div>
-      <div class="f span4"><label>Do výkonu nepočítat tyhle skupiny důvodů</label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;padding:4px 0">
-          ${['Lidé a přestávky','Organizace výroby','Systém a data','Přestavba a seřízení','Materiál a logistika'].map(g=>
-            `<label class="check"><input type="checkbox" data-exg="${esc(g)}" ${(c.excludeGroups||[]).includes(g)?'checked':''}> ${esc(g)}</label>`).join('')}
-        </div>
-        <div class="muted" style="font-size:11px">Vyloučený čas se z prostojů odečte, než se spočítá výkon.</div></div>
+      <div class="cards" style="margin-top:12px">
+        <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Práh výkonu</div>
+          <div class="val">${c.threshold}<small> %</small></div><div class="note">pod tím se zakládá 5× proč</div></div>
+        <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Plánovaný čas</div>
+          <div class="val">${num(c.plannedHoursPerDay,1)}<small> h/den</small></div><div class="note">na linku a den</div></div>
+        <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Eskalace</div>
+          <div class="val">${c.escalationDays}<small> dní</small></div><div class="note">po termínu opatření</div></div>
+        <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Ověření účinnosti</div>
+          <div class="val">${c.effectivenessDays}<small> dní</small></div><div class="note">od založení problému</div></div>
+      </div>
     </div>
-    <div class="foot"><span class="muted">Změny se projeví hned na téhle stránce.</span>
-      <span style="margin-left:auto"></span><button class="btn-ok" data-a="mg-savecfg">Uložit nastavení</button></div>
   </div>`;
 }
-
 /* ---------- okno problému ---------- */
 function problemModal(){
   const p=problems.find(x=>x._id===openPs); if(!p) return '';
@@ -2617,21 +2600,6 @@ async function act(a,v){
       const miss=underThreshold(weeks,v,engcfg).filter(l=>!problemFor(v,l.slug));
       for(const l of miss) await createProblem(v, l, l.repeated?'opakovaný problém':'výkon pod prahem');
       openPs=null; render(); return;
-    }
-    case 'mg-savecfg':{
-      const n=id=>{const el=document.getElementById(id); return el?Number(el.value):null;};
-      const t=id=>{const el=document.getElementById(id); return el?el.value.trim():'';};
-      const list=id=>t(id).split(',').map(x=>x.trim()).filter(Boolean);
-      const ex=[...document.querySelectorAll('[data-exg]')].filter(c=>c.checked).map(c=>c.dataset.exg);
-      const machines={};
-      document.querySelectorAll('[data-mach]').forEach(el=>{
-        const list=el.value.split(',').map(x=>x.trim()).filter(Boolean);
-        if(list.length) machines[el.dataset.mach]=list;
-      });
-      await saveEngcfg({plannedHoursPerDay:n('cf-hpd')||22.5, threshold:n('cf-thr')||90,
-        repeatWeeks:n('cf-rep')||2, escalationDays:n('cf-esc')||7, effectivenessDays:n('cf-eff')||28,
-        manager:t('cf-mgr'), engineers:list('cf-eng'), coordinators:list('cf-coo'), excludeGroups:ex, machines});
-      break;
     }
     case 'imp-reset': imp=newImp(imp.kind); break;
     case 'imp-kind': imp=newImp(v); break;

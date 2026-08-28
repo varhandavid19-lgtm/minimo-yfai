@@ -35,6 +35,21 @@
   .panel > h2{background:var(--panel);color:#fff;margin:0;font-size:13px;font-weight:700;padding:10px 14px;display:flex;align-items:center;gap:9px}
   .panel > h2 .right{margin-left:auto;font-weight:500;font-size:11px;opacity:.85}
   .panel .body{padding:14px}
+  .eggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+  .egf{display:flex;flex-direction:column;gap:4px}
+  .egf label{font-size:12.5px;font-weight:700;color:#41506b}
+  .egf input{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:8px;background:#fff;color:var(--text);width:100%}
+  .egf input:focus{outline:2px solid #2a5ea3;border-color:#2a5ea3}
+  .egf input:disabled{background:#f4f6f9;color:var(--muted)}
+  .eghint{font-size:11px;color:var(--muted)}
+  .egh{margin:18px 0 6px;font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#0a5b5e;
+    border-bottom:2px solid #e4f2f2;padding-bottom:5px}
+  .egnote{margin:0 0 12px;font-size:12px;color:var(--muted);background:#eef3fb;border:1px solid #d6e2f3;
+    border-radius:8px;padding:9px 11px}
+  .egchecks{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:#41506b}
+  .egchecks label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+  .egfoot{margin-top:16px;display:flex;justify-content:flex-end}
 
   .legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
   .lvl{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#fafbfd}
@@ -101,7 +116,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, onSnapshot, updateDoc, deleteDoc }
+import { getFirestore, collection, doc, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -193,6 +208,81 @@ const appEl=document.getElementById('app');
 const myAccess = () => resolveModule(myModules, myLevel, 'nastaveni');   // Skryté/Jen číst/Zapisovat
 const canWriteSettings = () => myAccess()==='write';
 
+/* ===== Nastavení modulu Engineering (dokument meta/engcfg) ===== */
+const ENG_AREAS = ['IMM','Assembly MFA2','Assembly SK336/PO455/W206','Assembly OV51/64',
+  'Assembly MBEAM','Slush','Foaming','GB/DP','Gclass'];
+const ENG_GROUPS_ALL = ['Lidé a přestávky','Organizace výroby','Systém a data',
+  'Přestavba a seřízení','Materiál a logistika','Porucha stroje','Technický prostoj','Kvalita'];
+const ENGCFG_DEF = {plannedHoursPerDay:22.5, perLine:{}, threshold:90, repeatWeeks:2,
+  escalationDays:7, effectivenessDays:28, excludeGroups:[], machines:{},
+  engineers:[], coordinators:[], manager:''};
+let engcfg=Object.assign({},ENGCFG_DEF), engLoaded=false;
+
+async function loadEngcfg(){
+  try{
+    const snap=await getDoc(doc(db,'meta','engcfg'));
+    engcfg=Object.assign({},ENGCFG_DEF, snap.exists()?snap.data():{});
+  }catch(e){ /* pravidla to nedovolí — panel se prostě nenaplní */ }
+  engLoaded=true; render();
+}
+async function saveEngcfg(){
+  if(!canWriteSettings()){ toast('Nemáte právo měnit nastavení.','err'); return; }
+  const n=(id,d)=>{const el=document.getElementById(id); const v=el?Number(el.value):NaN; return isFinite(v)&&v>0?v:d;};
+  const t=id=>{const el=document.getElementById(id); return el?el.value.trim():'';};
+  const list=id=>t(id).split(',').map(x=>x.trim()).filter(Boolean);
+  const machines={};
+  document.querySelectorAll('[data-mach]').forEach(el=>{
+    const arr=el.value.split(',').map(x=>x.trim()).filter(Boolean);
+    if(arr.length) machines[el.dataset.mach]=arr;
+  });
+  const patch={
+    plannedHoursPerDay:n('eg-hpd',22.5), threshold:n('eg-thr',90), repeatWeeks:n('eg-rep',2),
+    escalationDays:n('eg-esc',7), effectivenessDays:n('eg-eff',28),
+    manager:t('eg-mgr'), engineers:list('eg-eng'), coordinators:list('eg-coo'),
+    excludeGroups:[...document.querySelectorAll('[data-exg]')].filter(c=>c.checked).map(c=>c.dataset.exg),
+    machines
+  };
+  try{
+    await setDoc(doc(db,'meta','engcfg'), patch, {merge:true});
+    engcfg=Object.assign({},engcfg,patch);
+    toast('Nastavení Engineeringu uloženo.','ok');
+  }catch(e){ toast('Neuložilo se: '+((e&&e.message)||e),'err'); }
+  render();
+}
+function engView(){
+  const c=engcfg, rw=canWriteSettings(), dis=rw?'':'disabled';
+  const f=(id,label,val,hint,type)=>`<div class="egf"><label>${label}</label>
+    <input id="${id}" ${type?`type="${type}"`:''} value="${esc(val)}" ${dis}>
+    ${hint?`<span class="eghint">${hint}</span>`:''}</div>`;
+  return `<div class="panel"><h2>🏭 Engineering — řízení výkonu <span class="right">platí pro modul Engineering</span></h2>
+    <div class="body">
+      <p class="egnote">Podle těchhle hodnot se v Engineeringu počítá výkon linek a spouští povinný problem solving.
+        Stroje a lidé se odsud nabízejí v akčním plánu.</p>
+      <div class="eggrid">
+        ${f('eg-hpd','Plánovaný výrobní čas na linku a den',c.plannedHoursPerDay,'hodin — výchozí 22,5 = 3 směny po 7,5 h','number')}
+        ${f('eg-thr','Práh výkonu',c.threshold,'% — pod tím se povinně zakládá 5× proč','number')}
+        ${f('eg-rep','Opakovaný problém',c.repeatWeeks,'týdnů pod prahem po sobě','number')}
+        ${f('eg-esc','Eskalace na manažera',c.escalationDays,'dní po termínu opatření','number')}
+        ${f('eg-eff','Ověření účinnosti za',c.effectivenessDays,'dní od založení problému','number')}
+        ${f('eg-mgr','Engineering Manager',c.manager||'','komu se eskaluje')}
+      </div>
+      <div class="eggrid" style="margin-top:12px">
+        ${f('eg-eng','Process Engineers',(c.engineers||[]).join(', '),'jména oddělená čárkou — owner technické analýzy')}
+        ${f('eg-coo','Coordinators',(c.coordinators||[]).join(', '),'owner follow-upu otevřených akcí')}
+      </div>
+      <h3 class="egh">Stroje podle oblasti</h3>
+      <p class="egnote">Nabízejí se při zakládání tasku v akčním plánu. Když u oblasti nic nevyplníte,
+        nabídnou se linky z importovaných prostojů.</p>
+      <div class="eggrid">${ENG_AREAS.map(a=>`<div class="egf"><label>${esc(a)}</label>
+        <input data-mach="${esc(a)}" value="${esc(((c.machines||{})[a]||[]).join(', '))}" placeholder="stroje oddělené čárkou" ${dis}></div>`).join('')}
+      </div>
+      <h3 class="egh">Do výkonu nepočítat tyhle skupiny důvodů</h3>
+      <div class="egchecks">${ENG_GROUPS_ALL.map(g=>`<label><input type="checkbox" data-exg="${esc(g)}" ${(c.excludeGroups||[]).includes(g)?'checked':''} ${dis}> ${esc(g)}</label>`).join('')}</div>
+      ${rw?`<div class="egfoot"><button class="btn-edit" id="eg-save">Uložit nastavení Engineeringu</button></div>`
+          :`<p class="egnote" style="margin-top:12px">👁️ Máte nastavení jen pro čtení.</p>`}
+    </div></div>`;
+}
+
 onAuthStateChanged(auth, async (user)=>{
   if(!user){ location.href='index.html'; return; }         // nepřihlášen → na portál (kde je login)
   me={uid:user.uid, email:user.email};
@@ -201,7 +291,7 @@ onAuthStateChanged(auth, async (user)=>{
     const d=snap.exists()?snap.data():null;
     myLevel=levelOf(d); myModules=(d&&d.modules)||{};
   }catch(e){ myLevel='basic'; myModules={}; }
-  if(myAccess()!=='none'){ subscribe(); }
+  if(myAccess()!=='none'){ subscribe(); loadEngcfg(); }
   ready=true; render();
 });
 
@@ -352,6 +442,8 @@ function view(){
     </div></div>
     ${uedit?editUserView():''}
 
+    ${engView()}
+
     <div class="panel"><h2>ℹ️ Co který level znamená</h2><div class="body">
       <div class="legend">${legend}</div>
       <p style="margin:12px 0 0;font-size:11.5px;color:var(--muted)">
@@ -364,6 +456,7 @@ function view(){
 
 function wire(){
   document.getElementById('btn-logout')?.addEventListener('click',()=>signOut(auth));
+  document.getElementById('eg-save')?.addEventListener('click',saveEngcfg);
   document.querySelectorAll('button[data-edit]').forEach(b=>
     b.addEventListener('click',()=>openEdit(b.getAttribute('data-edit'))));
   document.querySelectorAll('button[data-del]').forEach(btn=>

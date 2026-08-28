@@ -88,8 +88,11 @@ spouští problem solving na úrovni Process Engineera.
   `plannedHoursPerDay` × počet dní, ze kterých máme data — proto neúplný týden
   povinnou analýzu automaticky nespouští (`w.dayCount >= 5`).
 - Nastavení standardu je v dokumentu `meta/engcfg` (práh, opakování, eskalace,
-  ověření účinnosti, ownery, vyloučené skupiny důvodů). Tam jsou i čítače
-  `seqPs` a `seqAct` pro čísla PS-rok-XXX a AK-rok-XXX — generují se TRANSAKCÍ.
+  ověření účinnosti, ownery, stroje, vyloučené skupiny důvodů). Tam jsou i čítače
+  `seqPs`, `seqAct` a `seqTask` — generují se TRANSAKCÍ.
+  **Edituje se v `nastaveni.html`** (dlaždice Nastavení na hlavní stránce),
+  ne v Engineeringu. V Řízení je jen přehled hodnot a odkaz. Když přidáš další
+  položku nastavení, přidej ji do `nastaveni.html`.
 - Problém nelze uzavřít, dokud nemá kořenovou příčinu, aspoň jedno preventivní
   opatření, všechna opatření hotová a vyplněné ověření účinnosti. Tohle je jádro
   zadání, NERUŠ to.
@@ -110,8 +113,8 @@ počet posunů, stav, po termínu, uzavřeno.
   v `meta/engcfg`, generuje se TRANSAKCÍ. Žádné předpony podle oblasti.
 - Owner se vybírá našeptávačem (řádek + návrhy pod ním), ne checkboxy.
 - Stroj se vybírá k oblasti. Seznam je v `meta/engcfg.machines` (edituje se
-  v Řízení → Nastavení standardu); když je pro oblast prázdný, nabídnou se
-  linky z importovaných prostojů.
+  v modulu Nastavení); když je pro oblast prázdný, nabídnou se linky
+  z importovaných prostojů.
 - Platný termín, počet posunů a „po termínu" se NIKDY neukládají, počítají se
   z `dueOrig` a pole `moves`. Nepřidávej je do dokumentu.
 - Posun termínu jde uložit jen s důvodem — každý posun má datum, důvod, kdo a kdy.
