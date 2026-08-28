@@ -106,9 +106,12 @@ počet posunů, stav, po termínu, uzavřeno.
 - Owner může být víc lidí — pole `owners`. Jména se berou z kolekce `users`,
   tedy z Nastavení celého minima. Starší tasky s jedním jménem v poli `owner`
   se pořád zobrazí správně (`taskOwners()`).
-- Číslo je `PREFIX-XXX` podle oblasti (IMM, MFA2, SK336, OV51, MBEAM, SLUSH,
-  FOAM, GBDP, GCLS) — čítače
-  `seqTask<PREFIX>` v `meta/engcfg`, generují se TRANSAKCÍ.
+- Číslo tasku je PROSTÉ pořadové číslo (1, 2, 3…) z čítače `seqTask`
+  v `meta/engcfg`, generuje se TRANSAKCÍ. Žádné předpony podle oblasti.
+- Owner se vybírá našeptávačem (řádek + návrhy pod ním), ne checkboxy.
+- Stroj se vybírá k oblasti. Seznam je v `meta/engcfg.machines` (edituje se
+  v Řízení → Nastavení standardu); když je pro oblast prázdný, nabídnou se
+  linky z importovaných prostojů.
 - Platný termín, počet posunů a „po termínu" se NIKDY neukládají, počítají se
   z `dueOrig` a pole `moves`. Nepřidávej je do dokumentu.
 - Posun termínu jde uložit jen s důvodem — každý posun má datum, důvod, kdo a kdy.
@@ -118,6 +121,12 @@ počet posunů, stav, po termínu, uzavřeno.
   ukládá do `nabidky/<idPožadavku>/…`. Limit 5 MB na soubor.
 - Rozepsané hodnoty v okně se před překreslením ukládají do paměti
   (`collectTask()`, `moveDraft`) — bez toho by se text ztratil při odmítnutém uložení.
+
+## Záložka Problem solving
+Přehled všech 5× proč / A3 z kolekce `problems`. Zakládají se v Řízení tlačítkem
+u linky pod prahem, tady se jen zobrazují a otevírají (stejné okno jako v Řízení).
+Řadí se podle naléhavosti: eskalace → opatření po termínu → nejstarší. Sloupec
+Opatření ukazuje `hotovo/celkem` a značku `P!`, když chybí preventivní opatření.
 
 ## Chování, které se NESMÍ rozbít
 - KAŽDÝ nově založený požadavek má VŽDY stav „nový", pro všechny role bez výjimky
