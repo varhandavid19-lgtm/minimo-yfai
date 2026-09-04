@@ -85,6 +85,9 @@
   table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
   thead th{background:#16355f;color:#fff;text-align:left;padding:8px 10px;font-size:10px;letter-spacing:.6px;text-transform:uppercase;cursor:pointer;user-select:none}
   thead th.no-sort{cursor:default}
+  thead tr.colf th{background:#20406a;padding:4px 5px;cursor:default;text-transform:none;letter-spacing:0;position:sticky}
+  thead tr.colf input,thead tr.colf select{width:100%;min-width:0;font-size:11px;padding:4px 6px;border:1px solid #3a5a86;border-radius:5px;background:#fff;color:#16233a}
+  thead tr.colf input:focus,thead tr.colf select:focus{outline:2px solid #7fb0ff;border-color:#7fb0ff}
   tbody td{padding:8px 10px;border-bottom:1px solid #eef1f5;vertical-align:top;background:var(--row,transparent)}
   tbody tr:hover td{filter:brightness(.975)}
   tr.crit td{background:#f8d2ce}
@@ -484,7 +487,8 @@ let rows=[];           // requests (živě z Firestore)
 let usersList=[];      // users (jen pro admina)
 let tab='pozadavky', authReady=false, dataReady=false, fatalErr='';
 let sort={col:'created',dir:-1};
-let filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:''};
+const emptyCol=()=>({poradove:'',created:'',sklad:'',popis:'',mnozstvi:'',cena:'',total:'',celkem:'',dodavatel:'',vyrobce:'',objednavka:'',datum:'',zadal:'',schvalil:''});
+let filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:'',col:emptyCol()};
 let dashRange={od:'',do:''};   // období pro ukazatele na dashboardu (podle data vytvoření)
 let editing=null, errs={}, footMsg='';
 let dlg=null, toastMsg=null, toastKind='', drafts={};
@@ -514,7 +518,7 @@ const canAttach = r => !!r && (P().edit || (me && r.author===me.uid));   // žad
    nejdou do databáze, takže ostatní uživatele nijak neovlivní a mají svoje vlastní. */
 function saveView(){ try{ localStorage.setItem('minimo-nakup-view', JSON.stringify({filters,sort,dashRange})); }catch(e){} }
 function loadView(){ try{ const v=JSON.parse(localStorage.getItem('minimo-nakup-view')||'null');
-  if(v){ if(v.filters) filters=Object.assign(filters,v.filters); if(v.sort) sort=v.sort; if(v.dashRange) dashRange=Object.assign(dashRange,v.dashRange); } }catch(e){} }
+  if(v){ if(v.filters) filters=Object.assign(filters,v.filters); filters.col=Object.assign(emptyCol(),filters.col||{}); if(v.sort) sort=v.sort; if(v.dashRange) dashRange=Object.assign(dashRange,v.dashRange); } }catch(e){} }
 loadView();
 function monthRange(){const n=new Date(),y=n.getFullYear(),m=n.getMonth(),p=x=>String(x).padStart(2,'0'),last=new Date(y,m+1,0).getDate();return {od:`${y}-${p(m+1)}-01`,do:`${y}-${p(m+1)}-${p(last)}`};}
 function yearRange(){const y=new Date().getFullYear();return {od:y+'-01-01',do:y+'-12-31'};}
@@ -710,6 +714,22 @@ function visibleRows(){
   if(filters.reqNo) r=r.filter(x=>has(x.reqNo,filters.reqNo));
   if(filters.rfqNo) r=r.filter(x=>has(x.rfqNo,filters.rfqNo));
   if(filters.orderNo) r=r.filter(x=>has(x.orderNo,filters.orderNo));
+  // filtry pod záhlavím sloupců (textové sloupce)
+  const cf=filters.col||{};
+  if(cf.poradove) r=r.filter(x=>has(x.poradove,cf.poradove));
+  if(cf.created)  r=r.filter(x=>has(dateCz(x.created),cf.created));
+  if(cf.sklad)    r=r.filter(x=>has(x.sklad,cf.sklad));
+  if(cf.popis)    r=r.filter(x=>has((x.popis||'')+' '+(x.duvod||'')+' '+(x.poznamka||''),cf.popis));
+  if(cf.mnozstvi) r=r.filter(x=>has(x.mnozstvi,cf.mnozstvi));
+  if(cf.cena)     r=r.filter(x=>has(x.cena,cf.cena));
+  if(cf.total)    r=r.filter(x=>has(total(x),cf.total));
+  if(cf.celkem)   r=r.filter(x=>has(totalEur(x),cf.celkem));
+  if(cf.dodavatel)r=r.filter(x=>has(x.dodavatel,cf.dodavatel));
+  if(cf.vyrobce)  r=r.filter(x=>has(x.vyrobce,cf.vyrobce));
+  if(cf.objednavka)r=r.filter(x=>has([x.reqNo,x.rfqNo,x.orderNo,x.dssiItem].join(' '),cf.objednavka));
+  if(cf.datum)    r=r.filter(x=>has(dateCz(x.datum),cf.datum));
+  if(cf.zadal)    r=r.filter(x=>has(x.authorName,cf.zadal));
+  if(cf.schvalil) r=r.filter(x=>has(x.approvedBy,cf.schvalil));
   if(filters.q){const q=filters.q.toLowerCase();
     r=r.filter(x=>[x.poradove,x.sklad,x.popis,x.duvod,x.vyrobce,x.poznamka,x.reqNo,x.rfqNo,x.orderNo,x.dssiItem].join(' ').toLowerCase().includes(q));}
   const c=sort.col;
@@ -751,7 +771,7 @@ function listView(){
   const closedStatuses=['doručeno','zamítnuto'];
   const openCount=rows.filter(r=>!closedStatuses.includes(r.status)).length;
   const closedCount=rows.filter(r=>closedStatuses.includes(r.status)).length;
-  const anyFilter = filters.q||filters.grp||filters.status||filters.priorita||filters.ucet||filters.usek||filters.od||filters.do||filters.mine||filters.reqNo||filters.rfqNo||filters.orderNo;
+  const anyFilter = filters.q||filters.grp||filters.status||filters.priorita||filters.ucet||filters.usek||filters.od||filters.do||filters.mine||filters.reqNo||filters.rfqNo||filters.orderNo||Object.values(filters.col||{}).some(Boolean);
   const dashActive = k => (dashPreset()===k?'on':'');
   const periodTxt = (dashRange.od||dashRange.do) ? `${dashRange.od?dateCz(dashRange.od):'…'} – ${dashRange.do?dateCz(dashRange.do):'…'}` : 'celá historie';
   return `
@@ -803,6 +823,29 @@ function listView(){
         ${th('total','Cena celkem')}${th('celkem','Celkem EUR')}${th('dodavatel','Dodavatel')}${th('vyrobce','Výrobce')}${th('ucet','Účet')}${th('usek','Linka / stroj')}
         ${th('datum','Dodání')}<th class="no-sort">Objednávka</th><th class="no-sort">Přijato</th><th class="no-sort">MIN/MAX</th><th class="no-sort">Odkaz</th>
         ${th('authorName','Zadal')}${th('approvedBy','Schválil')}<th class="no-sort">Výmaz řádku</th>
+      </tr>
+      <tr class="colf">
+        ${manage.on?'<th></th>':''}
+        <th><select data-cfsel="status"><option value="">Vše</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${filters.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></th>
+        <th><input data-cf="poradove" value="${esc(filters.col.poradove)}"></th>
+        <th><input data-cf="created" value="${esc(filters.col.created)}"></th>
+        <th><input data-cf="sklad" value="${esc(filters.col.sklad)}"></th>
+        <th><input data-cf="popis" value="${esc(filters.col.popis)}"></th>
+        <th><select data-cfsel="priorita"><option value="">Vše</option>${PRIORITIES.map(p=>`<option ${filters.priorita===p.k?'selected':''}>${esc(p.k)}</option>`).join('')}</select></th>
+        <th><input data-cf="mnozstvi" value="${esc(filters.col.mnozstvi)}"></th>
+        <th><input data-cf="cena" value="${esc(filters.col.cena)}"></th>
+        <th><input data-cf="total" value="${esc(filters.col.total)}"></th>
+        <th><input data-cf="celkem" value="${esc(filters.col.celkem)}"></th>
+        <th><input data-cf="dodavatel" value="${esc(filters.col.dodavatel)}"></th>
+        <th><input data-cf="vyrobce" value="${esc(filters.col.vyrobce)}"></th>
+        <th><select data-cfsel="ucet"><option value="">Vše</option>${cfg.accounts.map(a=>`<option value="${esc(a.code)}" ${filters.ucet===a.code?'selected':''}>${esc(accLabel(a.code))}</option>`).join('')}</select></th>
+        <th><select data-cfsel="usek"><option value="">Vše</option>${cfg.sections.map(s=>`<option ${filters.usek===s.name?'selected':''}>${esc(s.name)}</option>`).join('')}</select></th>
+        <th><input data-cf="datum" value="${esc(filters.col.datum)}"></th>
+        <th><input data-cf="objednavka" value="${esc(filters.col.objednavka)}"></th>
+        <th></th><th></th><th></th>
+        <th><input data-cf="zadal" value="${esc(filters.col.zadal)}"></th>
+        <th><input data-cf="schvalil" value="${esc(filters.col.schvalil)}"></th>
+        <th></th>
       </tr></thead>
       <tbody>
       ${rr.length?rr.map(r=>{
@@ -1374,6 +1417,9 @@ function bind(){
   [['f-reqno','reqNo'],['f-rfqno','rfqNo'],['f-orderno','orderNo']].forEach(([id,key])=>{const el=document.getElementById(id);
     if(el) el.oninput=()=>{filters[key]=el.value;const p=el.selectionStart;render();const n=document.getElementById(id);if(n){n.focus();n.setSelectionRange(p,p);}};});
   ['status','priorita','ucet','usek','od','do'].forEach(k=>{const el=document.getElementById('f-'+k);if(el)el.onchange=()=>{filters[k]=el.value;render();};});
+  // filtry pod záhlavím sloupců
+  document.querySelectorAll('input[data-cf]').forEach(el=>{el.oninput=()=>{filters.col[el.dataset.cf]=el.value;const p=el.selectionStart;render();const n=document.querySelector('input[data-cf="'+el.dataset.cf+'"]');if(n){n.focus();try{n.setSelectionRange(p,p);}catch(e){}}};});
+  document.querySelectorAll('select[data-cfsel]').forEach(el=>{el.onchange=()=>{filters[el.dataset.cfsel]=el.value;render();};});
   ['od','do'].forEach(k=>{const el=document.getElementById('d-'+k);if(el)el.onchange=()=>{dashRange[k]=el.value;render();};});
   const m=document.getElementById('f-mine');if(m)m.onchange=()=>{filters.mine=m.checked;render();};
   ['e-cena','e-mnozstvi'].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=recalc;el.onchange=recalc;}});
@@ -1440,7 +1486,7 @@ async function act(a,v,el,ev){
     case 'logout': await signOut(auth); return;
     case 'tab': tab=v; break;
     case 'sort': sort=(sort.col===v)?{col:v,dir:-sort.dir}:{col:v,dir:1}; break;
-    case 'clear-filters': filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:''}; break;
+    case 'clear-filters': filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:'',col:emptyCol()}; break;
     case 'dash-all': dashRange={od:'',do:''}; break;
     case 'dash-month': dashRange=monthRange(); break;
     case 'dash-year': dashRange=yearRange(); break;
