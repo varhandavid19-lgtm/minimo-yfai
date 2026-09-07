@@ -500,6 +500,7 @@ let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType
 let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
 let uploadBusy=false;                                         // právě se nahrává příloha
 let downOnOverlay=false;                                      // stisk myši začal na ztmavené ploše (kvůli zavírání kliknutím vedle)
+let importState=null;                                         // import z Maxima: {items:[{d,dup,sel}], busy, done}
 let modalTab='pozadavek';                                     // aktivní záložka v detailu (pozadavek/prijem/prilohy)
 let pendingFiles=[];                                          // přílohy čekající na nahrání u nového požadavku [{file,cat}]
 
@@ -695,7 +696,8 @@ function shell(){
     </div>
   </div>
   <main>${tab==='admin'?adminView():listView()}</main>
-  ${editing?modalView():''}`;
+  ${editing?modalView():''}
+  ${importState?importView():''}`;
 }
 
 /* ---------- seznam ---------- */
@@ -790,7 +792,7 @@ function listView(){
     ${card('Hodnota požadavků',num(sumEur,0)+' €','za období, bez zamítnutých · kurz '+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
   </div>
   ${roleNotice()}
-  ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':`<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button>${P().edit?`<button class="btn-manage ${manage.on?'on':''}" data-a="toggle-manage" title="Hromadné doplňování údajů a změna stavu">⚙ Správa požadavků</button>`:''}</div>`}
+  ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':`<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button>${P().edit?`<button class="btn-manage ${manage.on?'on':''}" data-a="toggle-manage" title="Hromadné doplňování údajů a změna stavu">⚙ Správa požadavků</button><label class="btn-manage" style="cursor:pointer" title="Import podlimitních položek z Maxima (Excel)">📥 Import z Maxima<input type="file" data-a="import-file" accept=".xlsx,.xls" hidden></label>`:''}</div>`}
   ${(manage.on&&P().edit)?mgrPanel():''}
   <div class="panel">
     <h2>Přehled požadavků <span class="right">${rr.length} z ${rows.length} záznamů</span></h2>
@@ -1367,6 +1369,91 @@ async function handleFiles(fileList,cat){
   uploadBusy=false; render();
 }
 
+/* ---------- Import podlimitních položek z Maxima (Excel) ---------- */
+function loadXLSX(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(loadXLSX._p) return loadXLSX._p;
+  loadXLSX._p=new Promise((res,rej)=>{ const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>res(window.XLSX); s.onerror=()=>rej(new Error('Nepodařilo se načíst knihovnu pro Excel (zkontroluj internet).'));
+    document.head.appendChild(s); });
+  return loadXLSX._p;
+}
+const IMP_MENA={'EUR':'EUR','CZK':'CZK','USD':'USD','€':'EUR','KČ':'CZK','KC':'CZK','CZ':'CZK'};
+const normHdr=s=>String(s??'').trim().toLowerCase();
+async function parseImportFile(file){
+  const XLSX=await loadXLSX();
+  const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+  const hi=aoa.findIndex(r=>Array.isArray(r)&&r.some(c=>normHdr(c)==='maxitem'));
+  if(hi<0) throw new Error('V souboru jsem nenašel hlavičku „Maxitem". Je to správný export z Maxima?');
+  const hdr=aoa[hi].map(normHdr); const col=n=>hdr.indexOf(n);
+  const cMax=col('maxitem'),cDesc=col('description'),cQty=col('quantity'),cCost=col('unit cost'),cCur=col('currency'),cBrand=col('brand'),cRem=col('remark 1'),cVend=col('prodejce');
+  const items=[];
+  for(let i=hi+1;i<aoa.length;i++){ const r=aoa[i]; if(!Array.isArray(r)) continue;
+    const g=idx=>idx>=0?r[idx]:null;
+    const sklad=String(g(cMax)??'').trim(), popis=String(g(cDesc)??'').trim();
+    if(!sklad&&!popis) continue;
+    const curRaw=String(g(cCur)??'').trim().toUpperCase();
+    items.push({ sklad, popis, mnozstvi:Number(g(cQty))||0, cena:Math.round((Number(g(cCost))||0)*100)/100,
+      mena:IMP_MENA[curRaw]||'CZK', vyrobce:String(g(cBrand)??'').trim(), poznamka:String(g(cRem)??'').trim(), dodavatel:String(g(cVend)??'').trim() }); }
+  return items;
+}
+function markDuplicates(items){
+  const open=rows.filter(x=>!['doručeno','zamítnuto'].includes(x.status));
+  return items.map(d=>{ const dup=d.sklad!=='' && open.some(x=>String(x.sklad||'').trim()===d.sklad && (Number(x.mnozstvi)||0)===(Number(d.mnozstvi)||0));
+    return {d, dup, sel:!dup}; });
+}
+function importView(){
+  const it=importState.items||[]; const dups=it.filter(x=>x.dup).length; const selN=it.filter(x=>x.sel).length;
+  return `<div class="overlay"><div class="modal" style="width:min(1100px,96vw)">
+    <h3>📥 Import podlimitních položek z Maxima<button class="x" data-a="import-cancel">✕</button></h3>
+    <div class="modalbody" style="padding:14px">
+      <div class="notice">Načteno <b>${it.length}</b> položek${dups?` · <b style="color:#c0392b">${dups} možná duplicita</b> (stejné skladové číslo + množství už existuje mezi otevřenými) — jsou <b>odškrtnuté</b>, zaškrtni jen ty, které chceš přesto založit.`:' · žádné duplicity.'} Z každé zaškrtnuté vznikne 1 požadavek ve stavu „nový".</div>
+      <div class="tblwrap" style="max-height:52vh">
+        <table><thead><tr>
+          <th class="no-sort" style="width:34px"><input type="checkbox" data-a="import-selall" ${it.length&&it.every(x=>x.sel)?'checked':''}></th>
+          <th class="no-sort">Skladové č.</th><th class="no-sort">Popis</th><th class="no-sort">Množ.</th><th class="no-sort">Cena/ks</th><th class="no-sort">Měna</th><th class="no-sort">Výrobce</th><th class="no-sort">Dodavatel</th><th class="no-sort">Duplicita</th>
+        </tr></thead><tbody>
+        ${it.map((x,i)=>`<tr style="--row:${x.dup?'#fdf1ef':'#fff'}">
+          <td onclick="event.stopPropagation()"><input type="checkbox" data-a="import-sel" data-v="${i}" ${x.sel?'checked':''}></td>
+          <td><b>${esc(x.d.sklad||'—')}</b></td><td class="desc">${esc(x.d.popis)}</td><td class="num">${esc(x.d.mnozstvi)}</td>
+          <td class="num">${x.d.cena?num(x.d.cena)+' '+esc(x.d.mena):'<span class="muted">—</span>'}</td><td>${esc(x.d.mena)}</td><td>${esc(x.d.vyrobce||'—')}</td><td>${esc(x.d.dodavatel||'—')}</td>
+          <td>${x.dup?'<span class="badge b-red">možná duplicita</span>':'<span class="muted">—</span>'}</td>
+        </tr>`).join('')}
+        </tbody></table>
+      </div>
+    </div>
+    <div class="foot">
+      ${importState.busy?`<span class="msg" style="color:#1f9254">Zakládám… ${importState.done||0}/${selN}</span>`:`<span class="muted">Vybráno k založení: <b>${selN}</b> z ${it.length}</span>`}
+      <div class="r">
+        <button class="btn-ghost" data-a="import-cancel" ${importState.busy?'disabled':''}>Zrušit</button>
+        <button class="btn-primary" data-a="import-confirm" ${(importState.busy||!selN)?'disabled':''}>Založit vybrané (${selN})</button>
+      </div>
+    </div>
+  </div></div>`;
+}
+async function runImport(){
+  const sel=importState.items.filter(x=>x.sel);
+  importState.busy=true; importState.done=0; render();
+  let ok=0, fail=0;
+  for(const x of sel){ const d=x.d;
+    try{
+      const poradove=await nextNumber();
+      const rec={ poradove, status:'nový', typ:'Nový požadavek', sklad:d.sklad, popis:d.popis, duvod:'Podlimitní položka (import z Maxima)',
+        priorita:'běžná', mnozstvi:d.mnozstvi||0, cena:d.cena||0, mena:d.mena||'CZK', dodavatel:d.dodavatel||'', vyrobce:d.vyrobce||'',
+        ucet:'', costcenter:'', usek:'', stroj:'', datum:'', min:0, max:0, newStock:false, url:'', notifyEmail:'', poznamka:d.poznamka||'',
+        author:me.uid, authorName:me.name, authorEmail:me.email, created:today(), createdTs:serverTimestamp(),
+        approvedBy:null, approvedAt:null, hist:[`${today()} · ${me.name} · založeno importem z Maxima`] };
+      await addDoc(collection(db,'requests'),rec); ok++;
+    }catch(e){ fail++; }
+    importState.done=ok+fail; if(importState) render();
+  }
+  importState=null; render();
+  toast(`Import hotový: založeno ${ok} požadavků`+(fail?`, ${fail} se nepovedlo`:'')+'.', fail?'err':'ok');
+}
+
 /* ---------- zápisy do Firestore ---------- */
 async function createRequest(){
   const poradove=await nextNumber();
@@ -1466,7 +1553,7 @@ function syncTopScroll(){
     window.addEventListener('resize',()=>{ const t=document.getElementById('tbltop-inner'), w=document.getElementById('tblwrap'); const tb=w&&w.querySelector('table'); if(t&&tb) t.style.width=tb.scrollWidth+'px'; }); }
 }
 
-const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save','upload-file','del-file',
+const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save','upload-file','del-file','import-file','import-confirm',
   'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','add-cc','del-cc','cc-name','save-rates','req',
   'user-role','user-name','user-email','user-phone','user-team']);
 async function act(a,v,el,ev){
@@ -1517,6 +1604,20 @@ async function act(a,v,el,ev){
       editing=Object.assign(JSON.parse(JSON.stringify(s)),{_id:null,poradove:'',status:'nový',datum:'',approvedBy:null,approvedAt:null,hist:[],files:[]});
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
       modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; uploadBusy=false; errs={};footMsg='';break;}
+
+    case 'import-file':{
+      if(!P().edit)return; const f=el.files&&el.files[0]; el.value='';
+      if(!f) return; toast('Načítám Excel…');
+      try{ const items=await parseImportFile(f);
+        if(!items.length){ toast('V souboru nejsou žádné položky k importu.','err'); return; }
+        importState={items:markDuplicates(items),busy:false,done:0};
+      }catch(e){ toast(e.message||'Nepodařilo se načíst soubor.','err'); return; }
+      break;
+    }
+    case 'import-sel':{ if(importState) importState.items[Number(v)].sel=el.checked; return; }
+    case 'import-selall':{ if(importState) importState.items.forEach(x=>x.sel=el.checked); break; }
+    case 'import-cancel':{ if(importState&&importState.busy)return; importState=null; break; }
+    case 'import-confirm':{ if(!importState||importState.busy)return; await runImport(); return; }
 
     case 'save':{
       const isNew=!editing._id;
