@@ -183,15 +183,10 @@
   .a3box>.bb{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
   .a3box textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 9px;font:inherit;font-size:12.5px;line-height:1.45;resize:vertical;background:#f6f8fa;color:var(--text)}
   .a3box textarea:focus{background:#fff;border-color:var(--teal);outline:none}
-  .a3why{display:flex;flex-direction:column;gap:6px}
-  .a3why .row{display:flex;gap:8px;align-items:center}
-  .a3why .n{flex:none;width:62px;font-size:10.5px;font-weight:800;color:#fff;background:var(--teal);border-radius:4px;padding:6px 5px;text-align:center}
-  .a3why .n.root{background:var(--red)}
-  .a3why input{flex:1;font-size:12.5px}
   .a3lbl{font-size:11px;font-weight:700;color:#41506b;margin-bottom:-3px}
 
   @media(max-width:960px){.a3top{grid-template-columns:1fr 1fr}.a3head{grid-template-columns:1fr 1fr}}
-  @media(max-width:680px){.a3wrap{padding:12px}.a3grid{flex-direction:column}.a3top{grid-template-columns:1fr}.a3head{grid-template-columns:1fr}.a3why .n{width:56px}}
+  @media(max-width:680px){.a3wrap{padding:12px}.a3grid{flex-direction:column}.a3top{grid-template-columns:1fr}.a3head{grid-template-columns:1fr}}
   @media(max-width:900px){.form{grid-template-columns:repeat(2,1fr)}.f.span3,.f.span4,.sect,.why{grid-column:span 2}}
   @media(max-width:680px){
     .form{grid-template-columns:1fr;padding:14px}
@@ -555,7 +550,7 @@ const monthShort = m => { const p=String(m||'').split('-'); return p.length===2 
    ŘÍZENÍ VÝKONU LINEK — standard podle zadání vedení
    Týdenní výkon linky pod prahem (výchozí 90 %) automaticky zakládá
    povinný problem solving na úrovni Process Engineera.
-   Drží se pořadí: A3 analýza (5× proč ke kořenové příčině) → opatření s ownerem a termínem
+   Drží se pořadí: A3 analýza → kořenová příčina → opatření s ownerem a termínem
    → ověření účinnosti → teprve pak lze problém uzavřít.
    ========================================================== */
 
@@ -1348,7 +1343,7 @@ async function createProblem(wk, line, trigger){
       trigger: trigger||'výkon pod prahem', status:'nový',
       owner:(engcfg.engineers||[])[0]||'', coordinator:(engcfg.coordinators||[])[0]||'',
       opened:today(), downtimeSec:Math.round(line.sec||0), perf:line.perf==null?null:+line.perf.toFixed(1),
-      immediate:'', whys:['','','','',''], rootCause:'',
+      immediate:'', analysis:'', rootCause:'',
       a3Title:`${line.label} — výkon ${num(line.perf,1)} % v ${weekShort(wk)}`,
       a3Loc:line.label, a3Author:me.name||'', a3Date:today(),
       problemDesc:'',
@@ -1371,7 +1366,7 @@ function collectPs(){
   Object.assign(p,{
     owner:g('ps-owner'), coordinator:g('ps-coord'),
     immediate:g('ps-immediate'), rootCause:g('ps-root'),
-    whys:[0,1,2,3,4].map(i=>g('ps-why'+i)),
+    analysis:g('a3-analysis'),
     effCheckDue:g('ps-effdue'), effResult:g('ps-effres'),
     a3Title:g('a3-title'), a3Loc:g('a3-loc'), a3Author:g('a3-author'), a3Date:g('a3-date'),
     problemDesc:g('a3-desc'), currentState:g('a3-cur'), goal:g('a3-goal'),
@@ -1384,7 +1379,7 @@ async function saveProblem(){
   const p=collectPs(); if(!p) return;
   const next={
     owner:p.owner, coordinator:p.coordinator,
-    immediate:p.immediate, rootCause:p.rootCause, whys:p.whys,
+    immediate:p.immediate, rootCause:p.rootCause, analysis:p.analysis,
     a3Title:p.a3Title, a3Loc:p.a3Loc, a3Author:p.a3Author, a3Date:p.a3Date,
     problemDesc:p.problemDesc, currentState:p.currentState, goal:p.goal,
     implPlan:p.implPlan, stdWork:p.stdWork,
@@ -1750,10 +1745,8 @@ function problemModal(){
         <div class="a3col">
           <div class="a3box grow"><div class="bh"><span class="n">4.</span> Analýza kořenové příčiny</div>
             <div class="bb">
-              <div class="a3lbl">5× proč</div>
-              <div class="a3why">${[0,1,2,3,4].map(i=>`
-                <div class="row"><div class="n ${i===4?'root':''}">${i+1}. proč</div>
-                  <input id="ps-why${i}" value="${esc((p.whys||[])[i]||'')}" placeholder="${i===0?'Proč linka stála?':'Proč?'}"></div>`).join('')}</div>
+              <div class="a3lbl">Analýza — jak jsme došli ke kořenové příčině</div>
+              ${ta('a3-analysis', p.analysis || (p.whys||[]).filter(Boolean).join('\n'), 'Postup analýzy ke kořenové příčině.',7)}
               <div class="a3lbl">Kořenová příčina <span style="color:var(--red)">*</span></div>
               <input id="ps-root" value="${esc(p.rootCause||'')}" placeholder="bez ní nejde A3 uzavřít">
             </div></div>
@@ -1825,7 +1818,7 @@ function psVisible(){
   if(psF.owner)  r=r.filter(p=>p.owner===psF.owner);
   if(psHideClosed) r=r.filter(p=>p.status!=='uzavřeno');
   if(psF.q){ const q=psF.q.toLowerCase();
-    r=r.filter(p=>[p.no,p.title,p.line,p.owner,p.coordinator,p.rootCause,(p.whys||[]).join(' ')].join(' ').toLowerCase().includes(q)); }
+    r=r.filter(p=>[p.no,p.title,p.line,p.owner,p.coordinator,p.rootCause,p.analysis||'',(p.whys||[]).join(' ')].join(' ').toLowerCase().includes(q)); }
   /* nejdřív to, co hoří: eskalace, pak po termínu, pak podle stáří */
   return r.sort((a,b)=>{
     const ea=(a.escalated||needsEscalation(a))?0:1, eb=(b.escalated||needsEscalation(b))?0:1;
@@ -1911,13 +1904,13 @@ function psView(){
 function exportPsCsv(){
   const rows=psVisible();
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
-  const head=['Č.','Linka','Týden','Spouštěč','Problém','Výkon %','Prostoje (min)','Stav','Owner analýzy','Coordinator',
-    'Okamžité opatření','1. proč','2. proč','3. proč','4. proč','5. proč','Kořenová příčina',
+  const head=['Č.','Linka','Týden','Spouštěč','Problém','Výkon %','Prostoje (min)','Stav','Vlastník A3','Supervizor',
+    'Okamžité opatření','Analýza','Kořenová příčina',
     'Opatření hotovo','Opatření celkem','Ověřit do','Výsledek ověření','Eskalace'];
   const csv=[line(head)].concat(rows.map(p=>{
-    const acts=actsOf(p._id), w=p.whys||[];
+    const acts=actsOf(p._id), analysis=p.analysis || (p.whys||[]).filter(Boolean).join(' | ');
     return line([p.no,p.line,p.week,p.trigger,p.title,p.perf!=null?num(p.perf,1):'',Math.round((p.downtimeSec||0)/60),
-      p.status,p.owner,p.coordinator,p.immediate,w[0]||'',w[1]||'',w[2]||'',w[3]||'',w[4]||'',p.rootCause,
+      p.status,p.owner,p.coordinator,p.immediate,analysis,p.rootCause,
       acts.length-openActs(acts).length,acts.length,p.effCheckDue,p.effResult,(p.escalated||needsEscalation(p))?'ano':'']);
   })).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
