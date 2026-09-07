@@ -165,6 +165,33 @@
   .addrow input#na-text{flex:1;min-width:220px}
   .hist{padding:0 18px 14px;font-size:11px;color:var(--muted)}
   .hist div{padding:3px 0;border-top:1px dotted var(--line)}
+
+  /* ===== A3 problem solving — 8 boxů podle standardu (Kaufman Global) ===== */
+  .a3wrap{padding:16px 18px}
+  .a3top{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px}
+  .a3head{display:grid;grid-template-columns:2fr 1.5fr 1.1fr 1fr;border:1px solid #cfe0dc;border-radius:8px;overflow:hidden;margin-bottom:12px;background:#fff}
+  .a3head .c{padding:6px 11px;border-right:1px solid #e4edeb;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .a3head .c:last-child{border-right:0}
+  .a3head .lb{font-size:10px;font-weight:800;letter-spacing:.5px;color:#7c8aa0;text-transform:uppercase}
+  .a3head input{border:0;background:transparent;padding:2px 0;font-size:13px;font-weight:600;color:var(--text);width:100%}
+  .a3grid{display:flex;gap:12px;align-items:stretch}
+  .a3col{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0}
+  .a3box{border:1px solid var(--teal);border-radius:8px;background:#fff;display:flex;flex-direction:column;overflow:hidden}
+  .a3box.grow{flex:1}
+  .a3box>.bh{font-size:13px;font-weight:800;color:var(--text);padding:8px 11px;border-bottom:1px solid var(--teal-bg);display:flex;align-items:center;gap:7px}
+  .a3box>.bh .n{color:var(--teal-dark)}
+  .a3box>.bb{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
+  .a3box textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 9px;font:inherit;font-size:12.5px;line-height:1.45;resize:vertical;background:#f6f8fa;color:var(--text)}
+  .a3box textarea:focus{background:#fff;border-color:var(--teal);outline:none}
+  .a3why{display:flex;flex-direction:column;gap:6px}
+  .a3why .row{display:flex;gap:8px;align-items:center}
+  .a3why .n{flex:none;width:62px;font-size:10.5px;font-weight:800;color:#fff;background:var(--teal);border-radius:4px;padding:6px 5px;text-align:center}
+  .a3why .n.root{background:var(--red)}
+  .a3why input{flex:1;font-size:12.5px}
+  .a3lbl{font-size:11px;font-weight:700;color:#41506b;margin-bottom:-3px}
+
+  @media(max-width:960px){.a3top{grid-template-columns:1fr 1fr}.a3head{grid-template-columns:1fr 1fr}}
+  @media(max-width:680px){.a3wrap{padding:12px}.a3grid{flex-direction:column}.a3top{grid-template-columns:1fr}.a3head{grid-template-columns:1fr}.a3why .n{width:56px}}
   @media(max-width:900px){.form{grid-template-columns:repeat(2,1fr)}.f.span3,.f.span4,.sect,.why{grid-column:span 2}}
   @media(max-width:680px){
     .form{grid-template-columns:1fr;padding:14px}
@@ -528,7 +555,7 @@ const monthShort = m => { const p=String(m||'').split('-'); return p.length===2 
    ŘÍZENÍ VÝKONU LINEK — standard podle zadání vedení
    Týdenní výkon linky pod prahem (výchozí 90 %) automaticky zakládá
    povinný problem solving na úrovni Process Engineera.
-   Drží se pořadí: analýza (5× proč) → opatření s ownerem a termínem
+   Drží se pořadí: A3 analýza (5× proč ke kořenové příčině) → opatření s ownerem a termínem
    → ověření účinnosti → teprve pak lze problém uzavřít.
    ========================================================== */
 
@@ -548,7 +575,7 @@ const ENGCFG_DEF = {
 
 const PS_STATUS = [
   {k:'nový',       cls:'b-red',   d:'čeká na Process Engineera'},
-  {k:'analýza',    cls:'b-amber', d:'běží 5× proč / A3'},
+  {k:'analýza',    cls:'b-amber', d:'běží A3 analýza'},
   {k:'opatření',   cls:'b-blue',  d:'opatření se plní'},
   {k:'ověřování',  cls:'b-teal',  d:'čeká na ověření účinnosti'},
   {k:'uzavřeno',   cls:'b-green', d:'ověřeno a uzavřeno'}
@@ -1322,6 +1349,12 @@ async function createProblem(wk, line, trigger){
       owner:(engcfg.engineers||[])[0]||'', coordinator:(engcfg.coordinators||[])[0]||'',
       opened:today(), downtimeSec:Math.round(line.sec||0), perf:line.perf==null?null:+line.perf.toFixed(1),
       immediate:'', whys:['','','','',''], rootCause:'',
+      a3Title:`${line.label} — výkon ${num(line.perf,1)} % v ${weekShort(wk)}`,
+      a3Loc:line.label, a3Author:me.name||'', a3Date:today(),
+      problemDesc:'',
+      currentState:`Výkon ${num(line.perf,1)} %, prostoje ${fmtDur(line.sec||0)} (${weekLabel(wk)}).`,
+      goal:`Výkon linky zpět nad ${engcfg.threshold||90} %.`,
+      implPlan:'', stdWork:'',
       effCheckDue:eff.toISOString().slice(0,10), effResult:'', escalated:false,
       hist:[`${today()} · ${me.name} · problém založen (${trigger||'výkon pod prahem'})`]};
     const ref=await addDoc(collection(db,'problems'), rec);
@@ -1340,6 +1373,9 @@ function collectPs(){
     immediate:g('ps-immediate'), rootCause:g('ps-root'),
     whys:[0,1,2,3,4].map(i=>g('ps-why'+i)),
     effCheckDue:g('ps-effdue'), effResult:g('ps-effres'),
+    a3Title:g('a3-title'), a3Loc:g('a3-loc'), a3Author:g('a3-author'), a3Date:g('a3-date'),
+    problemDesc:g('a3-desc'), currentState:g('a3-cur'), goal:g('a3-goal'),
+    implPlan:g('a3-impl'), stdWork:g('a3-std'),
     status:g('ps-status')||p.status
   });
   return p;
@@ -1349,6 +1385,9 @@ async function saveProblem(){
   const next={
     owner:p.owner, coordinator:p.coordinator,
     immediate:p.immediate, rootCause:p.rootCause, whys:p.whys,
+    a3Title:p.a3Title, a3Loc:p.a3Loc, a3Author:p.a3Author, a3Date:p.a3Date,
+    problemDesc:p.problemDesc, currentState:p.currentState, goal:p.goal,
+    implPlan:p.implPlan, stdWork:p.stdWork,
     effCheckDue:p.effCheckDue, effResult:p.effResult, status:p.status
   };
   if(next.status==='uzavřeno'){
@@ -1483,7 +1522,7 @@ function mgmtView(){
   ${missing.length?`<div class="notice warn" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <b>Standard vyžaduje analýzu:</b>
     <span>${missing.length} ${missing.length===1?'linka je':'linek je'} v ${weekShort(cur)} pod ${engcfg.threshold} % a nemá založený problem solving.</span>
-    <button class="btn-danger" style="margin-left:auto" data-a="mg-createall" data-v="${cur}">Založit pro všechny</button>
+    <button class="btn-danger" style="margin-left:auto" data-a="mg-createall" data-v="${cur}">Vytvořit A3 pro všechny</button>
   </div>`:''}
 
   <div class="panel">
@@ -1505,7 +1544,7 @@ function mgmtView(){
           <td data-label="Dní dat" class="num">${l.dayCount}</td>
           <td data-label="Problem solving">${p
             ? `<button class="btn-ghost" data-a="mg-open" data-v="${p._id}">${p.no} · ${p.status}</button>`
-            : (low?`<button class="btn-danger" data-a="mg-create" data-v="${cur}|${l.slug}">Založit 5× proč</button>`:'<span class="muted">—</span>')}</td>
+            : (low?`<button class="btn-danger" data-a="mg-create" data-v="${cur}|${l.slug}">Vytvořit A3 problem solving</button>`:'<span class="muted">—</span>')}</td>
         </tr>`;}).join('')}
       </tbody></table></div>
   </div>
@@ -1651,7 +1690,7 @@ function mgmtSettings(){
       </div>
       <div class="cards" style="margin-top:12px">
         <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Práh výkonu</div>
-          <div class="val">${c.threshold}<small> %</small></div><div class="note">pod tím se zakládá 5× proč</div></div>
+          <div class="val">${c.threshold}<small> %</small></div><div class="note">pod tím se zakládá A3</div></div>
         <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Plánovaný čas</div>
           <div class="val">${num(c.plannedHoursPerDay,1)}<small> h/den</small></div><div class="note">na linku a den</div></div>
         <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Eskalace</div>
@@ -1670,71 +1709,103 @@ function problemModal(){
   const sel=(id,val,list)=>`<select id="${id}"><option value="">— nevybráno —</option>${
     list.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}${
     val&&!list.includes(val)?`<option selected>${esc(val)}</option>`:''}</select>`;
+  const ta=(id,val,ph,rows)=>`<textarea id="${id}" rows="${rows||3}" placeholder="${esc(ph)}">${esc(val||'')}</textarea>`;
   const blocked=canCloseWith(p);
   return `
-  <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Problem solving">
-    <h3>${p.no} — ${esc(p.title)}<button class="x" data-a="mg-close" aria-label="Zavřít">✕</button></h3>
+  <div class="overlay" id="ovl"><div class="modal" style="max-width:1180px" role="dialog" aria-modal="true" aria-label="A3 problem solving">
+    <h3>${p.no} — A3 problem solving<button class="x" data-a="mg-close" aria-label="Zavřít">✕</button></h3>
     <div class="robar">
       <b>${esc(p.line)}</b> · ${weekLabel(p.week)} · výkon ${p.perf!=null?num(p.perf,1)+' %':'—'} · prostoje ${fmtDur(p.downtimeSec||0)}
       · spouštěč: ${esc(p.trigger)} ${(p.escalated||needsEscalation(p))?'<span class="badge b-red">eskalace na Engineering Managera</span>':''}
     </div>
-    <div class="form">
-      <div class="f"><label>Stav</label>
-        <select id="ps-status">${PS_STATUS.map(s=>`<option ${p.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
-        <div class="muted" style="font-size:11px">${psDef(p.status).d}</div></div>
-      <div class="f"><label>Owner technické analýzy <span style="color:var(--red)">*</span></label>${sel('ps-owner',p.owner,engs)}
-        <div class="muted" style="font-size:11px">Process Engineer</div></div>
-      <div class="f"><label>Owner follow-upu</label>${sel('ps-coord',p.coordinator,coos)}
-        <div class="muted" style="font-size:11px">Coordinator</div></div>
-      <div class="f"><label>Otevřeno</label><div class="ro">${dayCz(p.opened)}</div></div>
+    <div class="a3wrap">
 
-      <div class="f span4"><label>Okamžité opatření (co jsme udělali hned)</label>
-        <input id="ps-immediate" value="${esc(p.immediate||'')}" placeholder="např. výměna dílu, snížená rychlost, 100% kontrola"></div>
-
-      <div class="sect">5× proč — cesta ke kořenové příčině</div>
-      <div class="why">${[0,1,2,3,4].map(i=>`
-        <div class="row"><div class="n ${i===4?'root':''}">${i+1}. proč</div>
-          <input class="t" id="ps-why${i}" value="${esc((p.whys||[])[i]||'')}" placeholder="${i===0?'Proč linka stála?':'Proč?'}"></div>`).join('')}
+      <div class="a3top">
+        <div class="f"><label>Stav A3</label>
+          <select id="ps-status">${PS_STATUS.map(s=>`<option ${p.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
+          <div class="muted" style="font-size:11px">${psDef(p.status).d}</div></div>
+        <div class="f"><label>Vlastník A3 problem solving <span style="color:var(--red)">*</span></label>${sel('ps-owner',p.owner,engs)}
+          <div class="muted" style="font-size:11px">procesní inženýr</div></div>
+        <div class="f"><label>Problem solving supervizor</label>${sel('ps-coord',p.coordinator,coos)}
+          <div class="muted" style="font-size:11px">koordinátor (1 ze tří)</div></div>
       </div>
-      <div class="f span4"><label>Kořenová příčina <span style="color:var(--red)">*</span></label>
-        <input id="ps-root" value="${esc(p.rootCause||'')}" placeholder="bez ní nejde problém uzavřít"></div>
 
-      <div class="sect">Opatření — každé musí mít ownera a termín</div>
-      <div class="f span4">
-        <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius)">
-          <table><thead><tr><th>Číslo</th><th>Opatření</th><th>Typ</th><th>Owner</th><th>Termín</th><th>Stav</th><th></th></tr></thead>
-          <tbody>${acts.map(a=>`<tr class="${isOverdue(a)?'long':''}">
-            <td data-label="Číslo"><b>${a.no}</b></td>
-            <td data-label="Opatření" class="desc">${esc(a.text)}</td>
-            <td data-label="Typ"><span class="badge ${a.type==='preventive'?'b-teal':'b-grey'}">${a.type==='preventive'?'preventive':'corrective'}</span></td>
-            <td data-label="Owner">${esc(a.owner)}</td>
-            <td data-label="Termín">${isOverdue(a)?`<b style="color:var(--red)">${dayCz(a.due)}</b>`:dayCz(a.due)}</td>
-            <td data-label="Stav"><span class="badge ${(AC_STATUS.find(s=>s.k===a.status)||AC_STATUS[0]).cls}">${a.status}</span></td>
-            <td data-label="">${openActs([a]).length?`<button class="btn-ok" style="padding:3px 9px;font-size:11px" data-a="mg-adone" data-v="${a._id}">Hotovo</button>`:''}</td>
-          </tr>`).join('') || `<tr><td colspan="7" class="empty">Zatím žádné opatření. Corrective odstraní následek, preventive zabrání opakování — mít obojí je součást standardu.</td></tr>`}
-          </tbody></table>
+      <div class="a3head">
+        <div class="c"><span class="lb">Název</span><input id="a3-title" value="${esc(p.a3Title||p.title||'')}"></div>
+        <div class="c"><span class="lb">Lokalita / oddělení</span><input id="a3-loc" value="${esc(p.a3Loc||p.line||'')}"></div>
+        <div class="c"><span class="lb">Autor</span><input id="a3-author" value="${esc(p.a3Author||'')}"></div>
+        <div class="c"><span class="lb">Datum</span><input id="a3-date" type="date" value="${esc(p.a3Date||p.opened||today())}"></div>
+      </div>
+
+      <div class="a3grid">
+        <div class="a3col">
+          <div class="a3box"><div class="bh"><span class="n">1.</span> Popis problému</div>
+            <div class="bb">${ta('a3-desc',p.problemDesc,'Co se děje, kde a jak se to projevuje. Fakta, ne domněnky.',4)}</div></div>
+          <div class="a3box grow"><div class="bh"><span class="n">2.</span> Současný stav</div>
+            <div class="bb">${ta('a3-cur',p.currentState,'Jak to vypadá dnes — čísla, výkon, prostoje, dopad.',7)}</div></div>
+          <div class="a3box"><div class="bh"><span class="n">3.</span> Cíl / cílové zlepšení</div>
+            <div class="bb">${ta('a3-goal',p.goal,'Čeho chceme dosáhnout a do kdy.',4)}</div></div>
+        </div>
+
+        <div class="a3col">
+          <div class="a3box grow"><div class="bh"><span class="n">4.</span> Analýza kořenové příčiny</div>
+            <div class="bb">
+              <div class="a3lbl">5× proč</div>
+              <div class="a3why">${[0,1,2,3,4].map(i=>`
+                <div class="row"><div class="n ${i===4?'root':''}">${i+1}. proč</div>
+                  <input id="ps-why${i}" value="${esc((p.whys||[])[i]||'')}" placeholder="${i===0?'Proč linka stála?':'Proč?'}"></div>`).join('')}</div>
+              <div class="a3lbl">Kořenová příčina <span style="color:var(--red)">*</span></div>
+              <input id="ps-root" value="${esc(p.rootCause||'')}" placeholder="bez ní nejde A3 uzavřít">
+            </div></div>
+          <div class="a3box"><div class="bh"><span class="n">5.</span> Protiopatření</div>
+            <div class="bb">
+              <div class="a3lbl">Okamžité opatření (containment)</div>
+              <input id="ps-immediate" value="${esc(p.immediate||'')}" placeholder="co jsme udělali hned — výměna dílu, snížená rychlost, 100% kontrola">
+              <div class="a3lbl">Opatření — každé s ownerem a termínem</div>
+              <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius)">
+                <table><thead><tr><th>Č.</th><th>Opatření</th><th>Typ</th><th>Owner</th><th>Termín</th><th>Stav</th><th></th></tr></thead>
+                <tbody>${acts.map(a=>`<tr class="${isOverdue(a)?'long':''}">
+                  <td data-label="Č."><b>${a.no}</b></td>
+                  <td data-label="Opatření" class="desc">${esc(a.text)}</td>
+                  <td data-label="Typ"><span class="badge ${a.type==='preventive'?'b-teal':'b-grey'}">${a.type==='preventive'?'preventive':'corrective'}</span></td>
+                  <td data-label="Owner">${esc(a.owner)}</td>
+                  <td data-label="Termín">${isOverdue(a)?`<b style="color:var(--red)">${dayCz(a.due)}</b>`:dayCz(a.due)}</td>
+                  <td data-label="Stav"><span class="badge ${(AC_STATUS.find(s=>s.k===a.status)||AC_STATUS[0]).cls}">${a.status}</span></td>
+                  <td data-label="">${openActs([a]).length?`<button class="btn-ok" style="padding:3px 9px;font-size:11px" data-a="mg-adone" data-v="${a._id}">Hotovo</button>`:''}</td>
+                </tr>`).join('') || `<tr><td colspan="7" class="empty">Zatím žádné opatření. Corrective odstraní následek, preventive zabrání opakování — mít obojí je součást standardu.</td></tr>`}
+                </tbody></table>
+              </div>
+              <div class="addrow">
+                <input id="na-text" placeholder="Co se udělá">
+                <select id="na-type">${AC_TYPE.map(t=>`<option value="${t.k}">${t.label}</option>`).join('')}</select>
+                <input id="na-owner" placeholder="Owner" list="ownerlist">
+                <datalist id="ownerlist">${[...new Set(engs.concat(coos))].map(o=>`<option>${esc(o)}</option>`).join('')}</datalist>
+                <input id="na-due" type="date" value="">
+                <button class="btn-primary" data-a="mg-addaction">+ Přidat</button>
+              </div>
+            </div></div>
+        </div>
+
+        <div class="a3col">
+          <div class="a3box"><div class="bh"><span class="n">6.</span> Plán implementace</div>
+            <div class="bb">${ta('a3-impl',p.implPlan,'Kdo / kdy / jak protiopatření zavede. Kroky a termíny.',6)}</div></div>
+          <div class="a3box grow"><div class="bh"><span class="n">7.</span> Kontrola výsledků — ověření</div>
+            <div class="bb">
+              <div class="a3lbl">Ověřit do</div>
+              <input id="ps-effdue" type="date" value="${esc(p.effCheckDue||'')}">
+              <div class="a3lbl">Výsledek ověření <span style="color:var(--red)">*</span></div>
+              ${ta('ps-effres',p.effResult,'např. 4 týdny bez opakování, výkon linky zpět nad 90 %',5)}
+            </div></div>
         </div>
       </div>
-      <div class="f span4"><label>Nové opatření</label>
-        <div class="addrow">
-          <input id="na-text" placeholder="Co se udělá">
-          <select id="na-type">${AC_TYPE.map(t=>`<option value="${t.k}">${t.label}</option>`).join('')}</select>
-          <input id="na-owner" placeholder="Owner" list="ownerlist">
-          <datalist id="ownerlist">${[...new Set(engs.concat(coos))].map(o=>`<option>${esc(o)}</option>`).join('')}</datalist>
-          <input id="na-due" type="date" value="">
-          <button class="btn-primary" data-a="mg-addaction">+ Přidat</button>
-        </div>
-      </div>
 
-      <div class="sect">Ověření účinnosti — bez něj problém neuzavřeš</div>
-      <div class="f"><label>Ověřit do</label><input id="ps-effdue" type="date" value="${esc(p.effCheckDue||'')}"></div>
-      <div class="f span3"><label>Výsledek ověření</label>
-        <input id="ps-effres" value="${esc(p.effResult||'')}" placeholder="např. 4 týdny bez opakování, výkon linky zpět nad 90 %"></div>
+      <div class="a3box" style="margin-top:12px"><div class="bh"><span class="n">8.</span> Aktualizace standardu práce</div>
+        <div class="bb">${ta('a3-std',p.stdWork,'Co se zapíše do standardu / návodky / OPL, aby se problém nevrátil.',3)}</div></div>
     </div>
     ${(p.hist||[]).length?`<div class="hist">${(p.hist||[]).slice().reverse().slice(0,6).map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
     <div class="foot">
       ${psMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(psMsg)}</span>`
-        :`<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:'Problém je připravený k uzavření.'}</span>`}
+        :`<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:'A3 je připravené k uzavření.'}</span>`}
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat na manažera'}</button>
         <button class="btn-ok" data-a="mg-save">Uložit</button>
@@ -1746,7 +1817,7 @@ function problemModal(){
 
 
 
-/* ---------- obrazovka Problem solving (5× proč / A3) ---------- */
+/* ---------- obrazovka Problem solving (A3) ---------- */
 function psVisible(){
   let r=problems.slice();
   if(psF.status) r=r.filter(p=>p.status===psF.status);
@@ -1770,7 +1841,7 @@ function psView(){
       <div style="font-size:34px">🔎</div>
       <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím žádný problem solving</div>
       <p class="muted" style="max-width:560px;margin:0 auto 14px">Zakládá se v záložce <b>Řízení</b> tlačítkem
-        <b>Založit 5× proč</b> u linky, která spadla pod práh výkonu. Tady pak uvidíš všechny otevřené analýzy pohromadě.</p>
+        <b>Vytvořit A3 problem solving</b> u linky, která spadla pod práh výkonu. Tady pak uvidíš všechny otevřené A3 pohromadě.</p>
       <button class="btn-primary" data-a="tab" data-v="mgmt">Přejít na Řízení</button>
     </div></div>`;
   }
@@ -1786,7 +1857,7 @@ function psView(){
   <div class="cards">
     <div class="kcard" style="border-left-color:#1b4b8f"><div class="lbl">Otevřené analýzy</div>
       <div class="val">${open.length}</div><div class="note">celkem ${problems.length} od začátku</div></div>
-    <div class="kcard" style="border-left-color:#c0392b"><div class="lbl">Čeká na 5× proč</div>
+    <div class="kcard" style="border-left-color:#c0392b"><div class="lbl">Čeká na A3 analýzu</div>
       <div class="val">${analysis.length}</div><div class="note">bez kořenové příčiny</div></div>
     <div class="kcard" style="border-left-color:#b7791f"><div class="lbl">V opatřeních</div>
       <div class="val">${inAction.length}</div><div class="note">${openActs(actions).length} otevřených opatření</div></div>
@@ -1797,7 +1868,7 @@ function psView(){
   </div>
 
   <div class="panel">
-    <h2>Problem solving — 5× proč a A3<span class="right">${rows.length} z ${problems.length} · klikni na řádek pro detail</span></h2>
+    <h2>Problem solving — A3<span class="right">${rows.length} z ${problems.length} · klikni na řádek pro detail</span></h2>
     <div class="filters">
       <input class="grow" id="ps-q" placeholder="Hledat v problému, lince, příčině…" value="${esc(psF.q)}">
       <select id="ps-fline"><option value="">Všechny linky</option>${lines.map(l=>`<option ${psF.line===l?'selected':''}>${esc(l)}</option>`).join('')}</select>
