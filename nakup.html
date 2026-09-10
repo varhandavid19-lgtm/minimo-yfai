@@ -128,6 +128,7 @@
   .btn-manage{background:#fff;border:1px solid var(--navy-2);color:var(--navy-2);font-size:14px;font-weight:700;padding:14px 22px;border-radius:10px}
   .btn-manage:hover{background:#eef3fb}
   .btn-manage.on{background:var(--navy-2);color:#fff}
+  .btn-manage.drag{background:var(--navy-2);color:#fff;box-shadow:0 0 0 3px rgba(37,90,158,.35)}
   .mgrbox{border:1px solid #cddaf0;box-shadow:0 3px 12px rgba(27,75,143,.12)}
   .mgrbox > h2{background:#eef3fb}
   .mgrhint{padding:9px 14px;font-size:12px;color:#41506b;background:#f8fafd;border-bottom:1px solid var(--line)}
@@ -488,7 +489,7 @@ let usersList=[];      // users (jen pro admina)
 let tab='pozadavky', authReady=false, dataReady=false, fatalErr='';
 let sort={col:'created',dir:-1};
 const emptyCol=()=>({poradove:'',created:'',sklad:'',popis:'',mnozstvi:'',cena:'',total:'',celkem:'',dodavatel:'',vyrobce:'',objednavka:'',datum:'',zadal:'',schvalil:''});
-let filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:'',col:emptyCol()};
+let filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',typ:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:'',col:emptyCol()};
 let dashRange={od:'',do:''};   // období pro ukazatele na dashboardu (podle data vytvoření)
 let editing=null, errs={}, footMsg='';
 let dlg=null, toastMsg=null, toastKind='', drafts={};
@@ -648,8 +649,12 @@ function render(){
   if(nakupBlocked()){ app.innerHTML=noAccessView(); bind(); return; }
   if(!dataReady){ app.innerHTML=splash('Načítám požadavky…'); return; }
   saveView();   // zapamatuj si tvoje filtry jen v tomto prohlížeči
+  // zapamatuj pozici scrollu, ať po otevření/zavření detailu seznam nepřeskočí nahoru
+  const _pw=document.getElementById('tblwrap'); const _sTbl=_pw?_pw.scrollTop:null; const _sWin=window.scrollY;
   app.innerHTML = shell()+dlgView()+(qrOpen?qrScanView():'')+`<div id="toast-node">${toastView()}</div>`;
   bind();
+  const _nw=document.getElementById('tblwrap'); if(_nw&&_sTbl!=null) _nw.scrollTop=_sTbl;
+  if(_sWin) window.scrollTo(0,_sWin);
   const di=document.getElementById('dlg-input'); if(di){di.focus();di.select();}
 }
 function splash(msg,err){
@@ -710,6 +715,7 @@ function visibleRows(){
   if(filters.priorita) r=r.filter(x=>x.priorita===filters.priorita);
   if(filters.ucet) r=r.filter(x=>x.ucet===filters.ucet);
   if(filters.usek) r=r.filter(x=>x.usek===filters.usek);
+  if(filters.typ) r=r.filter(x=>(x.typ||'Nový požadavek')===filters.typ);
   if(filters.od) r=r.filter(x=>(x.created||'')>=filters.od);
   if(filters.do) r=r.filter(x=>(x.created||'')<=filters.do);
   const has=(v,q)=>String(v||'').toLowerCase().includes(q.toLowerCase());
@@ -773,7 +779,7 @@ function listView(){
   const closedStatuses=['doručeno','zamítnuto'];
   const openCount=rows.filter(r=>!closedStatuses.includes(r.status)).length;
   const closedCount=rows.filter(r=>closedStatuses.includes(r.status)).length;
-  const anyFilter = filters.q||filters.grp||filters.status||filters.priorita||filters.ucet||filters.usek||filters.od||filters.do||filters.mine||filters.reqNo||filters.rfqNo||filters.orderNo||Object.values(filters.col||{}).some(Boolean);
+  const anyFilter = filters.q||filters.grp||filters.status||filters.priorita||filters.ucet||filters.usek||filters.typ||filters.od||filters.do||filters.mine||filters.reqNo||filters.rfqNo||filters.orderNo||Object.values(filters.col||{}).some(Boolean);
   const dashActive = k => (dashPreset()===k?'on':'');
   const periodTxt = (dashRange.od||dashRange.do) ? `${dashRange.od?dateCz(dashRange.od):'…'} – ${dashRange.do?dateCz(dashRange.do):'…'}` : 'celá historie';
   return `
@@ -792,7 +798,7 @@ function listView(){
     ${card('Hodnota požadavků',num(sumEur,0)+' €','za období, bez zamítnutých · kurz '+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
   </div>
   ${roleNotice()}
-  ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':`<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button>${P().edit?`<button class="btn-manage ${manage.on?'on':''}" data-a="toggle-manage" title="Hromadné doplňování údajů a změna stavu">⚙ Správa požadavků</button><label class="btn-manage" style="cursor:pointer" title="Import podlimitních položek z Maxima (Excel)">📥 Import z Maxima<input type="file" data-a="import-file" accept=".xlsx,.xls" hidden></label>`:''}</div>`}
+  ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':`<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button>${P().edit?`<button class="btn-manage ${manage.on?'on':''}" data-a="toggle-manage" title="Hromadné doplňování údajů a změna stavu">⚙ Správa požadavků</button><label class="btn-manage" id="import-drop" style="cursor:pointer" title="Import podlimitních položek z Maxima — klikni a vyber Excel, nebo sem přetáhni soubor">📥 Import z Maxima<input type="file" data-a="import-file" accept=".xlsx,.xls" hidden></label>`:''}</div>`}
   ${(manage.on&&P().edit)?mgrPanel():''}
   <div class="panel">
     <h2>Přehled požadavků <span class="right">${rr.length} z ${rows.length} záznamů</span></h2>
@@ -814,6 +820,7 @@ function listView(){
       <select id="f-priorita"><option value="">Všechny priority</option>${PRIORITIES.map(p=>`<option ${filters.priorita===p.k?'selected':''}>${p.k}</option>`).join('')}</select>
       <select id="f-ucet"><option value="">Všechny účty</option>${cfg.accounts.map(a=>`<option value="${esc(a.code)}" ${filters.ucet===a.code?'selected':''}>${esc(accLabel(a.code))}</option>`).join('')}</select>
       <select id="f-usek"><option value="">Všechny linky</option>${cfg.sections.map(s=>`<option ${filters.usek===s.name?'selected':''}>${s.name}</option>`).join('')}</select>
+      <select id="f-typ" title="Doplnění skladu (import) nebo běžné nákupní požadavky"><option value="">Doplnění i požadavky</option><option value="Doplnění skladu" ${filters.typ==='Doplnění skladu'?'selected':''}>Jen doplnění skladu</option><option value="Nový požadavek" ${filters.typ==='Nový požadavek'?'selected':''}>Jen nákupní požadavky</option></select>
       ${anyFilter?`<button class="btn-ghost" data-a="clear-filters">Zrušit filtry</button>`:''}
     </div>
     <div class="tbltop" id="tbltop"><div id="tbltop-inner"></div></div>
@@ -1395,9 +1402,8 @@ async function parseImportFile(file){
     const g=idx=>idx>=0?r[idx]:null;
     const sklad=String(g(cMax)??'').trim(), popis=String(g(cDesc)??'').trim();
     if(!sklad&&!popis) continue;
-    const curRaw=String(g(cCur)??'').trim().toUpperCase();
     items.push({ sklad, popis, mnozstvi:Number(g(cQty))||0, cena:Math.round((Number(g(cCost))||0)*100)/100,
-      mena:IMP_MENA[curRaw]||'CZK', vyrobce:String(g(cBrand)??'').trim(), poznamka:String(g(cRem)??'').trim(), dodavatel:String(g(cVend)??'').trim() }); }
+      mena:'EUR', vyrobce:String(g(cBrand)??'').trim(), poznamka:String(g(cRem)??'').trim(), dodavatel:String(g(cVend)??'').trim() }); }
   return items;
 }
 function markDuplicates(items){
@@ -1405,21 +1411,31 @@ function markDuplicates(items){
   return items.map(d=>{ const dup=d.sklad!=='' && open.some(x=>String(x.sklad||'').trim()===d.sklad && (Number(x.mnozstvi)||0)===(Number(d.mnozstvi)||0));
     return {d, dup, sel:!dup}; });
 }
+/* Načtení Excelu z Maxima — voláno z výběru souboru i z přetažení na tlačítko. */
+async function startImport(file){
+  if(!P().edit) return;
+  if(!file) return;
+  toast('Načítám Excel…');
+  try{ const items=await parseImportFile(file);
+    if(!items.length){ toast('V souboru nejsou žádné položky k importu.','err'); return; }
+    importState={items:markDuplicates(items),busy:false,done:0}; render();
+  }catch(e){ toast(e.message||'Nepodařilo se načíst soubor.','err'); }
+}
 function importView(){
   const it=importState.items||[]; const dups=it.filter(x=>x.dup).length; const selN=it.filter(x=>x.sel).length;
   return `<div class="overlay"><div class="modal" style="width:min(1100px,96vw)">
     <h3>📥 Import podlimitních položek z Maxima<button class="x" data-a="import-cancel">✕</button></h3>
     <div class="modalbody" style="padding:14px">
-      <div class="notice">Načteno <b>${it.length}</b> položek${dups?` · <b style="color:#c0392b">${dups} možná duplicita</b> (stejné skladové číslo + množství už existuje mezi otevřenými) — jsou <b>odškrtnuté</b>, zaškrtni jen ty, které chceš přesto založit.`:' · žádné duplicity.'} Z každé zaškrtnuté vznikne 1 požadavek ve stavu „nový".</div>
+      <div class="notice">Načteno <b>${it.length}</b> položek${dups?` · <b style="color:#c0392b">${dups} možná duplicita</b> (stejné skladové číslo + množství už existuje mezi otevřenými) — jsou <b>odškrtnuté</b>, zaškrtni jen ty, které chceš přesto založit.`:' · žádné duplicity.'} Z každé zaškrtnuté vznikne 1 požadavek ve stavu „nový", označený jako <b>Doplnění skladu</b>, měna <b>EUR</b>, účet <b>511305</b>, linka <b>Maintenance</b>.</div>
       <div class="tblwrap" style="max-height:52vh">
         <table><thead><tr>
           <th class="no-sort" style="width:34px"><input type="checkbox" data-a="import-selall" ${it.length&&it.every(x=>x.sel)?'checked':''}></th>
-          <th class="no-sort">Skladové č.</th><th class="no-sort">Popis</th><th class="no-sort">Množ.</th><th class="no-sort">Cena/ks</th><th class="no-sort">Měna</th><th class="no-sort">Výrobce</th><th class="no-sort">Dodavatel</th><th class="no-sort">Duplicita</th>
+          <th class="no-sort">Skladové č.</th><th class="no-sort">Popis</th><th class="no-sort">Množ.</th><th class="no-sort">Cena/ks</th><th class="no-sort">Měna</th><th class="no-sort">Výrobce</th><th class="no-sort">Dodavatel</th><th class="no-sort">Poznámka (Remark 1)</th><th class="no-sort">Duplicita</th>
         </tr></thead><tbody>
         ${it.map((x,i)=>`<tr style="--row:${x.dup?'#fdf1ef':'#fff'}">
           <td onclick="event.stopPropagation()"><input type="checkbox" data-a="import-sel" data-v="${i}" ${x.sel?'checked':''}></td>
           <td><b>${esc(x.d.sklad||'—')}</b></td><td class="desc">${esc(x.d.popis)}</td><td class="num">${esc(x.d.mnozstvi)}</td>
-          <td class="num">${x.d.cena?num(x.d.cena)+' '+esc(x.d.mena):'<span class="muted">—</span>'}</td><td>${esc(x.d.mena)}</td><td>${esc(x.d.vyrobce||'—')}</td><td>${esc(x.d.dodavatel||'—')}</td>
+          <td class="num">${x.d.cena?num(x.d.cena)+' '+esc(x.d.mena):'<span class="muted">—</span>'}</td><td>${esc(x.d.mena)}</td><td>${esc(x.d.vyrobce||'—')}</td><td>${esc(x.d.dodavatel||'—')}</td><td class="desc">${x.d.poznamka?esc(x.d.poznamka):'<span class="muted">—</span>'}</td>
           <td>${x.dup?'<span class="badge b-red">možná duplicita</span>':'<span class="muted">—</span>'}</td>
         </tr>`).join('')}
         </tbody></table>
@@ -1441,11 +1457,11 @@ async function runImport(){
   for(const x of sel){ const d=x.d;
     try{
       const poradove=await nextNumber();
-      const rec={ poradove, status:'nový', typ:'Nový požadavek', sklad:d.sklad, popis:d.popis, duvod:'Podlimitní položka (import z Maxima)',
-        priorita:'běžná', mnozstvi:d.mnozstvi||0, cena:d.cena||0, mena:d.mena||'CZK', dodavatel:d.dodavatel||'', vyrobce:d.vyrobce||'',
-        ucet:'', costcenter:'', usek:'', stroj:'', datum:'', min:0, max:0, newStock:false, url:'', notifyEmail:'', poznamka:d.poznamka||'',
+      const rec={ poradove, status:'nový', typ:'Doplnění skladu', sklad:d.sklad, popis:d.popis, duvod:'Podlimitní položka (import z Maxima)',
+        priorita:'běžná', mnozstvi:d.mnozstvi||0, cena:d.cena||0, mena:'EUR', dodavatel:d.dodavatel||'', vyrobce:d.vyrobce||'',
+        ucet:'511305', costcenter:'', usek:'Maintenance', stroj:'', datum:'', min:0, max:0, newStock:false, url:'', notifyEmail:'', poznamka:d.poznamka||'',
         author:me.uid, authorName:me.name, authorEmail:me.email, created:today(), createdTs:serverTimestamp(),
-        approvedBy:null, approvedAt:null, hist:[`${today()} · ${me.name} · založeno importem z Maxima`] };
+        approvedBy:null, approvedAt:null, hist:[`${today()} · ${me.name} · založeno importem z Maxima (doplnění skladu, účet 511305, linka Maintenance)`] };
       await addDoc(collection(db,'requests'),rec); ok++;
     }catch(e){ fail++; }
     importState.done=ok+fail; if(importState) render();
@@ -1503,7 +1519,7 @@ function bind(){
   if(q) q.oninput=()=>{filters.q=q.value;const p=q.selectionStart;render();const n=document.getElementById('f-q');n.focus();n.setSelectionRange(p,p);};
   [['f-reqno','reqNo'],['f-rfqno','rfqNo'],['f-orderno','orderNo']].forEach(([id,key])=>{const el=document.getElementById(id);
     if(el) el.oninput=()=>{filters[key]=el.value;const p=el.selectionStart;render();const n=document.getElementById(id);if(n){n.focus();n.setSelectionRange(p,p);}};});
-  ['status','priorita','ucet','usek','od','do'].forEach(k=>{const el=document.getElementById('f-'+k);if(el)el.onchange=()=>{filters[k]=el.value;render();};});
+  ['status','priorita','ucet','usek','typ','od','do'].forEach(k=>{const el=document.getElementById('f-'+k);if(el)el.onchange=()=>{filters[k]=el.value;render();};});
   // filtry pod záhlavím sloupců
   document.querySelectorAll('input[data-cf]').forEach(el=>{el.oninput=()=>{filters.col[el.dataset.cf]=el.value;const p=el.selectionStart;render();const n=document.querySelector('input[data-cf="'+el.dataset.cf+'"]');if(n){n.focus();try{n.setSelectionRange(p,p);}catch(e){}}};});
   document.querySelectorAll('select[data-cfsel]').forEach(el=>{el.onchange=()=>{filters[el.dataset.cfsel]=el.value;render();};});
@@ -1521,6 +1537,15 @@ function bind(){
   if(qrOpen) startQr();
   syncTopScroll();
   bindAttachDnD();
+  bindImportDnD();
+}
+/* Přetažení Excelu z Maxima přímo na tlačítko Import z Maxima. */
+function bindImportDnD(){
+  const z=document.getElementById('import-drop'); if(!z) return;
+  z.addEventListener('dragover',e=>{ if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){ e.preventDefault(); z.classList.add('drag'); } });
+  z.addEventListener('dragleave',()=>z.classList.remove('drag'));
+  z.addEventListener('drop',e=>{ e.preventDefault(); z.classList.remove('drag');
+    const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) startImport(f); });
 }
 /* Přetažení souboru DO dlaždice (nahrání) a přetažení souboru Z appky na plochu (stažení). */
 function bindAttachDnD(){
@@ -1573,7 +1598,7 @@ async function act(a,v,el,ev){
     case 'logout': await signOut(auth); return;
     case 'tab': tab=v; break;
     case 'sort': sort=(sort.col===v)?{col:v,dir:-sort.dir}:{col:v,dir:1}; break;
-    case 'clear-filters': filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:'',col:emptyCol()}; break;
+    case 'clear-filters': filters={q:'',grp:'',status:'',priorita:'',ucet:'',usek:'',typ:'',od:'',do:'',mine:false,reqNo:'',rfqNo:'',orderNo:'',col:emptyCol()}; break;
     case 'dash-all': dashRange={od:'',do:''}; break;
     case 'dash-month': dashRange=monthRange(); break;
     case 'dash-year': dashRange=yearRange(); break;
@@ -1606,13 +1631,8 @@ async function act(a,v,el,ev){
       modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; uploadBusy=false; errs={};footMsg='';break;}
 
     case 'import-file':{
-      if(!P().edit)return; const f=el.files&&el.files[0]; el.value='';
-      if(!f) return; toast('Načítám Excel…');
-      try{ const items=await parseImportFile(f);
-        if(!items.length){ toast('V souboru nejsou žádné položky k importu.','err'); return; }
-        importState={items:markDuplicates(items),busy:false,done:0};
-      }catch(e){ toast(e.message||'Nepodařilo se načíst soubor.','err'); return; }
-      break;
+      const f=el.files&&el.files[0]; el.value='';
+      await startImport(f); return;
     }
     case 'import-sel':{ if(importState) importState.items[Number(v)].sel=el.checked; return; }
     case 'import-selall':{ if(importState) importState.items.forEach(x=>x.sel=el.checked); break; }
