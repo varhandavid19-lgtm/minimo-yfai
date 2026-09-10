@@ -47,6 +47,8 @@
     border-bottom:2px solid #e4f2f2;padding-bottom:5px}
   .egnote{margin:0 0 12px;font-size:12px;color:var(--muted);background:#eef3fb;border:1px solid #d6e2f3;
     border-radius:8px;padding:9px 11px}
+  .egwho{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:37px;
+    border:1px solid var(--line);border-radius:8px;background:#fafbfd;padding:7px 9px}
   .egchecks{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:#41506b}
   .egchecks label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
   .egfoot{margin-top:16px;display:flex;justify-content:flex-end}
@@ -213,6 +215,15 @@ const ENG_AREAS = ['IMM','Assembly MFA2','Assembly SK336/PO455/W206','Assembly O
   'Assembly MBEAM','Slush','Foaming','GB/DP','Gclass'];
 const ENG_GROUPS_ALL = ['Lidé a přestávky','Organizace výroby','Systém a data',
   'Přestavba a seřízení','Materiál a logistika','Porucha stroje','Technický prostoj','Kvalita'];
+const IS_PE    = p => /(^|\s)PE(\s|$)/i.test(String(p||''));      // IMM PE, ASSY PE, PE coordinator…
+const IS_COORD = p => /coordinat/i.test(String(p||''));
+/* Kdo se podle pozic nabídne v Engineeringu — jen pro přehled, nikam se neukládá. */
+function engPeople(test){
+  const list=users.filter(u=>(u.positions||[]).some(test))
+    .map(u=>esc(u.name||u.uid)).sort((a,b)=>a.localeCompare(b,'cs'));
+  return list.length ? list.map(n=>`<span class="pchip">${n}</span>`).join(' ')
+                     : '<span style="color:var(--muted);font-size:12px">zatím nikdo — nastav pozici u uživatele nahoře</span>';
+}
 const ENGCFG_DEF = {plannedHoursPerDay:22.5, perLine:{}, threshold:90, repeatWeeks:2,
   escalationDays:7, effectivenessDays:28, excludeGroups:[], machines:{},
   engineers:[], coordinators:[], manager:''};
@@ -229,7 +240,6 @@ async function saveEngcfg(){
   if(!canWriteSettings()){ toast('Nemáte právo měnit nastavení.','err'); return; }
   const n=(id,d)=>{const el=document.getElementById(id); const v=el?Number(el.value):NaN; return isFinite(v)&&v>0?v:d;};
   const t=id=>{const el=document.getElementById(id); return el?el.value.trim():'';};
-  const list=id=>t(id).split(',').map(x=>x.trim()).filter(Boolean);
   const machines={};
   document.querySelectorAll('[data-mach]').forEach(el=>{
     const arr=el.value.split(',').map(x=>x.trim()).filter(Boolean);
@@ -238,7 +248,7 @@ async function saveEngcfg(){
   const patch={
     plannedHoursPerDay:n('eg-hpd',22.5), threshold:n('eg-thr',90), repeatWeeks:n('eg-rep',2),
     escalationDays:n('eg-esc',7), effectivenessDays:n('eg-eff',28),
-    manager:t('eg-mgr'), engineers:list('eg-eng'), coordinators:list('eg-coo'),
+    manager:t('eg-mgr'),
     excludeGroups:[...document.querySelectorAll('[data-exg]')].filter(c=>c.checked).map(c=>c.dataset.exg),
     machines
   };
@@ -266,9 +276,15 @@ function engView(){
         ${f('eg-eff','Ověření účinnosti za',c.effectivenessDays,'dní od založení problému','number')}
         ${f('eg-mgr','Engineering Manager',c.manager||'','komu se eskaluje')}
       </div>
-      <div class="eggrid" style="margin-top:12px">
-        ${f('eg-eng','Process Engineers',(c.engineers||[]).join(', '),'jména oddělená čárkou — owner technické analýzy')}
-        ${f('eg-coo','Coordinators',(c.coordinators||[]).join(', '),'owner follow-upu otevřených akcí')}
+      <h3 class="egh">Kdo se nabízí v Engineeringu</h3>
+      <p class="egnote">Bere se automaticky podle <b>pozic</b> nastavených u uživatelů nahoře — nic se tu nepřepisuje.
+        Kdo má pozici s „PE" (IMM PE, ASSY PE, PE coordinator…), nabízí se jako owner technické analýzy.
+        Kdo má pozici s „coordinator", nabízí se jako owner follow-upu.</p>
+      <div class="eggrid">
+        <div class="egf"><label>Process Engineers — owner analýzy</label>
+          <div class="egwho">${engPeople(IS_PE)}</div></div>
+        <div class="egf"><label>Coordinators — owner follow-upu</label>
+          <div class="egwho">${engPeople(IS_COORD)}</div></div>
       </div>
       <h3 class="egh">Stroje podle oblasti</h3>
       <p class="egnote">Nabízejí se při zakládání tasku v akčním plánu. Když u oblasti nic nevyplníte,

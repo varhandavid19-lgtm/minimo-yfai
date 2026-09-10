@@ -693,6 +693,24 @@ const TASK_STATUS = [
 const MAX_TASK_FILE = 5*1024*1024;   // 5 MB na soubor, stejně jako u nákupu
 
 const areaPrefix = a => (TASK_AREAS.find(x=>x.k===a)||{p:'GEN'}).p;
+/* Lidi bereme z uživatelů celého minima (kolekce users) i s jejich pozicemi.
+   Process Engineers a Coordinatory z nich poznáme podle pozice, nic se nepřepisuje ručně. */
+async function loadPeople(force){
+  if(people.length && !force) return;
+  try{
+    const us = await getDocs(collection(db,'users'));
+    people = us.docs.map(d=>{const u=d.data()||{};
+      return {uid:d.id, name:(u.name||u.email||d.id), positions:(u.positions||[])};})
+      .sort((a,b)=>a.name.localeCompare(b.name,'cs'));
+  }catch(e){ /* bez lidí se dá pracovat dál, jen se nic nenabídne */ }
+}
+const IS_PE    = p => /(^|\s)PE(\s|$)/i.test(String(p||''));      // IMM PE, ASSY PE, PE coordinator…
+const IS_COORD = p => /coordinat/i.test(String(p||''));
+const byPosition = test => people.filter(u=>(u.positions||[]).some(test)).map(u=>u.name);
+/* K odvozeným jménům přidáme i to, co je případně ručně uložené v nastavení. */
+const engEngineers   = () => [...new Set(byPosition(IS_PE).concat(engcfg.engineers||[]))].sort((a,b)=>a.localeCompare(b,'cs'));
+const engCoordinators= () => [...new Set(byPosition(IS_COORD).concat(engcfg.coordinators||[]))].sort((a,b)=>a.localeCompare(b,'cs'));
+
 /* Stroje k oblasti — co si David nastaví v Nastavení standardu.
    Když u oblasti nic nemá, nabídnou se linky, které přišly z importu prostojů. */
 function machinesFor(area){
@@ -748,10 +766,7 @@ async function loadTasks(force){
     tasks = qs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
     /* denní souhrny kvůli nabídce strojů, když si je David ještě nevypsal v nastavení */
     if(!mgLoaded) await loadMgmt();
-    /* lidé pro rozbalovátko ownerů — spravují se v Nastavení celého minima */
-    const us = await getDocs(collection(db,'users'));
-    people = us.docs.map(d=>({uid:d.id, name:(d.data().name||d.data().email||d.id)}))
-                    .sort((a,b)=>a.name.localeCompare(b.name,'cs'));
+    await loadPeople();
     if(!engcfg.plannedHoursPerDay){
       const cs=await getDoc(doc(db,'meta','engcfg'));
       engcfg=Object.assign({}, ENGCFG_DEF, cs.exists()?cs.data():{});
@@ -1286,6 +1301,7 @@ async function loadMgmt(force){
     mgDays = qs.docs.map(d=>Object.assign({date:d.id}, d.data()));
     const cs = await getDoc(doc(db,'meta','engcfg'));
     engcfg = Object.assign({}, ENGCFG_DEF, cs.exists()?cs.data():{});
+    await loadPeople();
     const ps = await getDocs(query(collection(db,'problems'), orderBy('opened','desc'), limit(200)));
     problems = ps.docs.map(d=>Object.assign({_id:d.id}, d.data()));
     const ac = await getDocs(query(collection(db,'actions'), orderBy('due','asc'), limit(500)));
@@ -1341,7 +1357,7 @@ async function createProblem(wk, line, trigger){
     const rec={no, week:wk, line:line.label, lineSlug:line.slug,
       title:`${line.label} — výkon ${num(line.perf,1)} % v ${weekShort(wk)}`,
       trigger: trigger||'výkon pod prahem', status:'nový',
-      owner:(engcfg.engineers||[])[0]||'', coordinator:(engcfg.coordinators||[])[0]||'',
+      owner:engEngineers()[0]||'', coordinator:engCoordinators()[0]||'',
       opened:today(), downtimeSec:Math.round(line.sec||0), perf:line.perf==null?null:+line.perf.toFixed(1),
       immediate:'', analysis:'', rootCause:'',
       a3Title:`${line.label} — výkon ${num(line.perf,1)} % v ${weekShort(wk)}`,
@@ -1693,6 +1709,10 @@ function mgmtSettings(){
         <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Ověření účinnosti</div>
           <div class="val">${c.effectivenessDays}<small> dní</small></div><div class="note">od založení problému</div></div>
       </div>
+      <div class="notice" style="margin:12px 0 0">
+        <b>Process Engineers</b> (owner analýzy): ${engEngineers().length?engEngineers().map(x=>esc(x)).join(', '):'zatím nikdo — nastav lidem pozici s „PE" v Nastavení'}<br>
+        <b>Coordinators</b> (owner follow-upu): ${engCoordinators().length?engCoordinators().map(x=>esc(x)).join(', '):'zatím nikdo — nastav lidem pozici s „coordinator" v Nastavení'}
+      </div>
     </div>
   </div>`;
 }
@@ -1700,7 +1720,7 @@ function mgmtSettings(){
 function problemModal(){
   const p=problems.find(x=>x._id===openPs); if(!p) return '';
   const acts=actsOf(p._id);
-  const engs=(engcfg.engineers||[]), coos=(engcfg.coordinators||[]);
+  const engs=engEngineers(), coos=engCoordinators();
   const sel=(id,val,list)=>`<select id="${id}"><option value="">— nevybráno —</option>${
     list.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}${
     val&&!list.includes(val)?`<option selected>${esc(val)}</option>`:''}</select>`;

@@ -93,6 +93,12 @@ spouští problem solving na úrovni Process Engineera.
   **Edituje se v `nastaveni.html`** (dlaždice Nastavení na hlavní stránce),
   ne v Engineeringu. V Řízení je jen přehled hodnot a odkaz. Když přidáš další
   položku nastavení, přidej ji do `nastaveni.html`.
+- **Process Engineers a Coordinatoři se NEVYPISUJÍ ručně.** Odvozují se z pozic
+  uživatelů (`users.positions`), které David nastavuje v `nastaveni.html`:
+  pozice obsahující „PE" (IMM PE, ASSY PE, PE coordinator…) → nabídne se jako
+  owner technické analýzy, pozice obsahující „coordinator" → owner follow-upu.
+  Dělají to `engEngineers()` a `engCoordinators()` v `engineering.html`.
+  Nezaváděj zpátky textová políčka na jména do nastavení.
 - Problém nelze uzavřít, dokud nemá kořenovou příčinu, aspoň jedno preventivní
   opatření, všechna opatření hotová a vyplněné ověření účinnosti. Tohle je jádro
   zadání, NERUŠ to.
