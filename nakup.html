@@ -515,7 +515,7 @@ const fld = id => (cfg?.fields||[]).find(f=>f.id===id)||{label:id,req:false};
 const today = () => new Date().toISOString().slice(0,10);
 const fmtSize = b => { b=Number(b)||0; return b<1024?b+' B':(b<1048576?(b/1024).toFixed(0)+' kB':(b/1048576).toFixed(1)+' MB'); };
 const MAX_FILE = 5*1024*1024;   // 5 MB na soubor
-const canAttach = r => !!r && (P().edit || (me && r.author===me.uid));   // žadatel u svého + skladník/admin
+const canAttach = r => !!r && !isNakupRO() && (P().edit || !r._id || (me && r.author===me.uid));   // nový zakládá autor; u existujícího jen autor + skladník/admin
 /* Filtry a volby jsou POUZE tvoje – ukládají se jen do tvého prohlížeče (localStorage),
    nejdou do databáze, takže ostatní uživatele nijak neovlivní a mají svoje vlastní. */
 function saveView(){ try{ localStorage.setItem('minimo-nakup-view', JSON.stringify({filters,sort,dashRange})); }catch(e){} }
