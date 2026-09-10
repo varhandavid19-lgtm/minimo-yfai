@@ -705,7 +705,7 @@ async function loadPeople(force){
   }catch(e){ /* bez lidí se dá pracovat dál, jen se nic nenabídne */ }
 }
 const IS_PE    = p => /(^|\s)PE(\s|$)/i.test(String(p||''));      // IMM PE, ASSY PE, PE coordinator…
-const IS_COORD = p => /coordinat/i.test(String(p||''));
+const IS_COORD = p => /^PE\s+coordinator$/i.test(String(p||'').trim());   // jen PE coordinator, ne maintenance/change
 const byPosition = test => people.filter(u=>(u.positions||[]).some(test)).map(u=>u.name);
 /* K odvozeným jménům přidáme i to, co je případně ručně uložené v nastavení. */
 const engEngineers   = () => [...new Set(byPosition(IS_PE).concat(engcfg.engineers||[]))].sort((a,b)=>a.localeCompare(b,'cs'));
@@ -1711,7 +1711,7 @@ function mgmtSettings(){
       </div>
       <div class="notice" style="margin:12px 0 0">
         <b>Process Engineers</b> (owner analýzy): ${engEngineers().length?engEngineers().map(x=>esc(x)).join(', '):'zatím nikdo — nastav lidem pozici s „PE" v Nastavení'}<br>
-        <b>Coordinators</b> (owner follow-upu): ${engCoordinators().length?engCoordinators().map(x=>esc(x)).join(', '):'zatím nikdo — nastav lidem pozici s „coordinator" v Nastavení'}
+        <b>Coordinators</b> (owner follow-upu): ${engCoordinators().length?engCoordinators().map(x=>esc(x)).join(', '):'zatím nikdo — nastav lidem pozici „PE coordinator" v Nastavení'}
       </div>
     </div>
   </div>`;

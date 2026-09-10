@@ -96,7 +96,8 @@ spouští problem solving na úrovni Process Engineera.
 - **Process Engineers a Coordinatoři se NEVYPISUJÍ ručně.** Odvozují se z pozic
   uživatelů (`users.positions`), které David nastavuje v `nastaveni.html`:
   pozice obsahující „PE" (IMM PE, ASSY PE, PE coordinator…) → nabídne se jako
-  owner technické analýzy, pozice obsahující „coordinator" → owner follow-upu.
+  owner technické analýzy, pozice přesně „PE coordinator" → owner follow-upu
+  (MAINTENANCE coordinator ani Change coordinator se do follow-upu NEPOČÍTAJÍ).
   Dělají to `engEngineers()` a `engCoordinators()` v `engineering.html`.
   Nezaváděj zpátky textová políčka na jména do nastavení.
 - Problém nelze uzavřít, dokud nemá kořenovou příčinu, aspoň jedno preventivní
