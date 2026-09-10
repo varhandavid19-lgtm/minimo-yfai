@@ -651,9 +651,11 @@ function render(){
   saveView();   // zapamatuj si tvoje filtry jen v tomto prohlížeči
   // zapamatuj pozici scrollu, ať po otevření/zavření detailu seznam nepřeskočí nahoru
   const _pw=document.getElementById('tblwrap'); const _sTbl=_pw?_pw.scrollTop:null; const _sWin=window.scrollY;
+  const _pi=document.getElementById('imp-tblwrap'); const _sImp=_pi?_pi.scrollTop:null;
   app.innerHTML = shell()+dlgView()+(qrOpen?qrScanView():'')+`<div id="toast-node">${toastView()}</div>`;
   bind();
   const _nw=document.getElementById('tblwrap'); if(_nw&&_sTbl!=null) _nw.scrollTop=_sTbl;
+  const _ni=document.getElementById('imp-tblwrap'); if(_ni&&_sImp!=null) _ni.scrollTop=_sImp;
   if(_sWin) window.scrollTo(0,_sWin);
   const di=document.getElementById('dlg-input'); if(di){di.focus();di.select();}
 }
@@ -1427,7 +1429,7 @@ function importView(){
     <h3>📥 Import podlimitních položek z Maxima<button class="x" data-a="import-cancel">✕</button></h3>
     <div class="modalbody" style="padding:14px">
       <div class="notice">Načteno <b>${it.length}</b> položek${dups?` · <b style="color:#c0392b">${dups} možná duplicita</b> (stejné skladové číslo + množství už existuje mezi otevřenými) — jsou <b>odškrtnuté</b>, zaškrtni jen ty, které chceš přesto založit.`:' · žádné duplicity.'} Z každé zaškrtnuté vznikne 1 požadavek ve stavu „nový", označený jako <b>Doplnění skladu</b>, měna <b>EUR</b>, účet <b>511305</b>, linka <b>Maintenance</b>.</div>
-      <div class="tblwrap" style="max-height:52vh">
+      <div class="tblwrap" id="imp-tblwrap" style="max-height:52vh">
         <table><thead><tr>
           <th class="no-sort" style="width:34px"><input type="checkbox" data-a="import-selall" ${it.length&&it.every(x=>x.sel)?'checked':''}></th>
           <th class="no-sort">Skladové č.</th><th class="no-sort">Popis</th><th class="no-sort">Množ.</th><th class="no-sort">Cena/ks</th><th class="no-sort">Měna</th><th class="no-sort">Výrobce</th><th class="no-sort">Dodavatel</th><th class="no-sort">Poznámka (Remark 1)</th><th class="no-sort">Duplicita</th>
@@ -1634,7 +1636,7 @@ async function act(a,v,el,ev){
       const f=el.files&&el.files[0]; el.value='';
       await startImport(f); return;
     }
-    case 'import-sel':{ if(importState) importState.items[Number(v)].sel=el.checked; return; }
+    case 'import-sel':{ if(importState) importState.items[Number(v)].sel=el.checked; break; }
     case 'import-selall':{ if(importState) importState.items.forEach(x=>x.sel=el.checked); break; }
     case 'import-cancel':{ if(importState&&importState.busy)return; importState=null; break; }
     case 'import-confirm':{ if(!importState||importState.busy)return; await runImport(); return; }
