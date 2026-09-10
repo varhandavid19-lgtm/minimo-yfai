@@ -1444,13 +1444,22 @@ function importView(){
       </div>
     </div>
     <div class="foot">
-      ${importState.busy?`<span class="msg" style="color:#1f9254">Zakládám… ${importState.done||0}/${selN}</span>`:`<span class="muted">Vybráno k založení: <b>${selN}</b> z ${it.length}</span>`}
+      ${importState.busy?`<span class="msg" style="color:#1f9254">Zakládám… ${importState.done||0}/${selN}</span>`:`<span class="muted" id="imp-count">Vybráno k založení: <b>${selN}</b> z ${it.length}</span>`}
       <div class="r">
         <button class="btn-ghost" data-a="import-cancel" ${importState.busy?'disabled':''}>Zrušit</button>
-        <button class="btn-primary" data-a="import-confirm" ${(importState.busy||!selN)?'disabled':''}>Založit vybrané (${selN})</button>
+        <button class="btn-primary" id="imp-confirm" data-a="import-confirm" ${(importState.busy||!selN)?'disabled':''}>Založit vybrané (${selN})</button>
       </div>
     </div>
   </div></div>`;
+}
+/* Zaškrtnutí/odškrtnutí jednoho řádku importu — aktualizuje jen počítadlo a tlačítko,
+   nepřekresluje celou tabulku (aby to u stovek řádků neblikalo a nepřeskakovalo). */
+function refreshImportFoot(){
+  if(!importState) return;
+  const it=importState.items||[]; const selN=it.filter(x=>x.sel).length;
+  const c=document.getElementById('imp-count'); if(c) c.innerHTML=`Vybráno k založení: <b>${selN}</b> z ${it.length}`;
+  const b=document.getElementById('imp-confirm'); if(b){ b.textContent=`Založit vybrané (${selN})`; b.disabled=!selN; }
+  const sa=document.querySelector('input[data-a="import-selall"]'); if(sa) sa.checked = it.length>0 && it.every(x=>x.sel);
 }
 async function runImport(){
   const sel=importState.items.filter(x=>x.sel);
@@ -1636,7 +1645,7 @@ async function act(a,v,el,ev){
       const f=el.files&&el.files[0]; el.value='';
       await startImport(f); return;
     }
-    case 'import-sel':{ if(importState) importState.items[Number(v)].sel=el.checked; break; }
+    case 'import-sel':{ if(importState){ importState.items[Number(v)].sel=el.checked; refreshImportFoot(); } return; }
     case 'import-selall':{ if(importState) importState.items.forEach(x=>x.sel=el.checked); break; }
     case 'import-cancel':{ if(importState&&importState.busy)return; importState=null; break; }
     case 'import-confirm':{ if(!importState||importState.busy)return; await runImport(); return; }
