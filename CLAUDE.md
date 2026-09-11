@@ -80,6 +80,10 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
 - KPI: prostoje po linkách, changeover time, podíl nezařazených prostojů.
   Scrap a cycle time čekají na odpovídající report ze Symesticu — dlaždice pro ně
   v přehledu už jsou a hlásí, že data zatím nejsou.
+- **Záložka Scrap je jen odkaz ven** na samostatnou aplikaci Quality loss report,
+  kterou dělá vedení kvality (`SCRAP_URL` v `engineering.html`). Vnitřní přehled
+  scrapu (`scrapView`, kolekce `scrap` a `sc_months`) v kódu zůstává, ale z lišty
+  se na něj nejde dostat. Nepřepisuj záložku zpátky na `data-a="tab"`.
 
 ## Řízení výkonu linek (záložka Řízení v modulu Engineering)
 Standard vyžádaný vedením: týdenní výkon linky pod prahem (výchozí 90 %) povinně
