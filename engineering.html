@@ -82,7 +82,10 @@
   .prow .v{font-size:20px;font-weight:700}
   .prow .l{font-size:13.5px;color:#41506b}
   .spark{margin:2px 0}
-  .spark svg{width:100%;height:72px;display:block}
+  .spark svg{width:100%;height:60px;display:block}
+  .sparkx{display:grid;margin-top:5px;border-top:1px solid var(--line);padding-top:5px}
+  .sparkx span{text-align:center;font-size:12px;color:#5a6b80;white-space:nowrap;overflow:hidden}
+  .sparkx span.now{color:#16233a;font-weight:700}
   .spark.empty{font-size:13px;color:#41506b;padding:18px 0;text-align:center;
     border:1px dashed var(--line);border-radius:8px}
   .sparkcap{font-size:12px;color:#41506b;margin-top:4px}
@@ -1922,30 +1925,30 @@ function sparkWeeks(series, color){
   const data=(series||[]).filter(Boolean);
   if(data.length<2 || !data.some(d=>d.sec>0))
     return '<div class="spark empty">Na trend zatím není dost týdnů.</div>';
-  const W=300, H=72, mb=14, ih=H-mb;
+  const W=300, H=60;
   const max=Math.max(...data.map(d=>d.sec))||1;
   const avg=data.reduce((a,d)=>a+d.sec,0)/data.length;
-  const step=W/data.length, bw=step*0.6;
-  const ay=ih-(avg/max)*(ih-4);
+  const step=W/data.length, bw=step*0.62;
+  const ay=H-(avg/max)*(H-4);
+  /* Sloupce jsou v SVG roztaženém na šířku dlaždice. Popisky týdnů proto NEJSOU
+     v SVG — roztažení by z písma udělalo nečitelnou kaši — ale pod ním jako
+     obyčejný text ve stejně širokých sloupcích. */
   const bars=data.map((d,i)=>{
-    const h=Math.max(d.sec>0?2.5:0.8,(d.sec/max)*(ih-4));
-    const x=i*step+(step-bw)/2, y=ih-h, last=i===data.length-1;
+    const h=Math.max(d.sec>0?2.5:0.8,(d.sec/max)*(H-4));
+    const x=i*step+(step-bw)/2, y=H-h, last=i===data.length-1;
     return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}"
-      rx="2" fill="${color}" opacity="${last?1:.42}"><title>${weekShort(d.wk)} — ${fmtDur(d.sec)}</title></rect>`;
+      fill="${color}" opacity="${last?1:.42}"><title>${weekShort(d.wk)} — ${fmtDur(d.sec)}</title></rect>`;
   }).join('');
   const labs=data.map((d,i)=>{
     const last=i===data.length-1;
-    if(!last && i%2) return '';
-    return `<text x="${(i*step+step/2).toFixed(1)}" y="${H-2}" text-anchor="middle"
-      font-family="Arial, Helvetica, sans-serif" font-size="11"
-      fill="${last?'#2b3a52':'#7b8ba3'}" font-weight="${last?'700':'400'}">${weekShort(d.wk)}</text>`;
+    return `<span class="${last?'now':''}" title="${weekShort(d.wk)} — ${fmtDur(d.sec)}">${weekShort(d.wk)}</span>`;
   }).join('');
   return `<div class="spark">
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-      aria-label="Prostoje po týdnech">
-      <line x1="0" y1="${ay.toFixed(1)}" x2="${W}" y2="${ay.toFixed(1)}" stroke="#9aa8ba" stroke-width="1" stroke-dasharray="4 4"/>
-      ${bars}${labs}
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Prostoje po týdnech">
+      <line x1="0" y1="${ay.toFixed(1)}" x2="${W}" y2="${ay.toFixed(1)}" stroke="#9aa8ba" stroke-width="1" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>
+      ${bars}
     </svg>
+    <div class="sparkx" style="grid-template-columns:repeat(${data.length},1fr)">${labs}</div>
     <div class="sparkcap">prostoje po týdnech · čárkovaně průměr ${fmtDur(avg)}</div>
   </div>`;
 }
