@@ -21,6 +21,8 @@
   .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b}
   .btn-ok{background:var(--green);color:#fff}
   .btn-teal{background:var(--teal);color:#fff;font-weight:700}
+  .btn-del{background:#fff;border:1px solid #e3b7b1;color:var(--red);font-weight:600}
+  .btn-del:hover{background:var(--red);border-color:var(--red);color:#fff}
   .muted{color:var(--muted)}
   .num{text-align:right;font-variant-numeric:tabular-nums}
 
@@ -32,11 +34,19 @@
   .panel .body{padding:13px}
   .empty{padding:26px;text-align:center;color:var(--muted)}
 
-  .tabs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-  .tab{background:#eef1f5;color:#41506b;border:1px solid var(--line);font-weight:600;padding:8px 14px}
-  .tab.on{background:var(--teal);color:#fff;border-color:var(--teal)}
-  a.tab{display:inline-block;font-size:12px;line-height:normal;border-radius:var(--radius);text-decoration:none}
-  a.tab:hover{background:#e2e8f0}
+  .tabs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  /* Hlavní menu modulu — velká, zřetelná tlačítka, ať je vidět, kam se kliká. */
+  .tab{background:#fff;color:var(--navy-1);border:1.5px solid #c8d6e8;border-radius:9px;
+    font-size:14px;font-weight:700;padding:11px 20px;letter-spacing:.1px;
+    box-shadow:0 1px 2px rgba(15,47,95,.06);transition:background .12s,border-color .12s,color .12s,transform .12s}
+  .tab:hover{background:var(--teal-bg);border-color:var(--teal);color:var(--teal-dark);transform:translateY(-1px)}
+  .tab.on{background:var(--teal);color:#fff;border-color:var(--teal-dark);
+    box-shadow:0 2px 6px rgba(13,115,119,.35);transform:none}
+  a.tab{display:inline-block;line-height:normal;text-decoration:none}
+  /* Import stojí stranou vpravo — není to součást menu, je to nástroj. */
+  .tab-imp{background:var(--navy-2);color:#fff;border-color:var(--navy-1)}
+  .tab-imp:hover{background:var(--navy-1);border-color:var(--navy-1);color:#fff}
+  .tab-imp.on{background:var(--navy-1);border-color:var(--navy-1);box-shadow:0 2px 6px rgba(15,47,95,.35)}
   .tabs .sp{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .rangebtn{background:#fff;border:1px solid var(--line);color:#41506b;font-size:11.5px;padding:6px 11px}
   .rangebtn.on{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700}
@@ -256,7 +266,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc,
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, writeBatch, runTransaction }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { getStorage, ref as sref, uploadBytes, getDownloadURL, deleteObject }
@@ -1474,6 +1484,28 @@ async function toggleEscalation(id){
   catch(e){ toast(((e&&e.message)||e),'err'); }
 }
 
+/* Smazat celý problem solving i s jeho opatřeními. Smí jen správce — na serveru
+   to stejně hlídá pravidlo `allow write: if isAdmin()` u kolekcí problems a actions. */
+async function deleteProblem(id){
+  if(!canImport()){ toast('Mazat problem solving smí jen správce.','err'); return; }
+  const p=problems.find(x=>x._id===id); if(!p) return;
+  const acts=actsOf(id);
+  const kolik = acts.length===0 ? 'Žádná opatření k němu nejsou.'
+    : acts.length===1 ? 'Smaže se k němu i 1 opatření.'
+    : `Smaže se k němu i ${acts.length} opatření.`;
+  if(!confirm(`Opravdu smazat problem solving ${p.no}?\n\n${p.title}\n\n${kolik}\nTohle už nejde vrátit zpět.`)) return;
+  busy='Mažu '+p.no+'…'; render();
+  try{
+    for(const a of acts) await deleteDoc(doc(db,'actions',a._id));
+    await deleteDoc(doc(db,'problems',id));
+    problems=problems.filter(x=>x._id!==id);
+    actions=actions.filter(a=>a.problemId!==id);
+    if(openPs===id){ openPs=null; psMsg=''; }
+    toast('Problem solving '+p.no+' smazán.','ok');
+  }catch(e){ toast('Smazání selhalo: '+((e&&e.message)||e),'err'); }
+  busy=''; render();
+}
+
 /* ---------- obrazovka Řízení ---------- */
 function mgmtView(){
   if(!mgDays.length){
@@ -1827,6 +1859,7 @@ function problemModal(){
         :`<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:'A3 je připravené k uzavření.'}</span>`}
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat na manažera'}</button>
+        ${canImport()?`<button class="btn-del" data-a="mg-del" data-v="${p._id}">Smazat</button>`:''}
         <button class="btn-ok" data-a="mg-save">Uložit</button>
         <button class="btn-ghost" data-a="mg-close">Zavřít</button>
       </span>
@@ -1859,9 +1892,9 @@ function psView(){
     return `<div class="panel"><div class="body" style="text-align:center;padding:32px 18px">
       <div style="font-size:34px">🔎</div>
       <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím žádný problem solving</div>
-      <p class="muted" style="max-width:560px;margin:0 auto 14px">Zakládá se v záložce <b>Řízení</b> tlačítkem
+      <p class="muted" style="max-width:560px;margin:0 auto 14px">Zakládá se v záložce <b>Hlavní stránka</b> tlačítkem
         <b>Vytvořit A3 problem solving</b> u linky, která spadla pod práh výkonu. Tady pak uvidíš všechny otevřené A3 pohromadě.</p>
-      <button class="btn-primary" data-a="tab" data-v="mgmt">Přejít na Řízení</button>
+      <button class="btn-primary" data-a="tab" data-v="mgmt">Přejít na hlavní stránku</button>
     </div></div>`;
   }
   const rows=psVisible();
@@ -1922,7 +1955,8 @@ function psView(){
           <td data-label="Opatření" class="num nowrap">${acts.length-op.length}/${acts.length}${acts.some(a=>a.type==='preventive')?'':' <span class="badge b-amber" title="chybí preventivní opatření">P!</span>'}</td>
           <td data-label="Nejbližší termín" class="nowrap">${nearest?(late?`<b style="color:var(--red)">${dateCz(nearest)}</b>`:dateCz(nearest)):'—'}</td>
           <td data-label="Ověřit do" class="nowrap">${p.effResult?'<span class="badge b-green">ověřeno</span>':(p.effCheckDue?dateCz(p.effCheckDue):'—')}</td>
-          <td data-label=""><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button></td>
+          <td data-label="" class="nowrap"><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button>${
+            canImport()?` <button class="btn-del" style="padding:3px 9px;font-size:11px" data-a="mg-del" data-v="${p._id}" title="Smazat problem solving">Smazat</button>`:''}</td>
         </tr>`;}).join('') || `<tr><td colspan="15" class="empty">Nic neodpovídá filtru.</td></tr>`}
       </tbody></table></div>
   </div>`;
@@ -2072,7 +2106,7 @@ function taskModal(){
       <div class="f"><label>Stroj</label>
         <input id="tk-machine" list="tk-machines" value="${esc(t.machine||'')}" placeholder="Začni psát nebo vyber">
         <datalist id="tk-machines">${machinesFor(t.area).map(m=>`<option>${esc(m)}</option>`).join('')}</datalist>
-        <div class="muted" style="font-size:11px">seznam si doplníš v Řízení → Nastavení standardu</div></div>
+        <div class="muted" style="font-size:11px">seznam si doplníš na hlavní stránce → Nastavení standardu</div></div>
       <div class="f"><label>Typ</label>
         <select id="tk-type">${TASK_TYPES.map(x=>`<option ${t.type===x?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="f"><label>Zadáno</label><input id="tk-created" type="date" value="${esc(t.createdOn||'')}"></div>
@@ -2177,7 +2211,7 @@ function emptyView(){
     <div style="font-size:34px">📊</div>
     <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím tu nejsou žádné prostoje</div>
     <p class="muted" style="max-width:520px;margin:0 auto 14px">Vyjeď v Symesticu report prostojů (Downtimes) za období,
-      ulož ho do Excelu a nahraj ho v záložce <b>Import ze Symesticu</b>. Přehled a KPI se spočítají samy.</p>
+      ulož ho do Excelu a nahraj ho v záložce <b>Import</b>. KPI se spočítají samy.</p>
     ${canImport()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
   </div></div>`;
 }
@@ -2506,22 +2540,22 @@ function render(){
               : importView();
   app.innerHTML = shell(`
     <div class="tabs">
-      <button class="tab ${engTab==='mgmt'?'on':''}" data-a="tab" data-v="mgmt">Řízení</button>
+      <button class="tab ${engTab==='mgmt'?'on':''}" data-a="tab" data-v="mgmt">Hlavní stránka</button>
       <button class="tab ${engTab==='ps'?'on':''}" data-a="tab" data-v="ps">Problem solving</button>
       <button class="tab ${engTab==='tasks'?'on':''}" data-a="tab" data-v="tasks">Akční plán</button>
-      <button class="tab ${engTab==='dash'?'on':''}" data-a="tab" data-v="dash">Přehled a KPI</button>
+      <button class="tab ${engTab==='dash'?'on':''}" data-a="tab" data-v="dash">KPI</button>
       <button class="tab ${engTab==='list'?'on':''}" data-a="tab" data-v="list">Prostoje</button>
       <a class="tab" href="${SCRAP_URL}" title="Otevře aplikaci Quality loss report — Scrap">Scrap ↗</a>
-      ${canImport()?`<button class="tab ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
       <span class="sp">
-        ${engTab==='ps'?'<span class="muted" style="font-size:11.5px">Problem solving zakládáš v Řízení u linky pod prahem.</span>'
+        ${engTab==='ps'?'<span class="muted" style="font-size:11.5px">Problem solving zakládáš na hlavní stránce u linky pod prahem.</span>'
           :engTab==='tasks'?'<span class="muted" style="font-size:11.5px">Akční plán je nezávislý na období — vidíš všechny tasky.</span>'
-          :engTab==='mgmt'?'<span class="muted" style="font-size:11.5px">Řízení počítá po týdnech z posledních 12 týdnů.</span>'
+          :engTab==='mgmt'?'<span class="muted" style="font-size:11.5px">Hlavní stránka počítá po týdnech z posledních 12 týdnů.</span>'
           :engTab==='scrap'?'<span class="muted" style="font-size:11.5px">Scrap se počítá po měsících — posledních 12.</span>'
           :`<span class="muted" style="font-size:11.5px">Období:</span>
         ${[7,14,30].map(n=>`<button class="rangebtn ${range===n?'on':''}" data-a="range" data-v="${n}">${n} dní</button>`).join('')}`}
         <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
       </span>
+      ${canImport()?`<button class="tab tab-imp ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
     </div>
     ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
     ${busy?`<div class="notice">${esc(busy)}</div>`:''}
@@ -2678,6 +2712,7 @@ async function act(a,v){
     case 'mg-addaction': await addAction(); return;
     case 'mg-adone': await setActionStatus(v,'hotová'); return;
     case 'mg-escalate': await toggleEscalation(v); return;
+    case 'mg-del': await deleteProblem(v); return;
     case 'mg-create':{
       const [wk,slug]=String(v).split('|');
       const weeks=weeklyPerf(mgDays, engcfg);

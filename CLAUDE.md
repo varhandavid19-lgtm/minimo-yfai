@@ -85,7 +85,15 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   scrapu (`scrapView`, kolekce `scrap` a `sc_months`) v kódu zůstává, ale z lišty
   se na něj nejde dostat. Nepřepisuj záložku zpátky na `data-a="tab"`.
 
-## Řízení výkonu linek (záložka Řízení v modulu Engineering)
+### Menu záložek
+Záložky modulu jsou velká výrazná tlačítka (`.tab`), aktivní je tyrkysová.
+Pořadí a názvy: **Hlavní stránka** (`mgmt`), **Problem solving** (`ps`),
+**Akční plán** (`tasks`), **KPI** (`dash`), **Prostoje** (`list`),
+**Scrap ↗** (odkaz ven) a úplně vpravo, mimo menu, tmavomodrý **Import**
+(`.tab-imp`, vidí ho jen správce). Klíče záložek v kódu (`engTab`) zůstaly
+původní — přejmenoval se jen popisek.
+
+## Řízení výkonu linek (záložka Hlavní stránka v modulu Engineering)
 Standard vyžádaný vedením: týdenní výkon linky pod prahem (výchozí 90 %) povinně
 spouští problem solving na úrovni Process Engineera.
 - Výkon = (plánovaný čas − prostoje) ÷ plánovaný čas. Plánovaný čas je
@@ -108,6 +116,9 @@ spouští problem solving na úrovni Process Engineera.
   opatření, všechna opatření hotová a vyplněné ověření účinnosti. Tohle je jádro
   zadání, NERUŠ to.
 - Corrective a preventive opatření se rozlišují polem `type` — nemíchej je.
+- Problem solving smí smazat jen správce (`canImport()`), a to z řádku v záložce
+  Problem solving nebo z patičky detailu. Maže se i se svými opatřeními a vždy
+  po potvrzení. Na serveru to hlídá `allow write: if isAdmin()`.
 - Rozepsané hodnoty v okně problému se před každým překreslením přenesou do
   paměti funkcí `collectPs()`. Bez toho by se text ztratil při odmítnutém uložení.
 
