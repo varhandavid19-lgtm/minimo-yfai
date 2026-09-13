@@ -112,10 +112,21 @@ spouští problem solving na úrovni Process Engineera.
   (MAINTENANCE coordinator ani Change coordinator se do follow-upu NEPOČÍTAJÍ).
   Dělají to `engEngineers()` a `engCoordinators()` v `engineering.html`.
   Nezaváděj zpátky textová políčka na jména do nastavení.
-- Problém nelze uzavřít, dokud nemá kořenovou příčinu, aspoň jedno preventivní
-  opatření, všechna opatření hotová a vyplněné ověření účinnosti. Tohle je jádro
-  zadání, NERUŠ to.
-- Corrective a preventive opatření se rozlišují polem `type` — nemíchej je.
+- **Zjednodušený formulář** (David, 09/2026). Okno problem solvingu má přesně tyhle
+  části a nic víc: prostoj v minutách, vlastník, supervizor, stav, 1. popis problému,
+  2. okamžité opatření, 3. kořenová příčina, 4. nápravné opatření + navázané úkoly,
+  5. upravené dokumenty (zaškrtávátka), 6. ověření účinnosti. Původní osmiboxové A3
+  (současný stav, cíl, analýza, plán implementace, standard práce) je pryč — stará
+  data v dokumentech zůstávají, jen se nezobrazují ani nepřepisují. Nepřidávej boxy
+  zpátky bez vyžádání.
+- Zaškrtávátka dokumentů jsou v `PS_DOCS` (Karta parametrů, ODS, TPM, Work instruction,
+  JobSetup), ukládají se do pole `docs`.
+- **Nápravná opatření jsou tasky akčního plánu**, ne vlastní kolekce. Tlačítko
+  „+ Přidat úkol do akčního plánu" otevře stejné okno jako v Akčním plánu a task
+  dostane vazbu `psId` + `psNo`. Kolekce `actions` v kódu zůstává kvůli starým
+  záznamům, nová se do ní nezakládají.
+- Problém nelze uzavřít, dokud nemá kořenovou příčinu a vyplněné ověření účinnosti
+  (`canCloseWith`). Ověření účinnosti si vyžádal šéf — NERUŠ ho.
 - Problem solving smí smazat jen správce (`canImport()`), a to z řádku v záložce
   Problem solving nebo z patičky detailu. Maže se i se svými opatřeními a vždy
   po potvrzení. Na serveru to hlídá `allow write: if isAdmin()`.

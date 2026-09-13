@@ -196,6 +196,26 @@
   .a3box textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 9px;font:inherit;font-size:12.5px;line-height:1.45;resize:vertical;background:#f6f8fa;color:var(--text)}
   .a3box textarea:focus{background:#fff;border-color:var(--teal);outline:none}
   .a3lbl{font-size:11px;font-weight:700;color:#41506b;margin-bottom:-3px}
+  .a3top{grid-template-columns:repeat(4,1fr)}
+  .a3box input[type=number],.a3box input[type=date],.a3box input[type=text],.a3box input:not([type]){width:100%}
+  /* navázané úkoly akčního plánu */
+  .pstasks{display:flex;flex-direction:column;gap:5px}
+  .pstask{display:flex;gap:8px;align-items:center;padding:6px 9px;border:1px solid var(--line);border-radius:6px;
+    background:#f6f8fa;cursor:pointer;font-size:12px}
+  .pstask:hover{background:var(--teal-bg);border-color:var(--teal)}
+  .pstask.late{border-left:3px solid var(--red)}
+  .pstask .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pstask .who{color:var(--muted);white-space:nowrap}
+  .pstask .dd{white-space:nowrap;font-variant-numeric:tabular-nums}
+  /* zaškrtávátka upravených dokumentů */
+  .psdocs{display:flex;flex-wrap:wrap;gap:7px}
+  .psdoc{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid var(--line);
+    border-radius:20px;background:#f6f8fa;font-size:12.5px;font-weight:600;color:#41506b;cursor:pointer}
+  .psdoc:hover{border-color:var(--teal)}
+  .psdoc:has(input:checked){background:var(--teal-bg);border-color:var(--teal);color:var(--teal-dark)}
+  .psdoc input{width:auto;margin:0;accent-color:var(--teal)}
+  .psverify{display:grid;grid-template-columns:150px 1fr;gap:10px;padding-top:3px}
+  @media(max-width:680px){.psverify{grid-template-columns:1fr}}
 
   @media(max-width:960px){.a3top{grid-template-columns:1fr 1fr}.a3head{grid-template-columns:1fr 1fr}}
   @media(max-width:680px){.a3wrap{padding:12px}.a3grid{flex-direction:column}.a3top{grid-template-columns:1fr}.a3head{grid-template-columns:1fr}}
@@ -709,6 +729,15 @@ const TASK_STATUS = [
 const MAX_TASK_FILE = 5*1024*1024;   // 5 MB na soubor, stejně jako u nákupu
 
 const areaPrefix = a => (TASK_AREAS.find(x=>x.k===a)||{p:'GEN'}).p;
+/* Z názvu linky odhadneme oblast, ať se úkol z problem solvingu předvyplní sám. */
+function areaForLine(line){
+  const L=String(line||'');
+  const m=[[/^IMM|vstřik|lis/i,'IMM'],[/MFA/i,'Assembly MFA2'],[/SK ?336|PO ?455|W ?206/i,'Assembly SK336/PO455/W206'],
+    [/OV ?51|OV ?64/i,'Assembly OV51/64'],[/M ?BEAM/i,'Assembly MBEAM'],[/slush/i,'Slush'],
+    [/foam|pěn/i,'Foaming'],[/gclass|g ?class/i,'Gclass'],[/GB|DP|GB\/DP/i,'GB/DP']];
+  for(const [re,k] of m) if(re.test(L)) return k;
+  return TASK_AREAS[0].k;
+}
 /* Lidi bereme z uživatelů celého minima (kolekce users) i s jejich pozicemi.
    Process Engineers a Coordinatory z nich poznáme podle pozice, nic se nepřepisuje ručně. */
 async function loadPeople(force){
@@ -794,7 +823,8 @@ async function loadTasks(force){
 function emptyTask(){
   return {_id:null, no:'', area:TASK_AREAS[0].k, machine:'', type:'Operation',
     createdOn:today(), createdBy:me.name, task:'', output:'', owners:[],
-    dueOrig:'', moves:[], status:'OPEN', closedOn:'', note:'', files:[], hist:[]};
+    dueOrig:'', moves:[], status:'OPEN', closedOn:'', note:'', files:[], hist:[],
+    psId:'', psNo:''};
 }
 /* Přečte hodnoty z okna do paměti, ať se při překreslení nic neztratí. */
 function collectTask(){
@@ -824,7 +854,8 @@ async function saveTask(){
       const rec={no, area:t.area, machine:t.machine||'', type:t.type, createdOn:t.createdOn, createdBy:t.createdBy,
         task:t.task, output:t.output, owners:t.owners, dueOrig:t.dueOrig, moves:[],
         status:t.status, closedOn:t.closedOn, note:t.note, files:[],
-        hist:[`${today()} · ${me.name} · task založen`]};
+        psId:t.psId||'', psNo:t.psNo||'',
+        hist:[`${today()} · ${me.name} · task založen${t.psNo?' k problem solvingu '+t.psNo:''}`]};
       const ref=await addDoc(collection(db,'tasks'), rec);
       /* přílohy vybrané ještě před založením nahrajeme až teď, když máme id */
       if(pendingTaskFiles.length){
@@ -1344,7 +1375,12 @@ async function nextNo(field, prefix){
   return `${prefix}-${year}-${String(n).padStart(3,'0')}`;
 }
 
+/* Dokumenty, které se kvůli problému musely upravit — zaškrtávátka v A3. */
+const PS_DOCS = ['Karta parametrů','ODS','TPM','Work instruction','JobSetup'];
+
 /* ---------- pomocné nad problémy a akcemi ---------- */
+/* Nápravná opatření k problému jsou obyčejné tasky akčního plánu s vazbou psId. */
+const tasksOfPs = pid => tasks.filter(t=>t.psId===pid);
 const actsOf = pid => actions.filter(a=>a.problemId===pid);
 const openActs = list => list.filter(a=>a.status!=='hotová' && a.status!=='zrušená');
 const isOverdue = a => a.status!=='hotová' && a.status!=='zrušená' && a.due && a.due < today();
@@ -1352,15 +1388,11 @@ const overdueDays = a => isOverdue(a) ? Math.floor((Date.parse(today())-Date.par
 const problemFor = (wk,slug) => problems.find(p=>p.week===wk && p.lineSlug===slug);
 function needsEscalation(p){
   if(p.status==='uzavřeno') return false;
-  const worst=Math.max(0,...actsOf(p._id).map(overdueDays));
+  const worst=Math.max(0, ...tasksOfPs(p._id).map(lateDays), ...actsOf(p._id).map(overdueDays));
   return worst > (engcfg.escalationDays||7);
 }
 function canClose(p){
-  const acts=actsOf(p._id);
   if(!p.rootCause) return 'Nejdřív doplň kořenovou příčinu.';
-  if(!acts.length) return 'Problém nejde uzavřít bez jediného opatření.';
-  if(!acts.some(a=>a.type==='preventive')) return 'Chybí preventivní opatření — bez něj se problém vrátí.';
-  if(openActs(acts).length) return 'Nejdřív dokonči nebo zruš všechna opatření.';
   if(!p.effResult) return 'Před uzavřením musíš vyplnit ověření účinnosti.';
   return '';
 }
@@ -1375,13 +1407,7 @@ async function createProblem(wk, line, trigger){
       trigger: trigger||'výkon pod prahem', status:'nový',
       owner:engEngineers()[0]||'', coordinator:engCoordinators()[0]||'',
       opened:today(), downtimeSec:Math.round(line.sec||0), perf:line.perf==null?null:+line.perf.toFixed(1),
-      immediate:'', analysis:'', rootCause:'',
-      a3Title:`${line.label} — výkon ${num(line.perf,1)} % v ${weekShort(wk)}`,
-      a3Loc:line.label, a3Author:me.name||'', a3Date:today(),
-      problemDesc:'',
-      currentState:`Výkon ${num(line.perf,1)} %, prostoje ${fmtDur(line.sec||0)} (${weekLabel(wk)}).`,
-      goal:`Výkon linky zpět nad ${engcfg.threshold||90} %.`,
-      implPlan:'', stdWork:'',
+      problemDesc:'', immediate:'', rootCause:'', corrective:'', docs:[],
       effCheckDue:eff.toISOString().slice(0,10), effResult:'', escalated:false,
       hist:[`${today()} · ${me.name} · problém založen (${trigger||'výkon pod prahem'})`]};
     const ref=await addDoc(collection(db,'problems'), rec);
@@ -1395,26 +1421,25 @@ function collectPs(){
   const p=problems.find(x=>x._id===openPs); if(!p) return null;
   const el=document.getElementById('ps-root'); if(!el) return p;   // okno není vykreslené
   const g=id=>{const e=document.getElementById(id); return e?e.value.trim():'';};
+  const min=Number(g('ps-min'));
   Object.assign(p,{
     owner:g('ps-owner'), coordinator:g('ps-coord'),
-    immediate:g('ps-immediate'), rootCause:g('ps-root'),
-    analysis:g('a3-analysis'),
+    problemDesc:g('ps-desc'), immediate:g('ps-immediate'),
+    rootCause:g('ps-root'), corrective:g('ps-corrective'),
+    docs:[...document.querySelectorAll('[data-psdoc]')].filter(c=>c.checked).map(c=>c.dataset.psdoc),
     effCheckDue:g('ps-effdue'), effResult:g('ps-effres'),
-    a3Title:g('a3-title'), a3Loc:g('a3-loc'), a3Author:g('a3-author'), a3Date:g('a3-date'),
-    problemDesc:g('a3-desc'), currentState:g('a3-cur'), goal:g('a3-goal'),
-    implPlan:g('a3-impl'), stdWork:g('a3-std'),
     status:g('ps-status')||p.status
   });
+  if(isFinite(min) && min>=0) p.downtimeSec=Math.round(min*60);
   return p;
 }
 async function saveProblem(){
   const p=collectPs(); if(!p) return;
   const next={
     owner:p.owner, coordinator:p.coordinator,
-    immediate:p.immediate, rootCause:p.rootCause, analysis:p.analysis,
-    a3Title:p.a3Title, a3Loc:p.a3Loc, a3Author:p.a3Author, a3Date:p.a3Date,
-    problemDesc:p.problemDesc, currentState:p.currentState, goal:p.goal,
-    implPlan:p.implPlan, stdWork:p.stdWork,
+    problemDesc:p.problemDesc, immediate:p.immediate,
+    rootCause:p.rootCause, corrective:p.corrective, docs:p.docs||[],
+    downtimeSec:p.downtimeSec||0,
     effCheckDue:p.effCheckDue, effResult:p.effResult, status:p.status
   };
   if(next.status==='uzavřeno'){
@@ -1432,11 +1457,7 @@ async function saveProblem(){
   }catch(e){ psMsg='Uložení selhalo: '+((e&&e.message)||e); render(); }
 }
 function canCloseWith(p){
-  const acts=actsOf(p._id);
   if(!p.rootCause) return 'Bez kořenové příčiny problém uzavřít nejde.';
-  if(!acts.length) return 'Problém nejde uzavřít bez jediného opatření.';
-  if(!acts.some(a=>a.type==='preventive')) return 'Chybí preventivní opatření (preventive) — bez něj se problém vrátí.';
-  if(openActs(acts).length) return 'Nejdřív dokonči nebo zruš všechna opatření.';
   if(!p.effResult) return 'Před uzavřením vyplň ověření účinnosti.';
   return '';
 }
@@ -1489,10 +1510,9 @@ async function toggleEscalation(id){
 async function deleteProblem(id){
   if(!canImport()){ toast('Mazat problem solving smí jen správce.','err'); return; }
   const p=problems.find(x=>x._id===id); if(!p) return;
-  const acts=actsOf(id);
-  const kolik = acts.length===0 ? 'Žádná opatření k němu nejsou.'
-    : acts.length===1 ? 'Smaže se k němu i 1 opatření.'
-    : `Smaže se k němu i ${acts.length} opatření.`;
+  const acts=actsOf(id), mine=tasksOfPs(id);
+  const kolik = mine.length===0 ? 'Úkoly v akčním plánu k němu nejsou.'
+    : `Úkolů v akčním plánu k němu je ${mine.length} — ty v akčním plánu zůstanou, jen ztratí vazbu.`;
   if(!confirm(`Opravdu smazat problem solving ${p.no}?\n\n${p.title}\n\n${kolik}\nTohle už nejde vrátit zpět.`)) return;
   busy='Mažu '+p.no+'…'; render();
   try{
@@ -1617,18 +1637,18 @@ function mgmtView(){
   <div class="panel">
     <h2>Otevřené problémy<span class="right">${openPs2.length} · Process Engineer je owner analýzy</span></h2>
     <div class="tblwrap"><table>
-      <thead><tr><th>Číslo</th><th>Linka / týden</th><th>Stav</th><th>Owner analýzy</th><th>Coordinator</th><th>Opatření</th><th>Nejbližší termín</th><th></th></tr></thead>
+      <thead><tr><th>Číslo</th><th>Linka / týden</th><th>Stav</th><th>Owner analýzy</th><th>Coordinator</th><th>Úkoly</th><th>Nejbližší termín</th><th></th></tr></thead>
       <tbody>${openPs2.map(p=>{
-        const acts=actsOf(p._id), op=openActs(acts);
-        const nearest=op.map(a=>a.due).filter(Boolean).sort()[0]||'';
-        const late=op.some(isOverdue);
+        const mine=tasksOfPs(p._id), op=mine.filter(t=>!taskDone(t));
+        const nearest=op.map(dueValid).filter(Boolean).sort()[0]||'';
+        const late=op.some(taskLate);
         return `<tr class="${late?'long':''}">
           <td data-label="Číslo"><b>${p.no}</b>${(p.escalated||needsEscalation(p))?' <span class="badge b-red">eskalace</span>':''}</td>
           <td data-label="Linka" class="desc">${esc(p.line)} · ${weekShort(p.week)}${p.trigger==='opakovaný problém'?' <span class="badge b-amber">opakovaný</span>':''}</td>
           <td data-label="Stav"><span class="badge ${psDef(p.status).cls}">${p.status}</span></td>
           <td data-label="Owner">${esc(p.owner||'—')}</td>
           <td data-label="Coordinator">${esc(p.coordinator||'—')}</td>
-          <td data-label="Opatření">${acts.length-op.length}/${acts.length} hotovo</td>
+          <td data-label="Úkoly">${mine.length-op.length}/${mine.length} hotovo</td>
           <td data-label="Termín">${nearest?(late?`<b style="color:var(--red)">${dayCz(nearest)}</b>`:dayCz(nearest)):'—'}</td>
           <td data-label=""><button class="btn-ghost" data-a="mg-open" data-v="${p._id}">Otevřít</button></td>
         </tr>`;}).join('') || `<tr><td colspan="8" class="empty">Žádný otevřený problém.</td></tr>`}
@@ -1755,108 +1775,87 @@ function mgmtSettings(){
   </div>`;
 }
 /* ---------- okno problému ---------- */
+/* Zjednodušené A3: kolik minut, kdo to řeší, popis, okamžité opatření,
+   kořenová příčina, nápravná opatření (jako tasky akčního plánu),
+   upravené dokumenty a ověření účinnosti. */
 function problemModal(){
   const p=problems.find(x=>x._id===openPs); if(!p) return '';
-  const acts=actsOf(p._id);
   const engs=engEngineers(), coos=engCoordinators();
+  const mine=tasksOfPs(p._id);
   const sel=(id,val,list)=>`<select id="${id}"><option value="">— nevybráno —</option>${
     list.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}${
     val&&!list.includes(val)?`<option selected>${esc(val)}</option>`:''}</select>`;
-  const ta=(id,val,ph,rows)=>`<textarea id="${id}" rows="${rows||3}" placeholder="${esc(ph)}">${esc(val||'')}</textarea>`;
+  const ta=(id,val,ph,rows)=>`<textarea id="${id}" rows="${rows||4}" placeholder="${esc(ph)}">${esc(val||'')}</textarea>`;
   const blocked=canCloseWith(p);
+  const checked=new Set(p.docs||[]);
   return `
-  <div class="overlay" id="ovl"><div class="modal" style="max-width:1180px" role="dialog" aria-modal="true" aria-label="A3 problem solving">
-    <h3>${p.no} — A3 problem solving<button class="x" data-a="mg-close" aria-label="Zavřít">✕</button></h3>
+  <div class="overlay" id="ovl"><div class="modal" style="max-width:980px" role="dialog" aria-modal="true" aria-label="Problem solving">
+    <h3>${p.no} — problem solving<button class="x" data-a="mg-close" aria-label="Zavřít">✕</button></h3>
     <div class="robar">
-      <b>${esc(p.line)}</b> · ${weekLabel(p.week)} · výkon ${p.perf!=null?num(p.perf,1)+' %':'—'} · prostoje ${fmtDur(p.downtimeSec||0)}
+      <b>${esc(p.line)}</b> · ${weekLabel(p.week)} · výkon ${p.perf!=null?num(p.perf,1)+' %':'—'}
       · spouštěč: ${esc(p.trigger)} ${(p.escalated||needsEscalation(p))?'<span class="badge b-red">eskalace na Engineering Managera</span>':''}
     </div>
     <div class="a3wrap">
 
       <div class="a3top">
-        <div class="f"><label>Stav A3</label>
-          <select id="ps-status">${PS_STATUS.map(s=>`<option ${p.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
+        <div class="f"><label>Prostoj (minuty)</label>
+          <input id="ps-min" type="number" min="0" step="1" value="${Math.round((p.downtimeSec||0)/60)}">
+          <div class="muted" style="font-size:11px">napočítáno z importu, dá se přepsat</div></div>
+        <div class="f"><label>Vlastník <span style="color:var(--red)">*</span></label>${sel('ps-owner',p.owner,engs)}
+          <div class="muted" style="font-size:11px">procesní inženýr, který to řeší</div></div>
+        <div class="f"><label>Supervizor</label>${sel('ps-coord',p.coordinator,coos)}
+          <div class="muted" style="font-size:11px">PE coordinator</div></div>
+        <div class="f"><label>Stav</label>
+          <select id="ps-status">${PS_STATUS.map(x=>`<option ${p.status===x.k?'selected':''}>${x.k}</option>`).join('')}</select>
           <div class="muted" style="font-size:11px">${psDef(p.status).d}</div></div>
-        <div class="f"><label>Vlastník A3 problem solving <span style="color:var(--red)">*</span></label>${sel('ps-owner',p.owner,engs)}
-          <div class="muted" style="font-size:11px">procesní inženýr</div></div>
-        <div class="f"><label>Problem solving supervizor</label>${sel('ps-coord',p.coordinator,coos)}
-          <div class="muted" style="font-size:11px">koordinátor (1 ze tří)</div></div>
-      </div>
-
-      <div class="a3head">
-        <div class="c"><span class="lb">Název</span><input id="a3-title" value="${esc(p.a3Title||p.title||'')}"></div>
-        <div class="c"><span class="lb">Lokalita / oddělení</span><input id="a3-loc" value="${esc(p.a3Loc||p.line||'')}"></div>
-        <div class="c"><span class="lb">Autor</span><input id="a3-author" value="${esc(p.a3Author||'')}"></div>
-        <div class="c"><span class="lb">Datum</span><input id="a3-date" type="date" value="${esc(p.a3Date||p.opened||today())}"></div>
       </div>
 
       <div class="a3grid">
         <div class="a3col">
           <div class="a3box"><div class="bh"><span class="n">1.</span> Popis problému</div>
-            <div class="bb">${ta('a3-desc',p.problemDesc,'Co se děje, kde a jak se to projevuje. Fakta, ne domněnky.',4)}</div></div>
-          <div class="a3box grow"><div class="bh"><span class="n">2.</span> Současný stav</div>
-            <div class="bb">${ta('a3-cur',p.currentState,'Jak to vypadá dnes — čísla, výkon, prostoje, dopad.',7)}</div></div>
-          <div class="a3box"><div class="bh"><span class="n">3.</span> Cíl / cílové zlepšení</div>
-            <div class="bb">${ta('a3-goal',p.goal,'Čeho chceme dosáhnout a do kdy.',4)}</div></div>
+            <div class="bb">${ta('ps-desc',p.problemDesc,'Co se stalo, kde a jak se to projevilo. Fakta, ne domněnky.',5)}</div></div>
+          <div class="a3box"><div class="bh"><span class="n">2.</span> Okamžité opatření</div>
+            <div class="bb">${ta('ps-immediate',p.immediate,'Jak jsme linku rozjeli — nebo co pro to uděláme.',5)}</div></div>
+          <div class="a3box grow"><div class="bh"><span class="n">3.</span> Kořenová příčina <span style="color:var(--red)">*</span></div>
+            <div class="bb">${ta('ps-root',p.rootCause,'Proč se to stalo. Bez ní nejde problem solving uzavřít.',5)}</div></div>
         </div>
 
         <div class="a3col">
-          <div class="a3box grow"><div class="bh"><span class="n">4.</span> Analýza kořenové příčiny</div>
+          <div class="a3box"><div class="bh"><span class="n">4.</span> Nápravné opatření</div>
             <div class="bb">
-              <div class="a3lbl">Analýza — jak jsme došli ke kořenové příčině</div>
-              ${ta('a3-analysis', p.analysis || (p.whys||[]).filter(Boolean).join('\n'), 'Postup analýzy ke kořenové příčině.',7)}
-              <div class="a3lbl">Kořenová příčina <span style="color:var(--red)">*</span></div>
-              <input id="ps-root" value="${esc(p.rootCause||'')}" placeholder="bez ní nejde A3 uzavřít">
+              ${ta('ps-corrective',p.corrective,'Co uděláme, aby se to neopakovalo — nebo aby byl prostoj do budoucna menší.',4)}
+              <div class="a3lbl">Úkoly v akčním plánu</div>
+              <div class="pstasks">${mine.length?mine.map(t=>`
+                <div class="pstask ${taskLate(t)?'late':''}" data-a="tk-open" data-v="${t._id}" title="Otevřít task">
+                  <b>${esc(t.no)}</b>
+                  <span class="tx">${esc(t.task)}</span>
+                  <span class="who">${esc(taskOwners(t).join(', ')||'—')}</span>
+                  <span class="dd">${dueValid(t)?dateCz(dueValid(t)):'—'}</span>
+                  <span class="badge ${stDef(t.status).cls}">${esc(t.status)}</span>
+                </div>`).join(''):'<div class="muted" style="font-size:12px;padding:2px 0">Zatím žádný úkol.</div>'}</div>
+              <button class="btn-primary" data-a="ps-newtask" style="align-self:flex-start">+ Přidat úkol do akčního plánu</button>
             </div></div>
-          <div class="a3box"><div class="bh"><span class="n">5.</span> Protiopatření</div>
-            <div class="bb">
-              <div class="a3lbl">Okamžité opatření (containment)</div>
-              <input id="ps-immediate" value="${esc(p.immediate||'')}" placeholder="co jsme udělali hned — výměna dílu, snížená rychlost, 100% kontrola">
-              <div class="a3lbl">Opatření — každé s ownerem a termínem</div>
-              <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius)">
-                <table><thead><tr><th>Č.</th><th>Opatření</th><th>Typ</th><th>Owner</th><th>Termín</th><th>Stav</th><th></th></tr></thead>
-                <tbody>${acts.map(a=>`<tr class="${isOverdue(a)?'long':''}">
-                  <td data-label="Č."><b>${a.no}</b></td>
-                  <td data-label="Opatření" class="desc">${esc(a.text)}</td>
-                  <td data-label="Typ"><span class="badge ${a.type==='preventive'?'b-teal':'b-grey'}">${a.type==='preventive'?'preventive':'corrective'}</span></td>
-                  <td data-label="Owner">${esc(a.owner)}</td>
-                  <td data-label="Termín">${isOverdue(a)?`<b style="color:var(--red)">${dayCz(a.due)}</b>`:dayCz(a.due)}</td>
-                  <td data-label="Stav"><span class="badge ${(AC_STATUS.find(s=>s.k===a.status)||AC_STATUS[0]).cls}">${a.status}</span></td>
-                  <td data-label="">${openActs([a]).length?`<button class="btn-ok" style="padding:3px 9px;font-size:11px" data-a="mg-adone" data-v="${a._id}">Hotovo</button>`:''}</td>
-                </tr>`).join('') || `<tr><td colspan="7" class="empty">Zatím žádné opatření. Corrective odstraní následek, preventive zabrání opakování — mít obojí je součást standardu.</td></tr>`}
-                </tbody></table>
-              </div>
-              <div class="addrow">
-                <input id="na-text" placeholder="Co se udělá">
-                <select id="na-type">${AC_TYPE.map(t=>`<option value="${t.k}">${t.label}</option>`).join('')}</select>
-                <input id="na-owner" placeholder="Owner" list="ownerlist">
-                <datalist id="ownerlist">${[...new Set(engs.concat(coos))].map(o=>`<option>${esc(o)}</option>`).join('')}</datalist>
-                <input id="na-due" type="date" value="">
-                <button class="btn-primary" data-a="mg-addaction">+ Přidat</button>
-              </div>
-            </div></div>
-        </div>
 
-        <div class="a3col">
-          <div class="a3box"><div class="bh"><span class="n">6.</span> Plán implementace</div>
-            <div class="bb">${ta('a3-impl',p.implPlan,'Kdo / kdy / jak protiopatření zavede. Kroky a termíny.',6)}</div></div>
-          <div class="a3box grow"><div class="bh"><span class="n">7.</span> Kontrola výsledků — ověření</div>
+          <div class="a3box"><div class="bh"><span class="n">5.</span> Upravené dokumenty</div>
             <div class="bb">
-              <div class="a3lbl">Ověřit do</div>
-              <input id="ps-effdue" type="date" value="${esc(p.effCheckDue||'')}">
-              <div class="a3lbl">Výsledek ověření <span style="color:var(--red)">*</span></div>
-              ${ta('ps-effres',p.effResult,'např. 4 týdny bez opakování, výkon linky zpět nad 90 %',5)}
+              <div class="muted" style="font-size:11.5px;margin-bottom:-2px">Co se kvůli tomuhle problému muselo přepsat.</div>
+              <div class="psdocs">${PS_DOCS.map(d=>`<label class="psdoc"><input type="checkbox" data-psdoc="${esc(d)}" ${checked.has(d)?'checked':''}> ${esc(d)}</label>`).join('')}</div>
+            </div></div>
+
+          <div class="a3box grow"><div class="bh"><span class="n">6.</span> Ověření účinnosti <span style="color:var(--red)">*</span></div>
+            <div class="bb">
+              <div class="psverify">
+                <div><div class="a3lbl">Ověřit do</div><input id="ps-effdue" type="date" value="${esc(p.effCheckDue||'')}"></div>
+                <div><div class="a3lbl">Výsledek ověření</div><input id="ps-effres" value="${esc(p.effResult||'')}" placeholder="např. 4 týdny bez opakování"></div>
+              </div>
             </div></div>
         </div>
       </div>
-
-      <div class="a3box" style="margin-top:12px"><div class="bh"><span class="n">8.</span> Aktualizace standardu práce</div>
-        <div class="bb">${ta('a3-std',p.stdWork,'Co se zapíše do standardu / návodky / OPL, aby se problém nevrátil.',3)}</div></div>
     </div>
-    ${(p.hist||[]).length?`<div class="hist">${(p.hist||[]).slice().reverse().slice(0,6).map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
+    ${(p.hist||[]).length?`<div class="hist">${(p.hist||[]).slice().reverse().slice(0,4).map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
     <div class="foot">
       ${psMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(psMsg)}</span>`
-        :`<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:'A3 je připravené k uzavření.'}</span>`}
+        :`<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:'Připravené k uzavření.'}</span>`}
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat na manažera'}</button>
         ${canImport()?`<button class="btn-del" data-a="mg-del" data-v="${p._id}">Smazat</button>`:''}
@@ -1868,7 +1867,6 @@ function problemModal(){
 }
 
 
-
 /* ---------- obrazovka Problem solving (A3) ---------- */
 function psVisible(){
   let r=problems.slice();
@@ -1877,12 +1875,13 @@ function psVisible(){
   if(psF.owner)  r=r.filter(p=>p.owner===psF.owner);
   if(psHideClosed) r=r.filter(p=>p.status!=='uzavřeno');
   if(psF.q){ const q=psF.q.toLowerCase();
-    r=r.filter(p=>[p.no,p.title,p.line,p.owner,p.coordinator,p.rootCause,p.analysis||'',(p.whys||[]).join(' ')].join(' ').toLowerCase().includes(q)); }
+    r=r.filter(p=>[p.no,p.title,p.line,p.owner,p.coordinator,p.problemDesc||'',p.immediate||'',
+      p.rootCause,p.corrective||''].join(' ').toLowerCase().includes(q)); }
   /* nejdřív to, co hoří: eskalace, pak po termínu, pak podle stáří */
   return r.sort((a,b)=>{
     const ea=(a.escalated||needsEscalation(a))?0:1, eb=(b.escalated||needsEscalation(b))?0:1;
     if(ea!==eb) return ea-eb;
-    const la=openActs(actsOf(a._id)).some(isOverdue)?0:1, lb=openActs(actsOf(b._id)).some(isOverdue)?0:1;
+    const la=tasksOfPs(a._id).some(taskLate)?0:1, lb=tasksOfPs(b._id).some(taskLate)?0:1;
     if(la!==lb) return la-lb;
     return String(a.opened||'').localeCompare(String(b.opened||''));
   });
@@ -1912,7 +1911,8 @@ function psView(){
     <div class="kcard" style="border-left-color:#c0392b"><div class="lbl">Čeká na A3 analýzu</div>
       <div class="val">${analysis.length}</div><div class="note">bez kořenové příčiny</div></div>
     <div class="kcard" style="border-left-color:#b7791f"><div class="lbl">V opatřeních</div>
-      <div class="val">${inAction.length}</div><div class="note">${openActs(actions).length} otevřených opatření</div></div>
+      <div class="val">${inAction.length}</div><div class="note">${
+        tasks.filter(t=>t.psId && !taskDone(t)).length} otevřených úkolů v akčním plánu</div></div>
     <div class="kcard" style="border-left-color:#0d7377"><div class="lbl">Čeká na ověření</div>
       <div class="val">${verify.length}</div><div class="note">effectiveness check</div></div>
     <div class="kcard" style="border-left-color:${esc2.length?'#c0392b':'#1f9254'}"><div class="lbl">K eskalaci</div>
@@ -1933,12 +1933,12 @@ function psView(){
       <thead><tr>
         <th>Č.</th><th>Linka</th><th>Týden</th><th>Spouštěč</th><th>Problém</th>
         <th>Výkon</th><th>Prostoje</th><th>Stav</th><th>Owner analýzy</th><th>Coordinator</th>
-        <th>Kořenová příčina</th><th>Opatření</th><th>Nejbližší termín</th><th>Ověřit do</th><th></th>
+        <th>Kořenová příčina</th><th>Úkoly</th><th>Nejbližší termín</th><th>Ověřit do</th><th></th>
       </tr></thead>
       <tbody>${rows.map(p=>{
-        const acts=actsOf(p._id), op=openActs(acts);
-        const nearest=op.map(a=>a.due).filter(Boolean).sort()[0]||'';
-        const late=op.some(isOverdue);
+        const mine=tasksOfPs(p._id), op=mine.filter(t=>!taskDone(t));
+        const nearest=op.map(dueValid).filter(Boolean).sort()[0]||'';
+        const late=op.some(taskLate);
         const esk=p.escalated||needsEscalation(p);
         return `<tr class="clickable ${esk||late?'late':''} ${p.status==='uzavřeno'?'closed':''}" data-a="mg-open" data-v="${p._id}">
           <td data-label="Č." class="nowrap"><b>${esc(p.no)}</b>${esk?' <span class="badge b-red">eskalace</span>':''}</td>
@@ -1952,7 +1952,7 @@ function psView(){
           <td data-label="Owner">${esc(p.owner||'—')}</td>
           <td data-label="Coordinator">${esc(p.coordinator||'—')}</td>
           <td data-label="Kořenová příčina" class="desc">${p.rootCause?esc(p.rootCause):'<span class="badge b-red">chybí</span>'}</td>
-          <td data-label="Opatření" class="num nowrap">${acts.length-op.length}/${acts.length}${acts.some(a=>a.type==='preventive')?'':' <span class="badge b-amber" title="chybí preventivní opatření">P!</span>'}</td>
+          <td data-label="Úkoly" class="num nowrap">${mine.length-op.length}/${mine.length}</td>
           <td data-label="Nejbližší termín" class="nowrap">${nearest?(late?`<b style="color:var(--red)">${dateCz(nearest)}</b>`:dateCz(nearest)):'—'}</td>
           <td data-label="Ověřit do" class="nowrap">${p.effResult?'<span class="badge b-green">ověřeno</span>':(p.effCheckDue?dateCz(p.effCheckDue):'—')}</td>
           <td data-label="" class="nowrap"><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button>${
@@ -1964,14 +1964,14 @@ function psView(){
 function exportPsCsv(){
   const rows=psVisible();
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
-  const head=['Č.','Linka','Týden','Spouštěč','Problém','Výkon %','Prostoje (min)','Stav','Vlastník A3','Supervizor',
-    'Okamžité opatření','Analýza','Kořenová příčina',
-    'Opatření hotovo','Opatření celkem','Ověřit do','Výsledek ověření','Eskalace'];
+  const head=['Č.','Linka','Týden','Spouštěč','Problém','Výkon %','Prostoj (min)','Stav','Vlastník','Supervizor',
+    'Popis problému','Okamžité opatření','Kořenová příčina','Nápravné opatření','Upravené dokumenty',
+    'Úkoly hotovo','Úkoly celkem','Ověřit do','Výsledek ověření','Eskalace'];
   const csv=[line(head)].concat(rows.map(p=>{
-    const acts=actsOf(p._id), analysis=p.analysis || (p.whys||[]).filter(Boolean).join(' | ');
+    const mine=tasksOfPs(p._id);
     return line([p.no,p.line,p.week,p.trigger,p.title,p.perf!=null?num(p.perf,1):'',Math.round((p.downtimeSec||0)/60),
-      p.status,p.owner,p.coordinator,p.immediate,analysis,p.rootCause,
-      acts.length-openActs(acts).length,acts.length,p.effCheckDue,p.effResult,(p.escalated||needsEscalation(p))?'ano':'']);
+      p.status,p.owner,p.coordinator,p.problemDesc,p.immediate,p.rootCause,p.corrective,(p.docs||[]).join(', '),
+      mine.filter(taskDone).length,mine.length,p.effCheckDue,p.effResult,(p.escalated||needsEscalation(p))?'ano':'']);
   })).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download='problem_solving_'+today()+'.csv';
@@ -2096,6 +2096,7 @@ function taskModal(){
   <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Task akčního plánu">
     <h3>${isNew?'Nový task':esc(t.no)+' — '+esc(t.area)}<button class="x" data-a="tk-close" aria-label="Zavřít">✕</button></h3>
     <div class="robar">
+      ${t.psNo?`<span class="badge b-teal">nápravné opatření k ${esc(t.psNo)}</span>`:''}
       bílé vyplňuješ ty · <span class="ychip">žluté</span> až při posunu termínu · <span class="gchip">šedé</span> se dopočítá samo
       ${!isNew&&taskLate(t)?`<span class="badge b-red" style="margin-left:auto">po termínu ${lateDays(t)} dní</span>`:''}
     </div>
@@ -2694,7 +2695,8 @@ async function act(a,v){
       if(openTask) openTask.owners=taskOwners(openTask).filter(x=>x!==v);
       break; }
     case 'tk-new': openTask=emptyTask(); pendingTaskFiles=[]; moveDraft={date:'',why:''}; ownQ=''; tMsg=''; break;
-    case 'tk-open': openTask=JSON.parse(JSON.stringify(tasks.find(x=>x._id===v)||{})); moveDraft={date:'',why:''}; ownQ=''; tMsg=''; break;
+    case 'tk-open': if(openPs) collectPs();
+      openTask=JSON.parse(JSON.stringify(tasks.find(x=>x._id===v)||{})); moveDraft={date:'',why:''}; ownQ=''; tMsg=''; break;
     case 'tk-close': openTask=null; pendingTaskFiles=[]; moveDraft={date:'',why:''}; ownQ=''; tMsg=''; break;
     case 'tk-save': await saveTask(); return;
     case 'tk-addmove': await addMove(); return;
@@ -2706,7 +2708,15 @@ async function act(a,v){
 
     /* ----- řízení výkonu ----- */
     case 'mg-week': mgWeek=v; break;
-    case 'mg-open': openPs=v; psMsg=''; break;
+    case 'mg-open': openPs=v; psMsg=''; await loadTasks(); break;
+    case 'ps-newtask':{
+      collectPs();
+      const p=problems.find(x=>x._id===openPs); if(!p) break;
+      openTask=Object.assign(emptyTask(), {psId:p._id, psNo:p.no,
+        area:areaForLine(p.line), machine:p.line||'',
+        output:'Problém se neopakuje, výkon linky zpět nad '+(engcfg.threshold||90)+' %.'});
+      pendingTaskFiles=[]; moveDraft={date:'',why:''}; ownQ=''; tMsg='';
+      break; }
     case 'mg-close': openPs=null; psMsg=''; break;
     case 'mg-save': await saveProblem(); break;
     case 'mg-addaction': await addAction(); return;
