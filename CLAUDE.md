@@ -93,6 +93,13 @@ Pořadí a názvy: **Hlavní stránka** (`mgmt`), **Problem solving** (`ps`),
 (`.tab-imp`, vidí ho jen správce). Klíče záložek v kódu (`engTab`) zůstaly
 původní — přejmenoval se jen popisek.
 
+### Pravidla úložiště (Storage)
+Soubor `storage.rules` v repozitáři je jen kopie pro přehled — publikuje se RUČNĚ
+v konzoli Firebase → **Storage → Rules**, což je jiné místo než pravidla Firestore.
+Cesty: `nabidky/{requestId}/…` (nákup), `tasky/{taskId}/…` (akční plán),
+`ps/{psId}/…` (problem solving). Když přidáš novou cestu, uprav soubor a napiš
+Davidovi, ať ji publikuje.
+
 ## Řízení výkonu linek (záložka Hlavní stránka v modulu Engineering)
 Standard vyžádaný vedením: týdenní výkon linky pod prahem (výchozí 90 %) povinně
 spouští problem solving na úrovni Process Engineera.
@@ -121,6 +128,15 @@ spouští problem solving na úrovni Process Engineera.
   zpátky bez vyžádání.
 - Zaškrtávátka dokumentů jsou v `PS_DOCS` (Karta parametrů, ODS, TPM, Work instruction,
   JobSetup), ukládají se do pole `docs`.
+- **Přílohy a fotky** jsou v poli `files`, v úložišti pod `ps/{psId}/…`. Tlačítko
+  „📷 Vyfotit" je `<input capture="environment">` — na telefonu otevře fotoaparát.
+  Fotka se PŘED nahráním zmenší v prohlížeči (`shrinkImage`, delší hrana 1600 px,
+  JPEG 0.72, typicky na pětinu). Nepřeváděj na nahrávání originálu.
+- **Termín uzavření** je pole `dueDate`. Když se prošvihne (`psLate`), svítí problem
+  solving červeně všude: řádek a odznak v seznamu, řádek na hlavní stránce, hlavička
+  i políčko v okně, dlaždice „Po termínu" a řadí se nahoru. Neruš to.
+- **Datum uzavření poslední akce** se nikam neukládá, počítá se z navázaných tasků
+  (`lastActionClosed` = nejnovější `closedOn` hotového tasku).
 - **Nápravná opatření jsou tasky akčního plánu**, ne vlastní kolekce. Tlačítko
   „+ Přidat úkol do akčního plánu" otevře stejné okno jako v Akčním plánu a task
   dostane vazbu `psId` + `psNo`. Kolekce `actions` v kódu zůstává kvůli starým

@@ -186,7 +186,7 @@
   .a3head .c:last-child{border-right:0}
   .a3head .lb{font-size:10px;font-weight:800;letter-spacing:.5px;color:#7c8aa0;text-transform:uppercase}
   .a3head input{border:0;background:transparent;padding:2px 0;font-size:13px;font-weight:600;color:var(--text);width:100%}
-  .a3grid{display:flex;gap:12px;align-items:stretch}
+  .a3grid{display:flex;gap:12px;align-items:flex-start}
   .a3col{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0}
   .a3box{border:1px solid var(--teal);border-radius:8px;background:#fff;display:flex;flex-direction:column;overflow:hidden}
   .a3box.grow{flex:1}
@@ -196,7 +196,7 @@
   .a3box textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 9px;font:inherit;font-size:12.5px;line-height:1.45;resize:vertical;background:#f6f8fa;color:var(--text)}
   .a3box textarea:focus{background:#fff;border-color:var(--teal);outline:none}
   .a3lbl{font-size:11px;font-weight:700;color:#41506b;margin-bottom:-3px}
-  .a3top{grid-template-columns:repeat(4,1fr)}
+  .a3top{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
   .a3box input[type=number],.a3box input[type=date],.a3box input[type=text],.a3box input:not([type]){width:100%}
   /* navázané úkoly akčního plánu */
   .pstasks{display:flex;flex-direction:column;gap:5px}
@@ -215,15 +215,45 @@
   .psdoc:has(input:checked){background:var(--teal-bg);border-color:var(--teal);color:var(--teal-dark)}
   .psdoc input{width:auto;margin:0;accent-color:var(--teal)}
   .psverify{display:grid;grid-template-columns:150px 1fr;gap:10px;padding-top:3px}
+  .psverify .a3lbl{margin-bottom:4px}
+  .pslastact{font-size:11.5px;color:var(--muted);border-top:1px dotted var(--line);padding-top:7px}
+  .pslastact b{color:var(--text)}
+  /* přílohy — vyfotit / vybrat */
+  .psfilebtns{display:flex;gap:8px;flex-wrap:wrap}
+  .btn-cam{display:inline-flex;align-items:center;gap:7px;background:var(--teal);color:#fff;font-weight:700;
+    font-size:13px;padding:11px 16px;border-radius:8px;cursor:pointer;border:1px solid var(--teal-dark)}
+  .btn-cam:hover{background:var(--teal-dark)}
+  .btn-cam input{display:none}
+  .psfilebtns .filebtn{padding:11px 16px;font-size:13px;font-weight:600}
+  input.late,select.late{border-color:var(--red);background:#fdecea}
   @media(max-width:680px){.psverify{grid-template-columns:1fr}}
 
   @media(max-width:960px){.a3top{grid-template-columns:1fr 1fr}.a3head{grid-template-columns:1fr 1fr}}
   @media(max-width:680px){.a3wrap{padding:12px}.a3grid{flex-direction:column}.a3top{grid-template-columns:1fr}.a3head{grid-template-columns:1fr}}
+  /* Na telefonu je okno přes celou obrazovku: nadpis nahoře, tlačítka dole vždy po ruce. */
+  @media(max-width:680px){
+    .overlay{padding:0}
+    .modal{border-radius:0;max-width:none;margin:0;min-height:100%}
+    .modal h3{border-radius:0;position:sticky;top:0;z-index:3;padding:13px 14px;font-size:15px}
+    .modal h3 .x{font-size:26px;padding:0 6px}
+    .foot{position:sticky;bottom:0;z-index:3;box-shadow:0 -3px 10px rgba(16,35,58,.12);padding:9px 10px;gap:6px}
+    .foot>span:first-child{width:100%}
+    .foot>span:last-child{width:100%;display:flex;gap:6px;margin-left:0!important}
+    .foot button{flex:1 1 0;min-width:0;padding:12px 6px;font-size:12.5px;white-space:nowrap}
+    /* iOS nesmí při psaní zoomovat — proto nejmíň 16 px */
+    input,select,textarea,.a3box textarea{font-size:16px}
+    .a3box>.bh{font-size:14px;padding:10px 11px}
+    .psdoc{padding:11px 13px;font-size:13.5px}
+    .psdoc input{width:19px;height:19px}
+    .btn-cam,.psfilebtns .filebtn{flex:1 1 100%;justify-content:center;text-align:center}
+    .wide{display:none}
+    .pstask{flex-wrap:wrap;padding:9px 10px}
+    .pstask .tx{flex:1 1 100%;white-space:normal}
+  }
   @media(max-width:900px){.form{grid-template-columns:repeat(2,1fr)}.f.span3,.f.span4,.sect,.why{grid-column:span 2}}
   @media(max-width:680px){
     .form{grid-template-columns:1fr;padding:14px}
     .f.span2,.f.span3,.f.span4,.sect,.why{grid-column:span 1}
-    .overlay{padding:8px}
     .why .row{flex-wrap:wrap}.why .n{width:100%}
     .addrow input,.addrow select,.addrow button{width:100%}
   }
@@ -1381,6 +1411,14 @@ const PS_DOCS = ['Karta parametrů','ODS','TPM','Work instruction','JobSetup'];
 /* ---------- pomocné nad problémy a akcemi ---------- */
 /* Nápravná opatření k problému jsou obyčejné tasky akčního plánu s vazbou psId. */
 const tasksOfPs = pid => tasks.filter(t=>t.psId===pid);
+/* Prošvihnutý termín uzavření problem solvingu — kvůli tomu svítí všude červeně. */
+const psLate = p => p.status!=='uzavřeno' && !!p.dueDate && p.dueDate < today();
+const psLateDays = p => psLate(p) ? Math.floor((Date.parse(today())-Date.parse(p.dueDate))/86400000) : 0;
+/* Kdy byl uzavřen poslední hotový úkol k problému — datum poslední akce. */
+function lastActionClosed(pid){
+  const d=tasksOfPs(pid).filter(taskDone).map(t=>t.closedOn).filter(Boolean).sort();
+  return d.length ? d[d.length-1] : '';
+}
 const actsOf = pid => actions.filter(a=>a.problemId===pid);
 const openActs = list => list.filter(a=>a.status!=='hotová' && a.status!=='zrušená');
 const isOverdue = a => a.status!=='hotová' && a.status!=='zrušená' && a.due && a.due < today();
@@ -1407,7 +1445,8 @@ async function createProblem(wk, line, trigger){
       trigger: trigger||'výkon pod prahem', status:'nový',
       owner:engEngineers()[0]||'', coordinator:engCoordinators()[0]||'',
       opened:today(), downtimeSec:Math.round(line.sec||0), perf:line.perf==null?null:+line.perf.toFixed(1),
-      problemDesc:'', immediate:'', rootCause:'', corrective:'', docs:[],
+      problemDesc:'', immediate:'', rootCause:'', corrective:'', docs:[], files:[],
+      dueDate:eff.toISOString().slice(0,10),
       effCheckDue:eff.toISOString().slice(0,10), effResult:'', escalated:false,
       hist:[`${today()} · ${me.name} · problém založen (${trigger||'výkon pod prahem'})`]};
     const ref=await addDoc(collection(db,'problems'), rec);
@@ -1427,7 +1466,7 @@ function collectPs(){
     problemDesc:g('ps-desc'), immediate:g('ps-immediate'),
     rootCause:g('ps-root'), corrective:g('ps-corrective'),
     docs:[...document.querySelectorAll('[data-psdoc]')].filter(c=>c.checked).map(c=>c.dataset.psdoc),
-    effCheckDue:g('ps-effdue'), effResult:g('ps-effres'),
+    dueDate:g('ps-due'), effCheckDue:g('ps-effdue'), effResult:g('ps-effres'),
     status:g('ps-status')||p.status
   });
   if(isFinite(min) && min>=0) p.downtimeSec=Math.round(min*60);
@@ -1439,7 +1478,7 @@ async function saveProblem(){
     owner:p.owner, coordinator:p.coordinator,
     problemDesc:p.problemDesc, immediate:p.immediate,
     rootCause:p.rootCause, corrective:p.corrective, docs:p.docs||[],
-    downtimeSec:p.downtimeSec||0,
+    downtimeSec:p.downtimeSec||0, dueDate:p.dueDate||'',
     effCheckDue:p.effCheckDue, effResult:p.effResult, status:p.status
   };
   if(next.status==='uzavřeno'){
@@ -1507,6 +1546,70 @@ async function toggleEscalation(id){
 
 /* Smazat celý problem solving i s jeho opatřeními. Smí jen správce — na serveru
    to stejně hlídá pravidlo `allow write: if isAdmin()` u kolekcí problems a actions. */
+/* ---------- přílohy u problem solvingu ---------- */
+const MAX_PS_FILE = 5*1024*1024;      // 5 MB na soubor, stejně jako u nákupu
+const PHOTO_EDGE = 1600, PHOTO_Q = 0.72;
+/* Fotku z telefonu zmenšíme rovnou v prohlížeči, ať v úložišti nezabírá megabajty.
+   Když se to z jakéhokoli důvodu nepovede, nahraje se originál. */
+async function shrinkImage(f){
+  if(!/^image\//i.test(f.type||'') || /svg/i.test(f.type||'')) return f;
+  try{
+    const bmp = await createImageBitmap(f, {imageOrientation:'from-image'});
+    const sc = Math.min(1, PHOTO_EDGE/Math.max(bmp.width, bmp.height));
+    if(sc>=1 && f.size<=900*1024){ bmp.close && bmp.close(); return f; }
+    const w=Math.max(1,Math.round(bmp.width*sc)), h=Math.max(1,Math.round(bmp.height*sc));
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    const cx=cv.getContext('2d'); cx.drawImage(bmp,0,0,w,h);
+    bmp.close && bmp.close();
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',PHOTO_Q));
+    if(!blob || blob.size>=f.size) return f;
+    return new File([blob], f.name.replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg', lastModified:Date.now()});
+  }catch(e){ return f; }
+}
+async function uploadPsFile(psId, f){
+  const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-80);
+  const path='ps/'+psId+'/'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'_'+safe;
+  const st=sref(storage,path);
+  await uploadBytes(st,f,{contentType:f.type||'application/octet-stream'});
+  return {name:f.name, path, url:await getDownloadURL(st), size:f.size, at:today(), by:me.name};
+}
+async function handlePsFiles(list){
+  const p=collectPs(); if(!p) return;
+  const raw=[...(list||[])].filter(Boolean); if(!raw.length) return;
+  psMsg='Zpracovávám přílohy…'; render();
+  const ok=[];
+  for(const f0 of raw){
+    const f=await shrinkImage(f0);
+    if(f.size>MAX_PS_FILE){ toast(`„${f.name}" je i po zmenšení větší než 5 MB.`,'err'); continue; }
+    ok.push(f);
+  }
+  if(!ok.length){ psMsg=''; render(); return; }
+  psMsg='Nahrávám přílohy…'; render();
+  const arr=(p.files||[]).slice(), hist=(p.hist||[]).slice();
+  let n=0;
+  for(const f of ok){
+    try{ arr.push(await uploadPsFile(p._id,f)); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name}`); n++; }
+    catch(e){ toast('Nenahrálo se: '+f.name+' — '+((e&&e.message)||e),'err'); }
+  }
+  if(n){
+    try{ await updateDoc(doc(db,'problems',p._id),{files:arr, hist}); p.files=arr; p.hist=hist;
+         toast(n===1?'Příloha nahrána.':n+' přílohy nahrány.','ok'); }
+    catch(e){ toast('Uložení příloh selhalo: '+((e&&e.message)||e),'err'); }
+  }
+  psMsg=''; render();
+}
+async function removePsFile(i){
+  const p=collectPs(); if(!p) return;
+  const files=(p.files||[]).slice(), f=files[i]; if(!f) return;
+  if(!confirm(`Odebrat přílohu „${f.name}"?`)) return;
+  try{ await deleteObject(sref(storage,f.path)); }catch(e){ /* v úložišti už být nemusí */ }
+  files.splice(i,1);
+  const hist=(p.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${f.name}`);
+  try{ await updateDoc(doc(db,'problems',p._id),{files, hist}); p.files=files; p.hist=hist; }
+  catch(e){ toast('Smazání selhalo: '+((e&&e.message)||e),'err'); }
+  render();
+}
+
 async function deleteProblem(id){
   if(!canImport()){ toast('Mazat problem solving smí jen správce.','err'); return; }
   const p=problems.find(x=>x._id===id); if(!p) return;
@@ -1516,6 +1619,7 @@ async function deleteProblem(id){
   if(!confirm(`Opravdu smazat problem solving ${p.no}?\n\n${p.title}\n\n${kolik}\nTohle už nejde vrátit zpět.`)) return;
   busy='Mažu '+p.no+'…'; render();
   try{
+    for(const fl of (p.files||[])){ try{ await deleteObject(sref(storage,fl.path)); }catch(e){ /* už tam být nemusí */ } }
     for(const a of acts) await deleteDoc(doc(db,'actions',a._id));
     await deleteDoc(doc(db,'problems',id));
     problems=problems.filter(x=>x._id!==id);
@@ -1642,8 +1746,10 @@ function mgmtView(){
         const mine=tasksOfPs(p._id), op=mine.filter(t=>!taskDone(t));
         const nearest=op.map(dueValid).filter(Boolean).sort()[0]||'';
         const late=op.some(taskLate);
-        return `<tr class="${late?'long':''}">
-          <td data-label="Číslo"><b>${p.no}</b>${(p.escalated||needsEscalation(p))?' <span class="badge b-red">eskalace</span>':''}</td>
+        return `<tr class="${late||psLate(p)?'long':''}">
+          <td data-label="Číslo"><b${psLate(p)?' style="color:var(--red)"':''}>${p.no}</b>${
+            psLate(p)?` <span class="badge b-red">po termínu ${psLateDays(p)} dní</span>`:''}${
+            (p.escalated||needsEscalation(p))?' <span class="badge b-red">eskalace</span>':''}</td>
           <td data-label="Linka" class="desc">${esc(p.line)} · ${weekShort(p.week)}${p.trigger==='opakovaný problém'?' <span class="badge b-amber">opakovaný</span>':''}</td>
           <td data-label="Stav"><span class="badge ${psDef(p.status).cls}">${p.status}</span></td>
           <td data-label="Owner">${esc(p.owner||'—')}</td>
@@ -1793,7 +1899,9 @@ function problemModal(){
     <h3>${p.no} — problem solving<button class="x" data-a="mg-close" aria-label="Zavřít">✕</button></h3>
     <div class="robar">
       <b>${esc(p.line)}</b> · ${weekLabel(p.week)} · výkon ${p.perf!=null?num(p.perf,1)+' %':'—'}
-      · spouštěč: ${esc(p.trigger)} ${(p.escalated||needsEscalation(p))?'<span class="badge b-red">eskalace na Engineering Managera</span>':''}
+      · spouštěč: ${esc(p.trigger)}
+      ${psLate(p)?`<span class="badge b-red">po termínu ${psLateDays(p)} dní</span>`:''}
+      ${(p.escalated||needsEscalation(p))?'<span class="badge b-red">eskalace na Engineering Managera</span>':''}
     </div>
     <div class="a3wrap">
 
@@ -1805,6 +1913,9 @@ function problemModal(){
           <div class="muted" style="font-size:11px">procesní inženýr, který to řeší</div></div>
         <div class="f"><label>Supervizor</label>${sel('ps-coord',p.coordinator,coos)}
           <div class="muted" style="font-size:11px">PE coordinator</div></div>
+        <div class="f"><label>Termín uzavření</label>
+          <input id="ps-due" type="date" value="${esc(p.dueDate||'')}" class="${psLate(p)?'late':''}">
+          <div class="muted" style="font-size:11px">${psLate(p)?`<b style="color:var(--red)">po termínu ${psLateDays(p)} dní</b>`:'do kdy má být hotovo'}</div></div>
         <div class="f"><label>Stav</label>
           <select id="ps-status">${PS_STATUS.map(x=>`<option ${p.status===x.k?'selected':''}>${x.k}</option>`).join('')}</select>
           <div class="muted" style="font-size:11px">${psDef(p.status).d}</div></div>
@@ -1816,7 +1927,7 @@ function problemModal(){
             <div class="bb">${ta('ps-desc',p.problemDesc,'Co se stalo, kde a jak se to projevilo. Fakta, ne domněnky.',5)}</div></div>
           <div class="a3box"><div class="bh"><span class="n">2.</span> Okamžité opatření</div>
             <div class="bb">${ta('ps-immediate',p.immediate,'Jak jsme linku rozjeli — nebo co pro to uděláme.',5)}</div></div>
-          <div class="a3box grow"><div class="bh"><span class="n">3.</span> Kořenová příčina <span style="color:var(--red)">*</span></div>
+          <div class="a3box"><div class="bh"><span class="n">3.</span> Kořenová příčina <span style="color:var(--red)">*</span></div>
             <div class="bb">${ta('ps-root',p.rootCause,'Proč se to stalo. Bez ní nejde problem solving uzavřít.',5)}</div></div>
         </div>
 
@@ -1834,6 +1945,8 @@ function problemModal(){
                   <span class="badge ${stDef(t.status).cls}">${esc(t.status)}</span>
                 </div>`).join(''):'<div class="muted" style="font-size:12px;padding:2px 0">Zatím žádný úkol.</div>'}</div>
               <button class="btn-primary" data-a="ps-newtask" style="align-self:flex-start">+ Přidat úkol do akčního plánu</button>
+              <div class="pslastact">Poslední akce uzavřena:
+                <b>${lastActionClosed(p._id)?dateCz(lastActionClosed(p._id)):'zatím žádná'}</b></div>
             </div></div>
 
           <div class="a3box"><div class="bh"><span class="n">5.</span> Upravené dokumenty</div>
@@ -1842,12 +1955,28 @@ function problemModal(){
               <div class="psdocs">${PS_DOCS.map(d=>`<label class="psdoc"><input type="checkbox" data-psdoc="${esc(d)}" ${checked.has(d)?'checked':''}> ${esc(d)}</label>`).join('')}</div>
             </div></div>
 
-          <div class="a3box grow"><div class="bh"><span class="n">6.</span> Ověření účinnosti <span style="color:var(--red)">*</span></div>
+          <div class="a3box"><div class="bh"><span class="n">6.</span> Ověření účinnosti <span style="color:var(--red)">*</span></div>
             <div class="bb">
               <div class="psverify">
                 <div><div class="a3lbl">Ověřit do</div><input id="ps-effdue" type="date" value="${esc(p.effCheckDue||'')}"></div>
                 <div><div class="a3lbl">Výsledek ověření</div><input id="ps-effres" value="${esc(p.effResult||'')}" placeholder="např. 4 týdny bez opakování"></div>
               </div>
+            </div></div>
+
+          <div class="a3box"><div class="bh"><span class="n">7.</span> Přílohy</div>
+            <div class="bb">
+              <div class="psfilebtns">
+                <label class="btn-cam">📷 Vyfotit<input type="file" id="ps-cam" accept="image/*" capture="environment"></label>
+                <label class="filebtn">📎 Vybrat soubor<input type="file" id="ps-file" multiple></label>
+              </div>
+              <div class="drop" id="ps-drop" style="padding:11px;font-size:12px">nebo sem soubory přetáhni · do 5 MB · fotky se samy zmenší</div>
+              ${(p.files||[]).length?`<div class="filelist">${(p.files||[]).map((fl,i)=>`
+                <div class="fileitem">
+                  <span class="ic">${/\.(jpe?g|png|gif|webp|heic)$/i.test(fl.name)?'🖼️':'📎'}</span>
+                  <span class="nm"><a href="${esc(fl.url)}" target="_blank" rel="noopener">${esc(fl.name)}</a></span>
+                  <span class="muted">${fileSize(fl.size||0)}</span>
+                  <button class="btn-ghost" style="margin-left:auto;padding:2px 8px;font-size:11px" data-a="ps-delfile" data-v="${i}">Odebrat</button>
+                </div>`).join('')}</div>`:'<div class="muted" style="font-size:12px">Zatím žádná příloha.</div>'}
             </div></div>
         </div>
       </div>
@@ -1857,7 +1986,7 @@ function problemModal(){
       ${psMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(psMsg)}</span>`
         :`<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:'Připravené k uzavření.'}</span>`}
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat na manažera'}</button>
+        <button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat<span class="wide"> na manažera</span>'}</button>
         ${canImport()?`<button class="btn-del" data-a="mg-del" data-v="${p._id}">Smazat</button>`:''}
         <button class="btn-ok" data-a="mg-save">Uložit</button>
         <button class="btn-ghost" data-a="mg-close">Zavřít</button>
@@ -1879,6 +2008,8 @@ function psVisible(){
       p.rootCause,p.corrective||''].join(' ').toLowerCase().includes(q)); }
   /* nejdřív to, co hoří: eskalace, pak po termínu, pak podle stáří */
   return r.sort((a,b)=>{
+    const da=psLate(a)?0:1, db2=psLate(b)?0:1;
+    if(da!==db2) return da-db2;
     const ea=(a.escalated||needsEscalation(a))?0:1, eb=(b.escalated||needsEscalation(b))?0:1;
     if(ea!==eb) return ea-eb;
     const la=tasksOfPs(a._id).some(taskLate)?0:1, lb=tasksOfPs(b._id).some(taskLate)?0:1;
@@ -1915,6 +2046,8 @@ function psView(){
         tasks.filter(t=>t.psId && !taskDone(t)).length} otevřených úkolů v akčním plánu</div></div>
     <div class="kcard" style="border-left-color:#0d7377"><div class="lbl">Čeká na ověření</div>
       <div class="val">${verify.length}</div><div class="note">effectiveness check</div></div>
+    <div class="kcard" style="border-left-color:${open.filter(psLate).length?'#c0392b':'#1f9254'}"><div class="lbl">Po termínu</div>
+      <div class="val">${open.filter(psLate).length}</div><div class="note">prošvihnutý termín uzavření</div></div>
     <div class="kcard" style="border-left-color:${esc2.length?'#c0392b':'#1f9254'}"><div class="lbl">K eskalaci</div>
       <div class="val">${esc2.length}</div><div class="note">na Engineering Managera</div></div>
   </div>
@@ -1933,15 +2066,16 @@ function psView(){
       <thead><tr>
         <th>Č.</th><th>Linka</th><th>Týden</th><th>Spouštěč</th><th>Problém</th>
         <th>Výkon</th><th>Prostoje</th><th>Stav</th><th>Owner analýzy</th><th>Coordinator</th>
-        <th>Kořenová příčina</th><th>Úkoly</th><th>Nejbližší termín</th><th>Ověřit do</th><th></th>
+        <th>Kořenová příčina</th><th>Úkoly</th><th>Poslední akce</th><th>Termín uzavření</th><th>Ověřit do</th><th></th>
       </tr></thead>
       <tbody>${rows.map(p=>{
         const mine=tasksOfPs(p._id), op=mine.filter(t=>!taskDone(t));
         const nearest=op.map(dueValid).filter(Boolean).sort()[0]||'';
         const late=op.some(taskLate);
-        const esk=p.escalated||needsEscalation(p);
-        return `<tr class="clickable ${esk||late?'late':''} ${p.status==='uzavřeno'?'closed':''}" data-a="mg-open" data-v="${p._id}">
-          <td data-label="Č." class="nowrap"><b>${esc(p.no)}</b>${esk?' <span class="badge b-red">eskalace</span>':''}</td>
+        const esk=p.escalated||needsEscalation(p), pl=psLate(p), lastAct=lastActionClosed(p._id);
+        return `<tr class="clickable ${esk||late||pl?'late':''} ${p.status==='uzavřeno'?'closed':''}" data-a="mg-open" data-v="${p._id}">
+          <td data-label="Č." class="nowrap"><b${pl?' style="color:var(--red)"':''}>${esc(p.no)}</b>${
+            pl?' <span class="badge b-red">po termínu</span>':''}${esk?' <span class="badge b-red">eskalace</span>':''}</td>
           <td data-label="Linka" class="nowrap"><b>${esc(p.line)}</b></td>
           <td data-label="Týden" class="nowrap">${weekShort(p.week)}</td>
           <td data-label="Spouštěč">${p.trigger==='opakovaný problém'?'<span class="badge b-amber">opakovaný</span>':esc(p.trigger||'')}</td>
@@ -1953,11 +2087,14 @@ function psView(){
           <td data-label="Coordinator">${esc(p.coordinator||'—')}</td>
           <td data-label="Kořenová příčina" class="desc">${p.rootCause?esc(p.rootCause):'<span class="badge b-red">chybí</span>'}</td>
           <td data-label="Úkoly" class="num nowrap">${mine.length-op.length}/${mine.length}</td>
-          <td data-label="Nejbližší termín" class="nowrap">${nearest?(late?`<b style="color:var(--red)">${dateCz(nearest)}</b>`:dateCz(nearest)):'—'}</td>
+          <td data-label="Poslední akce" class="nowrap">${lastAct?dateCz(lastAct):'<span class="muted">—</span>'}</td>
+          <td data-label="Termín uzavření" class="nowrap">${p.dueDate
+            ? (pl?`<b style="color:var(--red)">${dateCz(p.dueDate)} · ${psLateDays(p)} dní</b>`:dateCz(p.dueDate))
+            : '<span class="muted">—</span>'}</td>
           <td data-label="Ověřit do" class="nowrap">${p.effResult?'<span class="badge b-green">ověřeno</span>':(p.effCheckDue?dateCz(p.effCheckDue):'—')}</td>
           <td data-label="" class="nowrap"><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button>${
             canImport()?` <button class="btn-del" style="padding:3px 9px;font-size:11px" data-a="mg-del" data-v="${p._id}" title="Smazat problem solving">Smazat</button>`:''}</td>
-        </tr>`;}).join('') || `<tr><td colspan="15" class="empty">Nic neodpovídá filtru.</td></tr>`}
+        </tr>`;}).join('') || `<tr><td colspan="17" class="empty">Nic neodpovídá filtru.</td></tr>`}
       </tbody></table></div>
   </div>`;
 }
@@ -1966,12 +2103,14 @@ function exportPsCsv(){
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
   const head=['Č.','Linka','Týden','Spouštěč','Problém','Výkon %','Prostoj (min)','Stav','Vlastník','Supervizor',
     'Popis problému','Okamžité opatření','Kořenová příčina','Nápravné opatření','Upravené dokumenty',
-    'Úkoly hotovo','Úkoly celkem','Ověřit do','Výsledek ověření','Eskalace'];
+    'Úkoly hotovo','Úkoly celkem','Poslední akce uzavřena','Termín uzavření','Dní po termínu',
+    'Ověřit do','Výsledek ověření','Příloh','Eskalace'];
   const csv=[line(head)].concat(rows.map(p=>{
     const mine=tasksOfPs(p._id);
     return line([p.no,p.line,p.week,p.trigger,p.title,p.perf!=null?num(p.perf,1):'',Math.round((p.downtimeSec||0)/60),
       p.status,p.owner,p.coordinator,p.problemDesc,p.immediate,p.rootCause,p.corrective,(p.docs||[]).join(', '),
-      mine.filter(taskDone).length,mine.length,p.effCheckDue,p.effResult,(p.escalated||needsEscalation(p))?'ano':'']);
+      mine.filter(taskDone).length,mine.length,lastActionClosed(p._id),p.dueDate,psLate(p)?psLateDays(p):'',
+      p.effCheckDue,p.effResult,(p.files||[]).length,(p.escalated||needsEscalation(p))?'ano':'']);
   })).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download='problem_solving_'+today()+'.csv';
@@ -2641,6 +2780,14 @@ function bind(){
   }
   const tka=document.getElementById('tk-area');
   if(tka) tka.onchange=()=>{ collectTask(); render(); };   // ať se přenačtou stroje k oblasti
+  ['ps-file','ps-cam'].forEach(id=>{ const el=document.getElementById(id);
+    if(el) el.onchange=()=>{ if(el.files&&el.files.length) handlePsFiles(el.files); }; });
+  const pdz=document.getElementById('ps-drop');
+  if(pdz){
+    ['dragenter','dragover'].forEach(ev=>pdz.addEventListener(ev,e=>{e.preventDefault();pdz.classList.add('hot');}));
+    ['dragleave','drop'].forEach(ev=>pdz.addEventListener(ev,e=>{e.preventDefault();pdz.classList.remove('hot');}));
+    pdz.addEventListener('drop',e=>{ if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length) handlePsFiles(e.dataTransfer.files); });
+  }
   const tfi=document.getElementById('tk-file');
   if(tfi) tfi.onchange=()=>{ if(tfi.files&&tfi.files.length) handleTaskFiles(tfi.files); };
   const tdz=document.getElementById('tk-drop');
@@ -2723,6 +2870,7 @@ async function act(a,v){
     case 'mg-adone': await setActionStatus(v,'hotová'); return;
     case 'mg-escalate': await toggleEscalation(v); return;
     case 'mg-del': await deleteProblem(v); return;
+    case 'ps-delfile': await removePsFile(Number(v)); return;
     case 'mg-create':{
       const [wk,slug]=String(v).split('|');
       const weeks=weeklyPerf(mgDays, engcfg);
