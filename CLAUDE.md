@@ -141,8 +141,21 @@ spouští problem solving na úrovni Process Engineera.
   „+ Přidat úkol do akčního plánu" otevře stejné okno jako v Akčním plánu a task
   dostane vazbu `psId` + `psNo`. Kolekce `actions` v kódu zůstává kvůli starým
   záznamům, nová se do ní nezakládají.
-- Problém nelze uzavřít, dokud nemá kořenovou příčinu a vyplněné ověření účinnosti
-  (`canCloseWith`). Ověření účinnosti si vyžádal šéf — NERUŠ ho.
+- Problém nelze uzavřít, dokud nemá **kořenovou příčinu** a vyplněné **ověření
+  účinnosti** (`canCloseWith`). Obojí je povinné — NERUŠ to.
+- **Uzavření je na dva kroky a nejde obejít ručně.** Stavy `ke schválení` a `uzavřeno`
+  nejsou v rozbalovátku (`PS_LOCKED`), nastaví je jen tlačítka:
+  1. koordinátor (`isPsCoordinator` — supervizor problému, kdokoli s pozicí
+     „PE coordinator", nebo správce) klikne **Uzavřít a poslat ke schválení**
+     → stav `ke schválení`, zapíše se `closeRequestedBy` a `closeRequestedAt`
+  2. Engineering Manager (`isEngManager` — jméno z `meta/engcfg.manager`, nebo
+     správce) klikne **Schválit a uzavřít** → stav `uzavřeno`, `approvedBy`,
+     `approvedAt`, `closedAt`. Může místo toho **Vrátit k dopracování** (s důvodem,
+     stav zpět na `opatření`).
+  Uzavřený problém už nejde editovat — v patičce zůstane jen Smazat a Zavřít.
+- V seznamu: uzavřený je **zeleně** s odznakem „uzavřeno" a řadí se dospod,
+  čekající na schválení je **žlutě** s odznakem „ke schválení" (filtr „skrýt
+  uzavřené" ho neschová).
 - Problem solving smí smazat jen správce (`canImport()`), a to z řádku v záložce
   Problem solving nebo z patičky detailu. Maže se i se svými opatřeními a vždy
   po potvrzení. Na serveru to hlídá `allow write: if isAdmin()`.

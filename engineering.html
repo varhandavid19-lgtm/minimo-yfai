@@ -109,7 +109,9 @@
   .tasktbl td.gcol{background:#f4f6f9}
   .tasktbl tr.late td{background:#fdecea}
   .tasktbl tr.late td.gcol{background:#f9dcd8}
-  .tasktbl tr.closed td{opacity:.62}
+  .tasktbl tr.closed td{background:#e8f6ee;color:#1b5e3a}
+  .tasktbl tr.closed td b{color:#1b5e3a}
+  .tasktbl tr.wait td{background:#fdf6e6}
   .tasktbl tr.clickable{cursor:pointer}
   .tasktbl{font-size:12px}
   .tasktbl th,.tasktbl td{padding:7px 8px}
@@ -147,6 +149,10 @@
     .tasktbl td.ycol,.tasktbl td.gcol{background:none}
     .tasktbl tr.late td{background:none}
     .tasktbl tr.late{border-left:4px solid var(--red)}
+    .tasktbl tr.closed td{background:none}
+    .tasktbl tr.closed{border-left:4px solid var(--green)}
+    .tasktbl tr.wait td{background:none}
+    .tasktbl tr.wait{border-left:4px solid var(--amber)}
     .filters .btn-new{width:100%}
   }
 
@@ -639,8 +645,11 @@ const PS_STATUS = [
   {k:'analýza',    cls:'b-amber', d:'běží A3 analýza'},
   {k:'opatření',   cls:'b-blue',  d:'opatření se plní'},
   {k:'ověřování',  cls:'b-teal',  d:'čeká na ověření účinnosti'},
-  {k:'uzavřeno',   cls:'b-green', d:'ověřeno a uzavřeno'}
+  {k:'ke schválení', cls:'b-amber', d:'koordinátor uzavřel, čeká na manažera'},
+  {k:'uzavřeno',   cls:'b-green', d:'schváleno manažerem a uzavřeno'}
 ];
+/* Tyhle dva stavy se nedají nastavit ručně — jen tlačítky uzavřít / schválit. */
+const PS_LOCKED = ['ke schválení','uzavřeno'];
 const AC_STATUS = [{k:'nová',cls:'b-blue'},{k:'v řešení',cls:'b-amber'},{k:'hotová',cls:'b-green'},{k:'zrušená',cls:'b-grey'}];
 const AC_TYPE = [{k:'corrective',label:'Corrective — odstraní následek'},{k:'preventive',label:'Preventive — zabrání opakování'}];
 const psDef = k => PS_STATUS.find(s=>s.k===k) || PS_STATUS[0];
@@ -1020,6 +1029,7 @@ async function loadProfile(user){
   const forced=isForcedAdmin(user.email);
   const role = forced ? 'admin' : (d.role||'zadavatel');
   return {uid:user.uid, email:user.email, name:d.name||user.email, role,
+          positions: d.positions||[],
           level: d.level || ROLE2LEVEL[role] || 'basic'};
 }
 
@@ -1411,6 +1421,16 @@ const PS_DOCS = ['Karta parametrů','ODS','TPM','Work instruction','JobSetup'];
 /* ---------- pomocné nad problémy a akcemi ---------- */
 /* Nápravná opatření k problému jsou obyčejné tasky akčního plánu s vazbou psId. */
 const tasksOfPs = pid => tasks.filter(t=>t.psId===pid);
+/* Uzavření je na dva kroky: koordinátor pošle ke schválení, manažer to schválí.
+   Koordinátor = supervizor daného problému, kdokoli s pozicí „PE coordinator",
+   nebo správce. Manažer = ten, kdo je v nastavení uvedený jako Engineering Manager. */
+const nameKey = x => String(x||'').trim().toLowerCase();
+const isPsCoordinator = p => !!me && (
+  (p.coordinator && nameKey(me.name)===nameKey(p.coordinator)) ||
+  (me.positions||[]).some(IS_COORD) || canImport());
+const isEngManager = () => !!me && (
+  (engcfg.manager && nameKey(me.name)===nameKey(engcfg.manager)) || canImport());
+
 /* Prošvihnutý termín uzavření problem solvingu — kvůli tomu svítí všude červeně. */
 const psLate = p => p.status!=='uzavřeno' && !!p.dueDate && p.dueDate < today();
 const psLateDays = p => psLate(p) ? Math.floor((Date.parse(today())-Date.parse(p.dueDate))/86400000) : 0;
@@ -1472,28 +1492,80 @@ function collectPs(){
   if(isFinite(min) && min>=0) p.downtimeSec=Math.round(min*60);
   return p;
 }
-async function saveProblem(){
-  const p=collectPs(); if(!p) return;
-  const next={
+/* Vyplněná pole problému — společné pro Uložit i pro uzavření. */
+function psPatch(p){
+  return {
     owner:p.owner, coordinator:p.coordinator,
     problemDesc:p.problemDesc, immediate:p.immediate,
     rootCause:p.rootCause, corrective:p.corrective, docs:p.docs||[],
     downtimeSec:p.downtimeSec||0, dueDate:p.dueDate||'',
-    effCheckDue:p.effCheckDue, effResult:p.effResult, status:p.status
+    effCheckDue:p.effCheckDue, effResult:p.effResult
   };
-  if(next.status==='uzavřeno'){
-    const why=canCloseWith(p);
-    if(why){ psMsg=why; render(); return; }
-    next.closedAt=today();
-  }
-  const hist=(p.hist||[]).slice();
-  hist.push(`${today()} · ${me.name} · ${next.status==='uzavřeno'?'problém uzavřen':'upraveno'}`);
-  next.hist=hist;
+}
+async function saveProblem(){
+  const p=collectPs(); if(!p) return;
+  const next=psPatch(p);
+  /* Uzavřený stav ani „ke schválení" se ručně nastavit nedá — jen tlačítky. */
+  next.status = PS_LOCKED.includes(p.status) ? p.status : (p.status||'nový');
+  next.hist=(p.hist||[]).concat(`${today()} · ${me.name} · upraveno`);
   try{
     await updateDoc(doc(db,'problems',p._id), next);
     Object.assign(p,next); psMsg=''; openPs=null;
     toast('Uloženo.','ok');
   }catch(e){ psMsg='Uložení selhalo: '+((e&&e.message)||e); render(); }
+}
+/* Koordinátor uzavře svou část — problém jde ke schválení manažerovi. */
+async function submitPsForApproval(){
+  const p=collectPs(); if(!p) return;
+  if(!isPsCoordinator(p)){ psMsg='Uzavřít problem solving může jen koordinátor.'; render(); return; }
+  const why=canCloseWith(p);
+  if(why){ psMsg=why; render(); return; }
+  const mgr=engcfg.manager ? ' ('+engcfg.manager+')' : '';
+  if(!confirm(`Uzavřít ${p.no} a poslat ke schválení manažerovi${mgr}?\n\nDokud to manažer neschválí, problem solving zůstane otevřený.`)) return;
+  const next=psPatch(p);
+  next.status='ke schválení';
+  next.closeRequestedBy=me.name; next.closeRequestedAt=today();
+  next.approvedBy=''; next.approvedAt='';
+  next.hist=(p.hist||[]).concat(`${today()} · ${me.name} · uzavřeno koordinátorem, čeká na schválení manažera`);
+  try{
+    await updateDoc(doc(db,'problems',p._id), next);
+    Object.assign(p,next); psMsg=''; openPs=null;
+    toast(p.no+' čeká na schválení manažera.','ok');
+  }catch(e){ psMsg='Nepovedlo se: '+((e&&e.message)||e); }
+  render();
+}
+/* Manažer schválí — teprve teď je problem solving opravdu uzavřený. */
+async function approvePs(){
+  const p=collectPs(); if(!p) return;
+  if(!isEngManager()){ psMsg='Schválit uzavření může jen Engineering Manager.'; render(); return; }
+  if(p.status!=='ke schválení'){ psMsg='Ke schválení to nejdřív musí poslat koordinátor.'; render(); return; }
+  const why=canCloseWith(p);
+  if(why){ psMsg=why; render(); return; }
+  if(!confirm(`Schválit a definitivně uzavřít ${p.no}?`)) return;
+  const next={status:'uzavřeno', approvedBy:me.name, approvedAt:today(), closedAt:today(),
+    hist:(p.hist||[]).concat(`${today()} · ${me.name} · schváleno manažerem, problem solving uzavřen`)};
+  try{
+    await updateDoc(doc(db,'problems',p._id), next);
+    Object.assign(p,next); psMsg=''; openPs=null;
+    toast(p.no+' uzavřen.','ok');
+  }catch(e){ psMsg='Nepovedlo se: '+((e&&e.message)||e); }
+  render();
+}
+/* Manažer vrátí zpátky k dopracování. */
+async function rejectPs(){
+  const p=collectPs(); if(!p) return;
+  if(!isEngManager()){ psMsg='Vrátit k dopracování může jen Engineering Manager.'; render(); return; }
+  const why=prompt('Proč se problem solving vrací k dopracování?');
+  if(why===null) return;
+  if(!String(why).trim()){ psMsg='K vrácení napiš důvod.'; render(); return; }
+  const next={status:'opatření', closeRequestedBy:'', closeRequestedAt:'',
+    hist:(p.hist||[]).concat(`${today()} · ${me.name} · vráceno k dopracování — ${String(why).trim()}`)};
+  try{
+    await updateDoc(doc(db,'problems',p._id), next);
+    Object.assign(p,next); psMsg='';
+    toast(p.no+' vrácen k dopracování.','ok');
+  }catch(e){ psMsg='Nepovedlo se: '+((e&&e.message)||e); }
+  render();
 }
 function canCloseWith(p){
   if(!p.rootCause) return 'Bez kořenové příčiny problém uzavřít nejde.';
@@ -1894,12 +1966,16 @@ function problemModal(){
   const ta=(id,val,ph,rows)=>`<textarea id="${id}" rows="${rows||4}" placeholder="${esc(ph)}">${esc(val||'')}</textarea>`;
   const blocked=canCloseWith(p);
   const checked=new Set(p.docs||[]);
+  const waiting=p.status==='ke schválení', closed=p.status==='uzavřeno';
+  const coord=isPsCoordinator(p), mgr=isEngManager();
   return `
   <div class="overlay" id="ovl"><div class="modal" style="max-width:980px" role="dialog" aria-modal="true" aria-label="Problem solving">
     <h3>${p.no} — problem solving<button class="x" data-a="mg-close" aria-label="Zavřít">✕</button></h3>
     <div class="robar">
       <b>${esc(p.line)}</b> · ${weekLabel(p.week)} · výkon ${p.perf!=null?num(p.perf,1)+' %':'—'}
       · spouštěč: ${esc(p.trigger)}
+      ${closed?`<span class="badge b-green">uzavřeno ${dateCz(p.closedAt||'')}${p.approvedBy?' · schválil '+esc(p.approvedBy):''}</span>`:''}
+      ${waiting?`<span class="badge b-amber">čeká na schválení manažerem${p.closeRequestedBy?' · uzavřel '+esc(p.closeRequestedBy):''}</span>`:''}
       ${psLate(p)?`<span class="badge b-red">po termínu ${psLateDays(p)} dní</span>`:''}
       ${(p.escalated||needsEscalation(p))?'<span class="badge b-red">eskalace na Engineering Managera</span>':''}
     </div>
@@ -1917,7 +1993,10 @@ function problemModal(){
           <input id="ps-due" type="date" value="${esc(p.dueDate||'')}" class="${psLate(p)?'late':''}">
           <div class="muted" style="font-size:11px">${psLate(p)?`<b style="color:var(--red)">po termínu ${psLateDays(p)} dní</b>`:'do kdy má být hotovo'}</div></div>
         <div class="f"><label>Stav</label>
-          <select id="ps-status">${PS_STATUS.map(x=>`<option ${p.status===x.k?'selected':''}>${x.k}</option>`).join('')}</select>
+          ${PS_LOCKED.includes(p.status)
+            ? `<div class="ro"><span class="badge ${psDef(p.status).cls}">${esc(p.status)}</span></div>`
+            : `<select id="ps-status">${PS_STATUS.filter(x=>!PS_LOCKED.includes(x.k))
+                .map(x=>`<option ${p.status===x.k?'selected':''}>${x.k}</option>`).join('')}</select>`}
           <div class="muted" style="font-size:11px">${psDef(p.status).d}</div></div>
       </div>
 
@@ -1984,11 +2063,16 @@ function problemModal(){
     ${(p.hist||[]).length?`<div class="hist">${(p.hist||[]).slice().reverse().slice(0,4).map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
     <div class="foot">
       ${psMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(psMsg)}</span>`
-        :`<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:'Připravené k uzavření.'}</span>`}
+        : closed?`<span class="muted" style="font-size:11.5px">Uzavřeno ${dateCz(p.closedAt||'')}${p.approvedBy?', schválil '+esc(p.approvedBy):''}.</span>`
+        : waiting?`<span class="muted" style="font-size:11.5px">Uzavřel ${esc(p.closeRequestedBy||'koordinátor')} ${dateCz(p.closeRequestedAt||'')} — ${mgr?'schval to, nebo vrať k dopracování.':'čeká na schválení Engineering Managera'+(engcfg.manager?' ('+esc(engcfg.manager)+')':'')+'.'}</span>`
+        : `<span class="muted" style="font-size:11.5px">${blocked?'K uzavření zbývá: '+blocked:(coord?'Můžeš uzavřít a poslat ke schválení.':'Připravené k uzavření — uzavírá koordinátor.')}</span>`}
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat<span class="wide"> na manažera</span>'}</button>
+        ${!closed?`<button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat<span class="wide"> na manažera</span>'}</button>`:''}
         ${canImport()?`<button class="btn-del" data-a="mg-del" data-v="${p._id}">Smazat</button>`:''}
-        <button class="btn-ok" data-a="mg-save">Uložit</button>
+        ${(!closed&&!waiting&&coord)?`<button class="btn-teal" data-a="ps-submit">Uzavřít<span class="wide"> a poslat ke schválení</span></button>`:''}
+        ${(waiting&&mgr)?`<button class="btn-ghost" data-a="ps-reject">Vrátit<span class="wide"> k dopracování</span></button>
+          <button class="btn-ok" data-a="ps-approve">Schválit<span class="wide"> a uzavřít</span></button>`:''}
+        ${!closed?'<button class="btn-ok" data-a="mg-save">Uložit</button>':''}
         <button class="btn-ghost" data-a="mg-close">Zavřít</button>
       </span>
     </div>
@@ -2002,12 +2086,14 @@ function psVisible(){
   if(psF.status) r=r.filter(p=>p.status===psF.status);
   if(psF.line)   r=r.filter(p=>p.line===psF.line);
   if(psF.owner)  r=r.filter(p=>p.owner===psF.owner);
-  if(psHideClosed) r=r.filter(p=>p.status!=='uzavřeno');
+  if(psHideClosed) r=r.filter(p=>p.status!=='uzavřeno');   // ke schválení se schovat nesmí
   if(psF.q){ const q=psF.q.toLowerCase();
     r=r.filter(p=>[p.no,p.title,p.line,p.owner,p.coordinator,p.problemDesc||'',p.immediate||'',
       p.rootCause,p.corrective||''].join(' ').toLowerCase().includes(q)); }
   /* nejdřív to, co hoří: eskalace, pak po termínu, pak podle stáří */
   return r.sort((a,b)=>{
+    const ca=a.status==='uzavřeno'?1:0, cb=b.status==='uzavřeno'?1:0;
+    if(ca!==cb) return ca-cb;
     const da=psLate(a)?0:1, db2=psLate(b)?0:1;
     if(da!==db2) return da-db2;
     const ea=(a.escalated||needsEscalation(a))?0:1, eb=(b.escalated||needsEscalation(b))?0:1;
@@ -2032,6 +2118,7 @@ function psView(){
   const analysis=open.filter(p=>p.status==='nový'||p.status==='analýza');
   const inAction=open.filter(p=>p.status==='opatření');
   const verify=open.filter(p=>p.status==='ověřování');
+  const approval=problems.filter(p=>p.status==='ke schválení');
   const esc2=open.filter(p=>p.escalated||needsEscalation(p));
   const lines=[...new Set(problems.map(p=>p.line))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
   const owners=[...new Set(problems.map(p=>p.owner))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
@@ -2046,6 +2133,8 @@ function psView(){
         tasks.filter(t=>t.psId && !taskDone(t)).length} otevřených úkolů v akčním plánu</div></div>
     <div class="kcard" style="border-left-color:#0d7377"><div class="lbl">Čeká na ověření</div>
       <div class="val">${verify.length}</div><div class="note">effectiveness check</div></div>
+    <div class="kcard" style="border-left-color:#b7791f"><div class="lbl">Ke schválení</div>
+      <div class="val">${approval.length}</div><div class="note">uzavřel koordinátor, čeká na manažera</div></div>
     <div class="kcard" style="border-left-color:${open.filter(psLate).length?'#c0392b':'#1f9254'}"><div class="lbl">Po termínu</div>
       <div class="val">${open.filter(psLate).length}</div><div class="note">prošvihnutý termín uzavření</div></div>
     <div class="kcard" style="border-left-color:${esc2.length?'#c0392b':'#1f9254'}"><div class="lbl">K eskalaci</div>
@@ -2073,9 +2162,12 @@ function psView(){
         const nearest=op.map(dueValid).filter(Boolean).sort()[0]||'';
         const late=op.some(taskLate);
         const esk=p.escalated||needsEscalation(p), pl=psLate(p), lastAct=lastActionClosed(p._id);
-        return `<tr class="clickable ${esk||late||pl?'late':''} ${p.status==='uzavřeno'?'closed':''}" data-a="mg-open" data-v="${p._id}">
-          <td data-label="Č." class="nowrap"><b${pl?' style="color:var(--red)"':''}>${esc(p.no)}</b>${
-            pl?' <span class="badge b-red">po termínu</span>':''}${esk?' <span class="badge b-red">eskalace</span>':''}</td>
+        const done=p.status==='uzavřeno', wait=p.status==='ke schválení';
+        return `<tr class="clickable ${done?'closed':(wait?'wait':((esk||late||pl)?'late':''))}" data-a="mg-open" data-v="${p._id}">
+          <td data-label="Č." class="nowrap"><b${(pl&&!done)?' style="color:var(--red)"':''}>${esc(p.no)}</b>${
+            done?' <span class="badge b-green">uzavřeno</span>'
+            : wait?' <span class="badge b-amber">ke schválení</span>'
+            : (pl?' <span class="badge b-red">po termínu</span>':'')+(esk?' <span class="badge b-red">eskalace</span>':'')}</td>
           <td data-label="Linka" class="nowrap"><b>${esc(p.line)}</b></td>
           <td data-label="Týden" class="nowrap">${weekShort(p.week)}</td>
           <td data-label="Spouštěč">${p.trigger==='opakovaný problém'?'<span class="badge b-amber">opakovaný</span>':esc(p.trigger||'')}</td>
@@ -2091,7 +2183,9 @@ function psView(){
           <td data-label="Termín uzavření" class="nowrap">${p.dueDate
             ? (pl?`<b style="color:var(--red)">${dateCz(p.dueDate)} · ${psLateDays(p)} dní</b>`:dateCz(p.dueDate))
             : '<span class="muted">—</span>'}</td>
-          <td data-label="Ověřit do" class="nowrap">${p.effResult?'<span class="badge b-green">ověřeno</span>':(p.effCheckDue?dateCz(p.effCheckDue):'—')}</td>
+          <td data-label="Ověřit do" class="nowrap">${done
+            ? `uzavřeno ${dateCz(p.closedAt||'')}`
+            : (p.effResult?'<span class="badge b-green">ověřeno</span>':(p.effCheckDue?dateCz(p.effCheckDue):'—'))}</td>
           <td data-label="" class="nowrap"><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button>${
             canImport()?` <button class="btn-del" style="padding:3px 9px;font-size:11px" data-a="mg-del" data-v="${p._id}" title="Smazat problem solving">Smazat</button>`:''}</td>
         </tr>`;}).join('') || `<tr><td colspan="17" class="empty">Nic neodpovídá filtru.</td></tr>`}
@@ -2104,13 +2198,15 @@ function exportPsCsv(){
   const head=['Č.','Linka','Týden','Spouštěč','Problém','Výkon %','Prostoj (min)','Stav','Vlastník','Supervizor',
     'Popis problému','Okamžité opatření','Kořenová příčina','Nápravné opatření','Upravené dokumenty',
     'Úkoly hotovo','Úkoly celkem','Poslední akce uzavřena','Termín uzavření','Dní po termínu',
-    'Ověřit do','Výsledek ověření','Příloh','Eskalace'];
+    'Ověřit do','Výsledek ověření','Příloh','Eskalace',
+    'Uzavřel koordinátor','Kdy','Schválil manažer','Uzavřeno dne'];
   const csv=[line(head)].concat(rows.map(p=>{
     const mine=tasksOfPs(p._id);
     return line([p.no,p.line,p.week,p.trigger,p.title,p.perf!=null?num(p.perf,1):'',Math.round((p.downtimeSec||0)/60),
       p.status,p.owner,p.coordinator,p.problemDesc,p.immediate,p.rootCause,p.corrective,(p.docs||[]).join(', '),
       mine.filter(taskDone).length,mine.length,lastActionClosed(p._id),p.dueDate,psLate(p)?psLateDays(p):'',
-      p.effCheckDue,p.effResult,(p.files||[]).length,(p.escalated||needsEscalation(p))?'ano':'']);
+      p.effCheckDue,p.effResult,(p.files||[]).length,(p.escalated||needsEscalation(p))?'ano':'',
+      p.closeRequestedBy||'',p.closeRequestedAt||'',p.approvedBy||'',p.closedAt||'']);
   })).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download='problem_solving_'+today()+'.csv';
@@ -2871,6 +2967,9 @@ async function act(a,v){
     case 'mg-escalate': await toggleEscalation(v); return;
     case 'mg-del': await deleteProblem(v); return;
     case 'ps-delfile': await removePsFile(Number(v)); return;
+    case 'ps-submit':  await submitPsForApproval(); return;
+    case 'ps-approve': await approvePs(); return;
+    case 'ps-reject':  await rejectPs(); return;
     case 'mg-create':{
       const [wk,slug]=String(v).split('|');
       const weeks=weeklyPerf(mgDays, engcfg);
