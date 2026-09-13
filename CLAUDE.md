@@ -85,6 +85,25 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   scrapu (`scrapView`, kolekce `scrap` a `sc_months`) v kódu zůstává, ale z lišty
   se na něj nejde dostat. Nepřepisuj záložku zpátky na `data-a="tab"`.
 
+### Procesy (hlavní stránka a KPI)
+Závod je rozdělený na šest procesů (`PROCESSES`): **IMM, Slush, Foaming/Scoring,
+Assembly IP, Glovebox/Decopart, G463**.
+- Linka ze Symesticu se k procesu přiřadí podle názvu (`PROC_MATCH`, testuje se
+  v pořadí od nejkonkrétnějšího — Assembly je nejširší, proto poslední). Ruční
+  přiřazení jde uložit do `meta/engcfg.procLines = {IMM:['IMM-007',…]}` a má přednost.
+  Co se nikam netrefí, spadne do `OTHER` a je vidět na hlavní stránce v žlutém
+  proužku „Nezařazené linky".
+- Hlavní stránka začíná **velkými dlaždicemi procesů** (`procTiles`): prostoje za
+  poslední měsíc s daty, minulý týden s porovnáním, výkon, otevřené problem solvingy
+  a úkoly, nejhorší linka a největší důvod. Klik na dlaždici přepne na KPI toho
+  procesu (`proc-kpi`).
+- KPI má **podzáložky procesů** (`dashSubtabs`, stav `dashProc`). `totals(proc)`
+  a `trend(proc)` filtrují na linky procesu.
+- Aby to šlo filtrovat, ukládá import do `dt_days` rozpad **i po lince**:
+  u každé linky pole `g` (skupiny důvodů), `r` (konkrétní důvody), `sh` (směny)
+  a `co` (přestavby). Starší importy to nemají — KPI na to upozorní proužkem
+  a stačí report nahrát znovu. Nezmenšuj to zpátky na souhrn přes celý závod.
+
 ### Menu záložek
 Záložky modulu jsou velká výrazná tlačítka (`.tab`), aktivní je tyrkysová.
 Pořadí a názvy: **Hlavní stránka** (`mgmt`), **Problem solving** (`ps`),
