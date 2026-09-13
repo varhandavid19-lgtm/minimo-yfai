@@ -54,42 +54,44 @@
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:12px;margin-bottom:14px}
 
   /* ===== velké dlaždice procesů na hlavní stránce ===== */
-  .ptiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;margin-bottom:16px}
+  .ptiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+  @media(max-width:1180px){.ptiles{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:760px){.ptiles{grid-template-columns:1fr}}
   .ptile{display:flex;flex-direction:column;text-align:left;padding:0;background:var(--card);
     border:1px solid var(--line);border-radius:12px;overflow:hidden;font:inherit;color:var(--text);
     box-shadow:0 1px 3px rgba(15,47,95,.07);transition:box-shadow .14s,transform .14s,border-color .14s}
   .ptile:hover{box-shadow:0 8px 22px rgba(15,47,95,.16);transform:translateY(-2px);border-color:#b9cbe6}
   .ptile.alarm{border-color:#e3b7b1}
-  .ptile .ph{display:flex;align-items:center;gap:10px;padding:12px 15px;
+  .ptile .ph{display:flex;align-items:center;gap:11px;padding:14px 17px;
     background:var(--pc);color:#fff}
-  .ptile .ph .ic{font-size:19px;line-height:1}
-  .ptile .ph .nm{font-size:15px;font-weight:800;letter-spacing:.2px}
+  .ptile .ph .ic{font-size:22px;line-height:1}
+  .ptile .ph .nm{font-size:17px;font-weight:800;letter-spacing:.2px}
   .ptile .ph .perf{margin-left:auto;font-size:13px;font-weight:800;background:rgba(255,255,255,.2);
     border-radius:20px;padding:3px 11px}
   .ptile .ph .perf.bad{background:#fff;color:var(--red)}
-  .pbody{padding:13px 15px;display:flex;flex-direction:column;gap:11px;flex:1}
-  .pmain .big{font-size:32px;font-weight:800;line-height:1;color:var(--navy-1)}
+  .pbody{padding:15px 17px;display:flex;flex-direction:column;gap:13px;flex:1}
+  .pmain .big{font-size:38px;font-weight:800;line-height:1;color:var(--navy-1)}
   .pmain .big small{font-size:15px;font-weight:700;color:var(--muted);margin-left:3px}
   .pmain .cap{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-top:5px}
   .pmain .sub{font-size:12px;color:#41506b;margin-top:4px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
   .prow{border-top:1px dotted var(--line);border-bottom:1px dotted var(--line);padding:8px 0;
     display:flex;flex-direction:column;gap:5px}
   .prow>div{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-  .prow .v{flex:none;min-width:54px}
-  .prow .v{font-size:17px;font-weight:800}
+  .prow .v{flex:none;min-width:62px}
+  .prow .v{font-size:19px;font-weight:800}
   .prow .l{font-size:12px;color:var(--muted)}
   .spark{margin:2px 0}
-  .spark svg{width:100%;height:54px;display:block}
+  .spark svg{width:100%;height:72px;display:block}
   .spark.empty{font-size:11.5px;color:var(--muted);padding:14px 0;text-align:center;
     border:1px dashed var(--line);border-radius:8px}
   .sparkcap{font-size:10.5px;color:var(--muted);margin-top:3px}
   .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .pgrid>div{background:#f6f8fa;border:1px solid var(--line);border-radius:8px;padding:8px 9px;min-width:0}
   .pgrid>div.bad{background:#fdecea;border-color:#f0c8c2}
-  .pgrid .v{display:block;font-size:21px;font-weight:800;line-height:1.1}
+  .pgrid .v{display:block;font-size:24px;font-weight:800;line-height:1.1}
   .pgrid>div.bad .v{color:var(--red)}
-  .pgrid .l{display:block;font-size:11px;color:var(--muted);margin-top:2px;line-height:1.35}
-  .pfoot{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:#41506b}
+  .pgrid .l{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+  .pfoot{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#41506b}
   .pgo{background:#f2f6fb;border-top:1px solid var(--line);padding:9px 15px;font-size:12px;
     font-weight:700;color:var(--teal-dark);text-align:right}
   .ptile:hover .pgo{background:var(--teal-bg)}
@@ -104,8 +106,7 @@
   .stab:hover{border-color:var(--teal);color:var(--teal-dark)}
   .stab.on{background:var(--navy-2);border-color:var(--navy-1);color:#fff}
   @media(max-width:680px){
-    .ptiles{grid-template-columns:1fr}
-    .pmain .big{font-size:27px}
+    .pmain .big{font-size:30px}
   }
   .kcard{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--muted);border-radius:var(--radius);padding:11px 13px}
   .kcard .lbl{font-size:10px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);font-weight:700}
@@ -721,7 +722,7 @@ const PROC_MATCH = [
   ['IMM',   /(^|[^a-z])imm([^a-z]|$)|vstřik|vstrik/i],
   ['SLUSH', /slush/i],
   ['FOAM',  /foam|pěn|pen(a|y|ov)|scoring|skór|skor(ing)?/i],
-  ['G463',  /g\s*-?\s*463|gclass|g\s*class/i],
+  ['G463',  /g\s*-?\s*463|gclass|g\s*class|prefix/i],
   ['GBDP',  /glove\s*box|glovebox|(^|[^a-z])gb([^a-z]|$)|decopart|deco\s*part|(^|[^a-z])dp([^a-z]|$)/i],
   ['ASSY',  /assembly|montáž|montaz|final|inspection|mfa|sk\s*-?336|po\s*-?45|ov\s*-?5\d|ov\s*-?6\d|w\s*-?206|m\s*-?beam|mbeam|eol/i]
 ];
@@ -1920,7 +1921,7 @@ function sparkWeeks(series, color){
   const data=(series||[]).filter(Boolean);
   if(data.length<2 || !data.some(d=>d.sec>0))
     return '<div class="spark empty">Na trend zatím není dost týdnů.</div>';
-  const W=300, H=54, mb=13, ih=H-mb;
+  const W=300, H=72, mb=14, ih=H-mb;
   const max=Math.max(...data.map(d=>d.sec))||1;
   const avg=data.reduce((a,d)=>a+d.sec,0)/data.length;
   const step=W/data.length, bw=step*0.6;
@@ -1973,7 +1974,8 @@ function procTiles(){
           <div><span class="v">${num(hWeek,1)} h</span><span class="l">minulý týden${lastWk?' ('+weekShort(lastWk)+')':''}</span>
             <span class="t">${trendArrow(o.secWeek, o.secPrevWeek)}</span></div>
           <div><span class="v">${o.hasCo?o.coCnt+'×':'—'}</span><span class="l">přestaveb${
-            o.hasCo&&o.coCnt?` · ⌀ ${Math.round(o.coSec/o.coCnt/60)} min · celkem ${fmtDur(o.coSec)}`:' (nahraj report znovu)'}</span></div>
+            !o.hasCo ? ' · nahraj report znovu'
+            : o.coCnt ? ` · ⌀ ${Math.round(o.coSec/o.coCnt/60)} min · celkem ${fmtDur(o.coSec)}` : ''}</span></div>
         </div>
         ${sparkWeeks(o.spark, p.color)}
         <div class="pgrid">

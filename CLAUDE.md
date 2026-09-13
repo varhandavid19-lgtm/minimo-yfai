@@ -89,7 +89,8 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
 Závod je rozdělený na šest procesů (`PROCESSES`): **IMM, Slush, Foaming/Scoring,
 Assembly IP, Glovebox/Decopart, G463**.
 - Linka ze Symesticu se k procesu přiřadí podle názvu (`PROC_MATCH`, testuje se
-  v pořadí od nejkonkrétnějšího — Assembly je nejširší, proto poslední). Ruční
+  v pořadí od nejkonkrétnějšího — Assembly je nejširší, proto poslední;
+  linka `PREFIX` patří pod G463). Ruční
   přiřazení jde uložit do `meta/engcfg.procLines = {IMM:['IMM-007',…]}` a má přednost.
   Co se nikam netrefí, spadne do `OTHER` a je vidět na hlavní stránce v žlutém
   proužku „Nezařazené linky".
