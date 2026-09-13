@@ -94,14 +94,15 @@ Assembly IP, Glovebox/Decopart, G463**.
   Co se nikam netrefí, spadne do `OTHER` a je vidět na hlavní stránce v žlutém
   proužku „Nezařazené linky".
 - Hlavní stránka začíná **velkými dlaždicemi procesů** (`procTiles`): prostoje za
-  poslední měsíc s daty, minulý týden s porovnáním, výkon, otevřené problem solvingy
-  a úkoly, nejhorší linka a největší důvod. Klik na dlaždici přepne na KPI toho
-  procesu (`proc-kpi`).
+  poslední měsíc s daty, minulý týden s porovnáním, počet přestaveb s průměrným
+  časem, malý sloupcový graf prostojů za posledních 8 týdnů (`sparkWeeks`), výkon,
+  otevřené problem solvingy a úkoly, nejhorší linka, největší důvod a linka
+  s nejvíc přestavbami. Klik na dlaždici přepne na KPI toho procesu (`proc-kpi`).
 - KPI má **podzáložky procesů** (`dashSubtabs`, stav `dashProc`). `totals(proc)`
   a `trend(proc)` filtrují na linky procesu.
 - Aby to šlo filtrovat, ukládá import do `dt_days` rozpad **i po lince**:
   u každé linky pole `g` (skupiny důvodů), `r` (konkrétní důvody), `sh` (směny)
-  a `co` (přestavby). Starší importy to nemají — KPI na to upozorní proužkem
+  a `co` (přestavby — počet a čas, z toho se počítá changeover na dlaždici). Starší importy to nemají — KPI na to upozorní proužkem
   a stačí report nahrát znovu. Nezmenšuj to zpátky na souhrn přes celý závod.
 
 ### Menu záložek

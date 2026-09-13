@@ -72,12 +72,19 @@
   .pmain .big small{font-size:15px;font-weight:700;color:var(--muted);margin-left:3px}
   .pmain .cap{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-top:5px}
   .pmain .sub{font-size:12px;color:#41506b;margin-top:4px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
-  .prow{border-top:1px dotted var(--line);border-bottom:1px dotted var(--line);padding:8px 0}
+  .prow{border-top:1px dotted var(--line);border-bottom:1px dotted var(--line);padding:8px 0;
+    display:flex;flex-direction:column;gap:5px}
   .prow>div{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  .prow .v{flex:none;min-width:54px}
   .prow .v{font-size:17px;font-weight:800}
   .prow .l{font-size:12px;color:var(--muted)}
+  .spark{margin:2px 0}
+  .spark svg{width:100%;height:54px;display:block}
+  .spark.empty{font-size:11.5px;color:var(--muted);padding:14px 0;text-align:center;
+    border:1px dashed var(--line);border-radius:8px}
+  .sparkcap{font-size:10.5px;color:var(--muted);margin-top:3px}
   .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .pgrid>div{background:#f6f8fa;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .pgrid>div{background:#f6f8fa;border:1px solid var(--line);border-radius:8px;padding:8px 9px;min-width:0}
   .pgrid>div.bad{background:#fdecea;border-color:#f0c8c2}
   .pgrid .v{display:block;font-size:21px;font-weight:800;line-height:1.1}
   .pgrid>div.bad .v{color:var(--red)}
@@ -1840,6 +1847,7 @@ function procStats(){
 
   const out={};
   const blank=k=>({k, secMonth:0, secPrevMonth:0, cntMonth:0, lines:{},
+    coSec:0, coCnt:0, spark:[], hasCo:false,
     secWeek:0, secPrevWeek:0, perfWeek:null, worst:null, groups:{}, days:new Set()});
   for(const p of PROCESSES) out[p.k]=blank(p.k);
   out.OTHER=blank('OTHER');
@@ -1852,14 +1860,28 @@ function procStats(){
       const pk=procOfLine(v.label), o=out[pk]; if(!o) continue;
       if(m===month){
         o.secMonth+=v.sec||0; o.cntMonth+=v.cnt||0; o.days.add(d.date);
-        const L=o.lines[v.label]||(o.lines[v.label]={label:v.label,sec:0});
+        const L=o.lines[v.label]||(o.lines[v.label]={label:v.label,sec:0,coCnt:0,coSec:0});
         L.sec+=v.sec||0;
+        if(v.co){ o.hasCo=true;
+          o.coSec+=v.co.sec||0; o.coCnt+=v.co.cnt||0;
+          L.coSec+=v.co.sec||0; L.coCnt+=v.co.cnt||0; }
         for(const [gk,g] of Object.entries(v.g||{})){
           const x=o.groups[gk]||(o.groups[gk]={label:g.label,sec:0}); x.sec+=g.sec||0;
         }
       } else o.secPrevMonth+=v.sec||0;
     }
   }
+  /* posledních 8 týdnů pro malý graf trendu v dlaždici */
+  const last8=wks.slice(-8);
+  for(const o of Object.values(out)) o.spark=last8.map(wk=>({wk, sec:0}));
+  last8.forEach((wk,i)=>{
+    const w=weeks[wk]; if(!w) return;
+    for(const l of Object.values(w.lines)){
+      const o=out[procOfLine(l.label)]; if(!o) continue;
+      o.spark[i].sec += l.sec||0;
+    }
+  });
+
   /* týdenní čísla a výkon */
   for(const [wk,target] of [[lastWk,'secWeek'],[prevWk,'secPrevWeek']]){
     const w=wk?weeks[wk]:null; if(!w) continue;
@@ -1874,6 +1896,7 @@ function procStats(){
   for(const o of Object.values(out)){
     o.perfWeek = o._pn ? o._pp/o._pn : null;
     o.worst = Object.values(o.lines).sort((a,b)=>b.sec-a.sec)[0]||null;
+    o.coWorst = Object.values(o.lines).filter(l=>l.coCnt>0).sort((a,b)=>b.coCnt-a.coCnt)[0]||null;
     o.topGroup = Object.values(o.groups).sort((a,b)=>b.sec-a.sec)[0]||null;
     o.dayCount = o.days.size; delete o.days; delete o._pp; delete o._pn;
     o.openPs    = problems.filter(p=>p.status!=='uzavřeno' && procOfLine(p.line)===o.k);
@@ -1890,6 +1913,39 @@ const trendArrow = (now, before) => {
   return d>0 ? `<span class="tarrow up">▲ +${num(d,0)} %</span>`
              : `<span class="tarrow down">▼ ${num(d,0)} %</span>`;
 };
+
+/* Malý sloupcový graf prostojů po týdnech do dlaždice procesu.
+   Poslední sloupec je zvýrazněný, čárkovaně je průměr — ať je hned vidět trend. */
+function sparkWeeks(series, color){
+  const data=(series||[]).filter(Boolean);
+  if(data.length<2 || !data.some(d=>d.sec>0))
+    return '<div class="spark empty">Na trend zatím není dost týdnů.</div>';
+  const W=300, H=54, mb=13, ih=H-mb;
+  const max=Math.max(...data.map(d=>d.sec))||1;
+  const avg=data.reduce((a,d)=>a+d.sec,0)/data.length;
+  const step=W/data.length, bw=step*0.6;
+  const ay=ih-(avg/max)*(ih-4);
+  const bars=data.map((d,i)=>{
+    const h=Math.max(d.sec>0?2.5:0.8,(d.sec/max)*(ih-4));
+    const x=i*step+(step-bw)/2, y=ih-h, last=i===data.length-1;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}"
+      rx="2" fill="${color}" opacity="${last?1:.42}"><title>${weekShort(d.wk)} — ${fmtDur(d.sec)}</title></rect>`;
+  }).join('');
+  const labs=data.map((d,i)=>{
+    const last=i===data.length-1;
+    if(!last && i%2) return '';
+    return `<text x="${(i*step+step/2).toFixed(1)}" y="${H-2}" text-anchor="middle"
+      font-size="9" fill="${last?'#41506b':'#9aa8ba'}" font-weight="${last?'800':'400'}">${weekShort(d.wk)}</text>`;
+  }).join('');
+  return `<div class="spark">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+      aria-label="Prostoje po týdnech">
+      <line x1="0" y1="${ay.toFixed(1)}" x2="${W}" y2="${ay.toFixed(1)}" stroke="#9aa8ba" stroke-width="1" stroke-dasharray="4 4"/>
+      ${bars}${labs}
+    </svg>
+    <div class="sparkcap">prostoje po týdnech · čárkovaně průměr ${fmtDur(avg)}</div>
+  </div>`;
+}
 
 /* ---------- dlaždice procesů na hlavní stránce ---------- */
 function procTiles(){
@@ -1916,7 +1972,10 @@ function procTiles(){
         <div class="prow">
           <div><span class="v">${num(hWeek,1)} h</span><span class="l">minulý týden${lastWk?' ('+weekShort(lastWk)+')':''}</span>
             <span class="t">${trendArrow(o.secWeek, o.secPrevWeek)}</span></div>
+          <div><span class="v">${o.hasCo?o.coCnt+'×':'—'}</span><span class="l">přestaveb${
+            o.hasCo&&o.coCnt?` · ⌀ ${Math.round(o.coSec/o.coCnt/60)} min · celkem ${fmtDur(o.coSec)}`:' (nahraj report znovu)'}</span></div>
         </div>
+        ${sparkWeeks(o.spark, p.color)}
         <div class="pgrid">
           <div class="${o.psLate.length?'bad':''}"><span class="v">${o.openPs.length}</span><span class="l">otevřených problem solvingů${o.psLate.length?` · ${o.psLate.length} hoří`:''}</span></div>
           <div class="${o.lateTasks.length?'bad':''}"><span class="v">${o.openTasks.length}</span><span class="l">otevřených úkolů${o.lateTasks.length?` · ${o.lateTasks.length} po termínu`:''}</span></div>
@@ -1924,6 +1983,8 @@ function procTiles(){
         <div class="pfoot">
           ${o.worst?`<span>Nejhorší linka: <b>${esc(o.worst.label)}</b> · ${fmtDur(o.worst.sec)}</span>`:'<span class="muted">Za tohle období žádná data.</span>'}
           ${o.topGroup?`<span>Největší důvod: <b>${esc(o.topGroup.label)}</b> · ${fmtDur(o.topGroup.sec)}</span>`:''}
+          ${o.coWorst?`<span>Nejvíc přestaveb: <b>${esc(o.coWorst.label)}</b> · ${o.coWorst.coCnt}×</span>`:''}
+
         </div>
       </div>
       <div class="pgo">KPI procesu →</div>
