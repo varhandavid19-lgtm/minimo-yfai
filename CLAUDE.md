@@ -75,8 +75,16 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   importuje. Když se nestáhne, aplikace nabídne CSV, které umí přečíst sama.
 - Časy z Excelu se počítají v UTC (`fromSerial`), aby se prostoj neposunul
   o hodinu podle nastavení počítače. Nepřepisuj na `new Date(...)` s místním časem.
-- Modul zatím vidí jen správce podle e-mailu (pole `OWNERS`), stejně jako Externí
-  opravy. Importovat smí jen role `admin` — vynuceno i pravidly Firestore.
+- **Kdo do modulu smí:** správci podle e-mailu (`OWNERS`) a lidé s pozicí
+  procesního inženýra nebo PE koordinátora (`ENG_POSITIONS` = IMM PE, SLUSH PE,
+  FOAM PE, ASSY PE, GB/DP PE, PE coordinator). Pozice nastavuje David v Nastavení.
+  **Tentýž seznam je na čtyřech místech a musí zůstat shodný:** `engineering.html`
+  (`ENG_POSITIONS`), `header.js` (odkaz v menu), `index.html` (dlaždice na portálu)
+  a `firestore.rules` (`isEngineer()`). Když ho měníš, uprav ho všude.
+- Inženýři a koordinátoři smí zakládat a upravovat problem solving, opatření
+  a tasky a zvýšit čítače v `meta/engcfg`. **Nesmí importovat, měnit nastavení
+  standardu ani mazat** — to zůstává správci (`canImport()` = role `admin`).
+  Stejně to vynucují pravidla Firestore (`canEng()`).
 - KPI: prostoje po linkách, changeover time, podíl nezařazených prostojů.
   Scrap a cycle time čekají na odpovídající report ze Symesticu — dlaždice pro ně
   v přehledu už jsou a hlásí, že data zatím nejsou.
