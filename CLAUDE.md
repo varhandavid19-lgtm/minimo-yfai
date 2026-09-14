@@ -114,6 +114,13 @@ Assembly IP, Glovebox/Decopart, G463**.
   a `co` (přestavby — počet a čas, z toho se počítá changeover na dlaždici). Starší importy to nemají — KPI na to upozorní proužkem
   a stačí report nahrát znovu. Nezmenšuj to zpátky na souhrn přes celý závod.
 
+### Období v KPI a Prostojích
+Volby jsou v `RANGES`: 7 / 14 / 30 dní, **Tento měsíc** a **Minulý měsíc**.
+Stav `range` je řetězec (`'7'`, `'14'`, `'30'`, `'m0'`, `'m1'`), ne číslo.
+Meze počítá `rangeBounds()` — u měsíců vrací i horní mez `to`, takže se dotaz
+skládá se dvěma `where` (`>=` i `<=`). Když přidáváš další období, uprav
+`RANGES` i `rangeBounds()`, nic jiného na to nesahá.
+
 ### Menu záložek
 Záložky modulu jsou velká výrazná tlačítka (`.tab`), aktivní je tyrkysová.
 Pořadí a názvy: **Hlavní stránka** (`mgmt`), **Problem solving** (`ps`),

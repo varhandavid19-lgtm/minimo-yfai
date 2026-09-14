@@ -1099,7 +1099,7 @@ let tF={area:'',owner:'',status:'',type:'',q:''};
 let ownQ='';
 let psF={status:'',line:'',owner:'',q:''}, psHideClosed=true;
 let moveDraft={date:'',why:''};
-let range=7, loaded=false, busy='', errMsg='';
+let range='7', loaded=false, busy='', errMsg='';   // '7' | '14' | '30' | 'm0' (tento měsíc) | 'm1' (minulý měsíc)
 let evLoaded='', evMore=false;
 let f={seg:'',group:'',shift:'',q:''};
 const newImp = kind => ({kind:kind||'dt', step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null,
@@ -1111,6 +1111,24 @@ const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 const num = (v,d=1)=>(isFinite(v)?Number(v):0).toLocaleString('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
 const today = () => new Date().toISOString().slice(0,10);
 const dateFrom = n => { const d=new Date(); d.setDate(d.getDate()-(n-1)); return d.toISOString().slice(0,10); };
+/* Volby období nad KPI a Prostoji. Měsíce mají i horní mez, dny jen dolní. */
+const RANGES = [{k:'7',t:'7 dní'},{k:'14',t:'14 dní'},{k:'30',t:'30 dní'},
+                {k:'m0',t:'Tento měsíc'},{k:'m1',t:'Minulý měsíc'}];
+function monthBounds(back){
+  const now=new Date(), d=new Date(now.getFullYear(), now.getMonth()-(back||0), 1);
+  const y=d.getFullYear(), m=d.getMonth(), last=new Date(y, m+1, 0);
+  const iso=x=>`${x.getFullYear()}-${pad2(x.getMonth()+1)}-${pad2(x.getDate())}`;
+  return {from:iso(d), to:iso(last), month:`${y}-${pad2(m+1)}`};
+}
+/* Od kdy do kdy se čtou denní souhrny. `to` prázdné = bez horní meze. */
+function rangeBounds(){
+  if(range==='m0' || range==='m1'){
+    const b=monthBounds(range==='m1'?1:0);
+    return {from:b.from, to:b.to, label:monthCz(b.month)};
+  }
+  const n=Number(range)||7;
+  return {from:dateFrom(n), to:'', label:n+' dní'};
+}
 const dayCz = d => String(d).slice(8,10).replace(/^0/,'')+'. '+String(d).slice(5,7).replace(/^0/,'')+'.';
 /* celé datum i s rokem: 2026-08-24 → 24. 8. 2026 */
 const dateCz = s => { if(!s) return ''; const p=String(s).slice(0,10).split('-'); return p.length===3 ? `${+p[2]}. ${+p[1]}. ${p[0]}` : String(s); };
@@ -1151,7 +1169,10 @@ async function loadDays(force){
   if(loaded && !force) return;
   busy='Načítám souhrny…'; errMsg=''; render();
   try{
-    const qs = await getDocs(query(collection(db,'dt_days'), where('date','>=',dateFrom(range)), orderBy('date','desc')));
+    const b=rangeBounds();
+    const qs = await getDocs(b.to
+      ? query(collection(db,'dt_days'), where('date','>=',b.from), where('date','<=',b.to), orderBy('date','desc'))
+      : query(collection(db,'dt_days'), where('date','>=',b.from), orderBy('date','desc')));
     days = qs.docs.map(d=>Object.assign({date:d.id}, d.data()));
     const hs = await getDocs(query(collection(db,'dt_imports'), orderBy('at','desc'), limit(10)));
     history = hs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
@@ -1161,14 +1182,16 @@ async function loadDays(force){
   busy=''; render();
 }
 async function loadEvents(){
-  const from=dateFrom(range);
-  if(evLoaded===from) return;
+  const b=rangeBounds(), key=b.from+'…'+b.to;
+  if(evLoaded===key) return;
   busy='Načítám prostoje…'; errMsg=''; render();
   try{
-    const qs = await getDocs(query(collection(db,'downtimes'), where('date','>=',from), orderBy('date','desc'), limit(1200)));
-    events = qs.docs.map(d=>Object.assign({_id:d.id}, d.data())).sort((a,b)=>String(b.start).localeCompare(String(a.start)));
+    const qs = await getDocs(b.to
+      ? query(collection(db,'downtimes'), where('date','>=',b.from), where('date','<=',b.to), orderBy('date','desc'), limit(1200))
+      : query(collection(db,'downtimes'), where('date','>=',b.from), orderBy('date','desc'), limit(1200)));
+    events = qs.docs.map(d=>Object.assign({_id:d.id}, d.data())).sort((a,b2)=>String(b2.start).localeCompare(String(a.start)));
     evMore = qs.docs.length>=1200;
-    evLoaded = from;
+    evLoaded = key;
   }catch(e){ errMsg=ruleHint(e); }
   busy=''; render();
 }
@@ -2795,7 +2818,9 @@ function dashView(){
     <div class="kcard" style="border-left-color:#1b4b8f">
       <div class="lbl">Prostoje celkem</div>
       <div class="val">${num(t.sec/3600,0)}<small> h</small></div>
-      <div class="note">${t.cnt.toLocaleString('cs-CZ')} událostí za ${n} ${n===1?'den':(n<5?'dny':'dní')}${proc?' · '+esc(pd.label):''}</div>
+      <div class="note">${t.cnt.toLocaleString('cs-CZ')} událostí ${
+        String(range).startsWith('m') ? '· '+rangeBounds().label+' ('+n+' '+(n===1?'den':(n<5?'dny':'dní'))+' s daty)'
+                                      : 'za '+n+' '+(n===1?'den':(n<5?'dny':'dní'))}${proc?' · '+esc(pd.label):''}</div>
     </div>
     <div class="kcard" style="border-left-color:#c0392b">
       <div class="lbl">Nejhorší linka</div>
@@ -3119,7 +3144,7 @@ function render(){
           :engTab==='mgmt'?'<span class="muted" style="font-size:11.5px">Hlavní stránka počítá po týdnech z posledních 12 týdnů.</span>'
           :engTab==='scrap'?'<span class="muted" style="font-size:11.5px">Scrap se počítá po měsících — posledních 12.</span>'
           :`<span class="muted" style="font-size:11.5px">Období:</span>
-        ${[7,14,30].map(n=>`<button class="rangebtn ${range===n?'on':''}" data-a="range" data-v="${n}">${n} dní</button>`).join('')}`}
+        ${RANGES.map(r=>`<button class="rangebtn ${range===r.k?'on':''}" data-a="range" data-v="${r.k}">${r.t}</button>`).join('')}`}
         <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
       </span>
       ${canImport()?`<button class="tab tab-imp ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
@@ -3253,7 +3278,7 @@ async function act(a,v){
       if(v==='imp' && imp.step===3) imp=newImp(imp.kind);
       break;
     case 'range':
-      range=Number(v)||7; loaded=false; evLoaded='';
+      range=String(v||'7'); loaded=false; evLoaded='';
       loadDays(true); if(engTab==='list') loadEvents();
       break;
     case 'reload':
