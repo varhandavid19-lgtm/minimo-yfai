@@ -130,6 +130,15 @@
   .bar .tr{flex:1.5;height:14px;background:#eef1f5;border:1px solid var(--line);border-radius:4px;overflow:hidden}
   .bar .tr i{display:block;height:100%;border-radius:3px}
   .bar .vl{flex:none;width:120px;text-align:right;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+  button.bar{width:100%;background:none;border:0;border-bottom:1px dotted var(--line);border-radius:0;
+    text-align:left;cursor:pointer;font:inherit;color:inherit;padding:6px 4px}
+  button.bar:hover{background:var(--teal-bg)}
+  button.bar .ar{flex:none;color:var(--teal-dark);font-weight:800;font-size:15px;width:12px;text-align:center;opacity:.35}
+  button.bar:hover .ar{opacity:1}
+  .drillhint{margin-top:9px;font-size:11.5px;color:var(--muted)}
+  .drillbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#eef4fc;border:1px solid #cfe0f5;
+    border-radius:var(--radius);padding:9px 11px;margin-bottom:12px}
+  .dchip{background:#fff;border:1px solid #cfe0f5;border-radius:20px;padding:4px 11px;font-size:12px;font-weight:700;color:#274a74}
   .chart{width:100%;height:auto;display:block}
 
   .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);background:#fafbfd}
@@ -1088,8 +1097,9 @@ const fileSize = b => b>=1048576 ? (b/1048576).toFixed(1)+' MB' : Math.max(1,Mat
 
 /* ===== stav stránky ===== */
 let me=null, loginBusy=false, loginErr='';
-let engTab='dash';
+let engTab='mgmt';                // modul se otevírá na hlavní stránce
 let dashProc='';                 // '' = celý závod, jinak klíč procesu (KPI podzáložky)
+let drillFrom='';                // proces, ze kterého jsem se proklikl do Prostojů
 let days=[], events=[], history=[];
 let scMonths=[], scLoaded=false;
 let mgDays=[], problems=[], actions=[], engcfg=Object.assign({},ENGCFG_DEF);
@@ -1101,7 +1111,7 @@ let psF={status:'',line:'',owner:'',q:''}, psHideClosed=true;
 let moveDraft={date:'',why:''};
 let range='7', loaded=false, busy='', errMsg='';   // '7' | '14' | '30' | 'm0' (tento měsíc) | 'm1' (minulý měsíc)
 let evLoaded='', evMore=false;
-let f={seg:'',group:'',shift:'',q:''};
+let f={seg:'',group:'',shift:'',reason:'',proc:'',q:''};
 const newImp = kind => ({kind:kind||'dt', step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null,
                          aoa:null, headers:[], headRow:0, map:{}, month:''});
 let imp=newImp('dt');
@@ -1145,7 +1155,7 @@ onAuthStateChanged(auth, async user=>{
   if(!user){ me=null; days=[]; events=[]; history=[]; loaded=false; evLoaded=''; render(); return; }
   me = await loadProfile(user);
   render();
-  if(canEnter(me)) loadDays();
+  if(canEnter(me)) loadMgmt();
 });
 async function loadProfile(user){
   const ref=doc(db,'users',user.uid);
@@ -1363,15 +1373,20 @@ function totals(proc){
 }
 const top = (obj,n) => Object.values(obj||{}).sort((a,b)=>b.sec-a.sec).slice(0,n||99);
 
+/* Když má položka `drill`, je celý řádek tlačítko — kliknutím se otevřou
+   Prostoje vyfiltrované na tuhle linku / důvod / směnu za stejné období. */
 function bars(items,color){
   if(!items.length) return `<div class="empty">Zatím žádná data.</div>`;
   const max=Math.max(...items.map(i=>i.sec))||1;
-  return `<div class="bars">`+items.map(i=>`
-    <div class="bar">
+  return `<div class="bars">`+items.map(i=>{
+    const inner=`
       <div class="nm" title="${esc(i.label)}">${esc(i.label)}</div>
       <div class="tr"><i style="width:${Math.max(1,i.sec/max*100).toFixed(1)}%;background:${i.color||color||'#1b4b8f'}"></i></div>
-      <div class="vl">${fmtDur(i.sec)}<span class="muted" style="font-weight:400"> · ${i.cnt}×</span></div>
-    </div>`).join('')+`</div>`;
+      <div class="vl">${fmtDur(i.sec)}<span class="muted" style="font-weight:400"> · ${i.cnt}×</span></div>`;
+    return i.drill
+      ? `<button class="bar go" data-a="kpi-drill" data-v="${esc(i.drill)}" title="Ukázat jednotlivé prostoje">${inner}<span class="ar">›</span></button>`
+      : `<div class="bar">${inner}</div>`;
+  }).join('')+`</div>`;
 }
 function trend(proc){
   const secOf = d => proc
@@ -2796,7 +2811,8 @@ function dashView(){
   if(!days.length) return dashSubtabs()+emptyView();
   const proc=dashProc, pd=proc?procDef(proc):null;
   const t=totals(proc);
-  const segs=top(t.segs,12), groups=top(t.groups);
+  const segs=top(t.segs,12).map(x=>Object.assign({},x,{drill:'seg:'+x.label}));
+  const groups=top(t.groups).map(x=>Object.assign({},x,{drill:'group:'+x.label}));
   const unk=Object.values(t.groups||{}).find(g=>g.label===UNKNOWN);
   const unkPct = t.sec ? Math.round((unk?unk.sec:0)/t.sec*100) : 0;
   const coAvg = t.co.cnt ? Math.round(t.co.sec/t.co.cnt/60) : 0;
@@ -2854,11 +2870,13 @@ function dashView(){
   <div class="grid2">
     <div class="panel">
       <h2>Prostoje po linkách<span class="right">${proc?esc(pd.label)+' · ':''}${Object.keys(t.segs).length} linek · TOP 12</span></h2>
-      <div class="body">${bars(segs,'#1b4b8f')}</div>
+      <div class="body">${bars(segs,'#1b4b8f')}
+        <div class="drillhint">Klikni na linku a uvidíš její jednotlivé prostoje s důvodem i poznámkou.</div></div>
     </div>
     <div class="panel">
       <h2>Podle důvodu</h2>
-      <div class="body">${bars(groups.map(g=>Object.assign({},g,{color:GROUP_COLOR[g.label]||'#6b7a90'})))}</div>
+      <div class="body">${bars(groups.map(g=>Object.assign({},g,{color:GROUP_COLOR[g.label]||'#6b7a90'})))}
+        <div class="drillhint">Klikni na řádek a rozbalí se ti jednotlivé prostoje i s poznámkou.</div></div>
     </div>
   </div>
 
@@ -2869,7 +2887,7 @@ function dashView(){
     </div>
     <div class="panel">
       <h2>Podle směny</h2>
-      <div class="body">${bars(['R','O','N'].filter(k=>t.shifts[k]).map(k=>({label:SHIFT_LBL[k],sec:t.shifts[k].sec,cnt:t.shifts[k].cnt})),'#0d7377')}
+      <div class="body">${bars(['R','O','N'].filter(k=>t.shifts[k]).map(k=>({label:SHIFT_LBL[k],sec:t.shifts[k].sec,cnt:t.shifts[k].cnt,drill:'shift:'+k})),'#0d7377')}
         <div class="notice" style="margin:12px 0 0">Směny se počítají podle času začátku: ranní 6–14, odpolední 14–22, noční 22–6.</div>
       </div>
     </div>
@@ -2877,31 +2895,50 @@ function dashView(){
 
   <div class="panel">
     <h2>TOP 10 důvodů prostoje<span class="right">konkrétní kódy ze Symesticu</span></h2>
-    <div class="body">${bars(top(t.reasons,10),'#41506b')}</div>
+    <div class="body">${bars(top(t.reasons,10).map(x=>Object.assign({},x,{drill:'reason:'+x.label})),'#41506b')}</div>
   </div>`;
 }
 
 function listView(){
   if(!events.length && !busy) return emptyView();
   let r=events.slice();
+  if(f.proc) r=r.filter(x=>procOfLine(x.seg)===f.proc);
   if(f.seg) r=r.filter(x=>x.seg===f.seg);
   if(f.group) r=r.filter(x=>(x.group||'')===f.group);
+  if(f.reason) r=r.filter(x=>(x.reason||'')===f.reason);
   if(f.shift) r=r.filter(x=>x.shift===f.shift);
   if(f.q){ const q=f.q.toLowerCase(); r=r.filter(x=>[x.seg,x.reason,x.comment].join(' ').toLowerCase().includes(q)); }
   const segList=[...new Set(events.map(x=>x.seg))].sort((a,b)=>a.localeCompare(b,'cs'));
   const grpList=[...new Set(events.map(x=>x.group||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
+  const rsnList=[...new Set(events.map(x=>x.reason||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
   const sum=r.reduce((s,x)=>s+(x.sec||0),0);
+  /* Když jsem sem přišel prokliknutím z KPI, ať je vidět odkud a jak se vrátit. */
+  const chips=[
+    f.proc   ? {t:'Proces: '+procDef(f.proc).label} : null,
+    f.seg    ? {t:'Linka: '+f.seg} : null,
+    f.group  ? {t:'Skupina: '+f.group} : null,
+    f.reason ? {t:'Důvod: '+f.reason} : null,
+    f.shift  ? {t:'Směna: '+(SHIFT_LBL[f.shift]||f.shift)} : null
+  ].filter(Boolean);
   return `
+  ${chips.length?`<div class="drillbar">
+    <button class="btn-ghost" data-a="drill-back">← Zpět na KPI</button>
+    <span class="muted" style="font-size:12px">Prostoje za ${esc(rangeBounds().label)}, zúžené na:</span>
+    ${chips.map(c=>`<span class="dchip">${esc(c.t)}</span>`).join('')}
+    <button class="btn-ghost" data-a="drill-clear" style="margin-left:auto">Zrušit filtr</button>
+  </div>`:''}
   <div class="panel">
-    <h2>Prostoje<span class="right">${r.length.toLocaleString('cs-CZ')} záznamů · ${fmtDur(sum)}</span></h2>
+    <h2>Prostoje<span class="right">${r.length.toLocaleString('cs-CZ')} záznamů · ${fmtDur(sum)} · ${esc(rangeBounds().label)}</span></h2>
     <div class="filters">
       <input class="grow" id="f-q" placeholder="Hledat v linkách, důvodech a poznámkách…" value="${esc(f.q)}">
+      <select id="f-proc"><option value="">Všechny procesy</option>${PROCESSES.map(p=>`<option value="${p.k}" ${f.proc===p.k?'selected':''}>${esc(p.label)}</option>`).join('')}</select>
       <select id="f-seg"><option value="">Všechny linky</option>${segList.map(s=>`<option ${f.seg===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
-      <select id="f-group"><option value="">Všechny důvody</option>${grpList.map(s=>`<option ${f.group===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      <select id="f-group"><option value="">Všechny skupiny</option>${grpList.map(s=>`<option ${f.group===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      <select id="f-reason"><option value="">Všechny důvody</option>${rsnList.map(s=>`<option ${f.reason===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
       <select id="f-shift"><option value="">Všechny směny</option>${['R','O','N'].map(k=>`<option value="${k}" ${f.shift===k?'selected':''}>${SHIFT_LBL[k]}</option>`).join('')}</select>
       <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
     </div>
-    ${evMore?`<div class="notice warn" style="margin:0;border-radius:0;border-left:0;border-right:0">Zobrazuji posledních 1 200 prostojů z vybraného období. Pro starší data zkrať období nebo použij export.</div>`:''}
+    ${evMore?`<div class="notice warn" style="margin:0;border-radius:0;border-left:0;border-right:0">Z vybraného období je načteno posledních 1 200 prostojů, takže u starších dnů nemusí být výpis ani filtr úplný. Zkrať období nebo použij export.</div>`:''}
     <div class="tblwrap">
       <table>
         <thead><tr><th>Datum</th><th>Sm.</th><th>Linka / stroj</th><th>Od</th><th>Do</th><th>Trvání</th><th>Skupina</th><th>Důvod</th><th>Poznámka</th></tr></thead>
@@ -3100,8 +3137,10 @@ function importView(){
 
 function exportCsv(){
   let r=events.slice();
+  if(f.proc) r=r.filter(x=>procOfLine(x.seg)===f.proc);
   if(f.seg) r=r.filter(x=>x.seg===f.seg);
   if(f.group) r=r.filter(x=>(x.group||'')===f.group);
+  if(f.reason) r=r.filter(x=>(x.reason||'')===f.reason);
   if(f.shift) r=r.filter(x=>x.shift===f.shift);
   if(f.q){ const q=f.q.toLowerCase(); r=r.filter(x=>[x.seg,x.reason,x.comment].join(' ').toLowerCase().includes(q)); }
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
@@ -3188,7 +3227,7 @@ function bind(){
   const q=document.getElementById('f-q');
   if(q) q.oninput=()=>{ f.q=q.value; const p=q.selectionStart; render();
     const n=document.getElementById('f-q'); if(n){ n.focus(); n.setSelectionRange(p,p); } };
-  [['f-seg','seg'],['f-group','group'],['f-shift','shift']].forEach(([id,k])=>{
+  [['f-seg','seg'],['f-group','group'],['f-shift','shift'],['f-reason','reason'],['f-proc','proc']].forEach(([id,k])=>{
     const el=document.getElementById(id); if(el) el.onchange=()=>{ f[k]=el.value; render(); };
   });
 
@@ -3309,6 +3348,19 @@ async function act(a,v){
     /* ----- řízení výkonu ----- */
     case 'mg-week': mgWeek=v; break;
     case 'dash-proc': dashProc=v||''; break;
+    /* Proklik z grafu v KPI do Prostojů — stejné období, jen zúžené na to,
+       na co jsem klikl. Ostatní filtry se přitom vynulují. */
+    case 'kpi-drill':{
+      const i=String(v).indexOf(':'), kind=String(v).slice(0,i), val=String(v).slice(i+1);
+      f={seg:'', group:'', shift:'', reason:'', proc:dashProc||'', q:''};
+      if(kind==='seg'){ f.seg=val; f.proc=''; }      // konkrétní linka proces nepotřebuje
+      else if(kind==='group')  f.group=val;
+      else if(kind==='shift')  f.shift=val;
+      else if(kind==='reason') f.reason=val;
+      drillFrom=dashProc||''; engTab='list'; loadEvents();
+      break; }
+    case 'drill-back': engTab='dash'; dashProc=drillFrom||''; break;
+    case 'drill-clear': f={seg:'',group:'',shift:'',reason:'',proc:'',q:''}; break;
     case 'proc-kpi': dashProc=v||''; engTab='dash'; loadDays(); break;
     case 'mg-open': openPs=v; psMsg=''; await loadTasks(); break;
     case 'ps-newtask':{

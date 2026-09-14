@@ -114,6 +114,14 @@ Assembly IP, Glovebox/Decopart, G463**.
   a `co` (přestavby — počet a čas, z toho se počítá changeover na dlaždici). Starší importy to nemají — KPI na to upozorní proužkem
   a stačí report nahrát znovu. Nezmenšuj to zpátky na souhrn přes celý závod.
 
+### Proklik z KPI do prostojů
+Řádek v grafu, který má v položce pole `drill` (`'seg:IMM-007'`, `'group:…'`,
+`'reason:…'`, `'shift:R'`), se vykreslí jako tlačítko. Kliknutí (`kpi-drill`)
+přepne na záložku **Prostoje**, nastaví odpovídající filtr a zachová vybrané
+období i proces. Nad tabulkou je pak lišta se štítky a tlačítkem **Zpět na KPI**.
+Tabulka prostojů má kvůli tomu filtry i na proces (`f.proc`) a konkrétní důvod
+(`f.reason`) — export CSV je respektuje taky.
+
 ### Období v KPI a Prostojích
 Volby jsou v `RANGES`: 7 / 14 / 30 dní, **Tento měsíc** a **Minulý měsíc**.
 Stav `range` je řetězec (`'7'`, `'14'`, `'30'`, `'m0'`, `'m1'`), ne číslo.
@@ -125,6 +133,7 @@ skládá se dvěma `where` (`>=` i `<=`). Když přidáváš další období, up
 Záložky modulu jsou velká výrazná tlačítka (`.tab`), aktivní je tyrkysová.
 Pořadí a názvy: **Hlavní stránka** (`mgmt`), **Problem solving** (`ps`),
 **Akční plán** (`tasks`), **KPI** (`dash`), **Prostoje** (`list`),
+Modul se otevírá na hlavní stránce (`engTab='mgmt'`), ne na KPI.
 **Scrap ↗** (odkaz ven) a úplně vpravo, mimo menu, tmavomodrý **Import**
 (`.tab-imp`, vidí ho jen správce). Klíče záložek v kódu (`engTab`) zůstaly
 původní — přejmenoval se jen popisek.
