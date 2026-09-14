@@ -136,6 +136,11 @@
   button.bar .ar{flex:none;color:var(--teal-dark);font-weight:800;font-size:15px;width:12px;text-align:center;opacity:.35}
   button.bar:hover .ar{opacity:1}
   .drillhint{margin-top:9px;font-size:11.5px;color:var(--muted)}
+  th.sortth{cursor:pointer;user-select:none;white-space:nowrap}
+  th.sortth:hover{background:#22497e}
+  th.sortth .sar{margin-left:5px;font-size:10px;opacity:.45}
+  th.sortth.on{background:#2a5793}
+  th.sortth.on .sar{opacity:1}
   .drillbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#eef4fc;border:1px solid #cfe0f5;
     border-radius:var(--radius);padding:9px 11px;margin-bottom:12px}
   .dchip{background:#fff;border:1px solid #cfe0f5;border-radius:20px;padding:4px 11px;font-size:12px;font-weight:700;color:#274a74}
@@ -1112,6 +1117,19 @@ let moveDraft={date:'',why:''};
 let range='7', loaded=false, busy='', errMsg='';   // '7' | '14' | '30' | 'm0' (tento měsíc) | 'm1' (minulý měsíc)
 let evLoaded='', evMore=false;
 let f={seg:'',group:'',shift:'',reason:'',proc:'',q:''};
+/* Řazení tabulky prostojů. `num:true` = při prvním kliknutí od největšího. */
+const EV_COLS = [
+  {k:'date',    t:'Datum',         num:true,  get:e=>String(e.start||e.date||'')},
+  {k:'shift',   t:'Sm.',           num:false, get:e=>String(e.shift||'')},
+  {k:'seg',     t:'Linka / stroj', num:false, get:e=>String(e.seg||'')},
+  {k:'start',   t:'Od',            num:false, get:e=>String(e.start||'').slice(11,19)},
+  {k:'end',     t:'Do',            num:false, get:e=>String(e.end||'').slice(11,19)},
+  {k:'sec',     t:'Trvání',        num:true,  get:e=>Number(e.sec)||0},
+  {k:'group',   t:'Skupina',       num:false, get:e=>String(e.group||'')},
+  {k:'reason',  t:'Důvod',         num:false, get:e=>String(e.reason||'')},
+  {k:'comment', t:'Poznámka',      num:false, get:e=>String(e.comment||'')}
+];
+let evSort={k:'date', dir:'desc'};
 const newImp = kind => ({kind:kind||'dt', step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null,
                          aoa:null, headers:[], headRow:0, map:{}, month:''});
 let imp=newImp('dt');
@@ -2899,8 +2917,8 @@ function dashView(){
   </div>`;
 }
 
-function listView(){
-  if(!events.length && !busy) return emptyView();
+/* Prostoje po filtrech a v pořadí, které si David naklikal ve hlavičce tabulky. */
+function visibleEvents(){
   let r=events.slice();
   if(f.proc) r=r.filter(x=>procOfLine(x.seg)===f.proc);
   if(f.seg) r=r.filter(x=>x.seg===f.seg);
@@ -2908,6 +2926,19 @@ function listView(){
   if(f.reason) r=r.filter(x=>(x.reason||'')===f.reason);
   if(f.shift) r=r.filter(x=>x.shift===f.shift);
   if(f.q){ const q=f.q.toLowerCase(); r=r.filter(x=>[x.seg,x.reason,x.comment].join(' ').toLowerCase().includes(q)); }
+  const col=EV_COLS.find(c=>c.k===evSort.k) || EV_COLS[0];
+  const sign=evSort.dir==='desc'?-1:1;
+  return r.sort((a,b)=>{
+    const x=col.get(a), y=col.get(b);
+    let d = col.num===true && typeof x==='number' ? x-y : String(x).localeCompare(String(y),'cs',{numeric:true});
+    if(d===0) d = String(b.start||'').localeCompare(String(a.start||''));   // stejné hodnoty: novější napřed
+    else d*=sign;
+    return d;
+  });
+}
+function listView(){
+  if(!events.length && !busy) return emptyView();
+  const r=visibleEvents();
   const segList=[...new Set(events.map(x=>x.seg))].sort((a,b)=>a.localeCompare(b,'cs'));
   const grpList=[...new Set(events.map(x=>x.group||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
   const rsnList=[...new Set(events.map(x=>x.reason||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
@@ -2941,7 +2972,11 @@ function listView(){
     ${evMore?`<div class="notice warn" style="margin:0;border-radius:0;border-left:0;border-right:0">Z vybraného období je načteno posledních 1 200 prostojů, takže u starších dnů nemusí být výpis ani filtr úplný. Zkrať období nebo použij export.</div>`:''}
     <div class="tblwrap">
       <table>
-        <thead><tr><th>Datum</th><th>Sm.</th><th>Linka / stroj</th><th>Od</th><th>Do</th><th>Trvání</th><th>Skupina</th><th>Důvod</th><th>Poznámka</th></tr></thead>
+        <thead><tr>${EV_COLS.map(c=>{
+          const on=evSort.k===c.k;
+          return `<th class="sortth ${on?'on':''}" data-a="ev-sort" data-v="${c.k}"
+            title="Seřadit podle ${esc(c.t)}">${esc(c.t)}<span class="sar">${on?(evSort.dir==='desc'?'▼':'▲'):'⇅'}</span></th>`;
+        }).join('')}</tr></thead>
         <tbody>${r.slice(0,300).map(e=>`
           <tr class="${e.sec>=3600?'long':''}">
             <td data-label="Datum">${dayCz(e.date)}</td>
@@ -3136,13 +3171,7 @@ function importView(){
 }
 
 function exportCsv(){
-  let r=events.slice();
-  if(f.proc) r=r.filter(x=>procOfLine(x.seg)===f.proc);
-  if(f.seg) r=r.filter(x=>x.seg===f.seg);
-  if(f.group) r=r.filter(x=>(x.group||'')===f.group);
-  if(f.reason) r=r.filter(x=>(x.reason||'')===f.reason);
-  if(f.shift) r=r.filter(x=>x.shift===f.shift);
-  if(f.q){ const q=f.q.toLowerCase(); r=r.filter(x=>[x.seg,x.reason,x.comment].join(' ').toLowerCase().includes(q)); }
+  const r=visibleEvents();
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
   const csv=[line(['Datum','Směna','Linka','Začátek','Konec','Trvání (min)','Netto (min)','Skupina','Důvod','Poznámka'])]
     .concat(r.map(e=>line([e.date,e.shift,e.seg,String(e.start).slice(11,19),e.end?String(e.end).slice(11,19):'',
@@ -3361,6 +3390,14 @@ async function act(a,v){
       break; }
     case 'drill-back': engTab='dash'; dashProc=drillFrom||''; break;
     case 'drill-clear': f={seg:'',group:'',shift:'',reason:'',proc:'',q:''}; break;
+    /* Klik na sloupec: nový sloupec začne od největšího (u textu od A),
+       další klik na ten samý pořadí otočí. */
+    case 'ev-sort':{
+      const col=EV_COLS.find(c=>c.k===v); if(!col) break;
+      evSort = evSort.k===v
+        ? {k:v, dir: evSort.dir==='desc'?'asc':'desc'}
+        : {k:v, dir: col.num?'desc':'asc'};
+      break; }
     case 'proc-kpi': dashProc=v||''; engTab='dash'; loadDays(); break;
     case 'mg-open': openPs=v; psMsg=''; await loadTasks(); break;
     case 'ps-newtask':{

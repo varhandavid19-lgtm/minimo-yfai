@@ -122,6 +122,12 @@ období i proces. Nad tabulkou je pak lišta se štítky a tlačítkem **Zpět n
 Tabulka prostojů má kvůli tomu filtry i na proces (`f.proc`) a konkrétní důvod
 (`f.reason`) — export CSV je respektuje taky.
 
+### Řazení tabulky prostojů
+Sloupce v záložce Prostoje jsou klikací (`EV_COLS`, stav `evSort`). První klik
+na nový sloupec řadí u čísel a datumů od největšího, u textu od A; další klik
+pořadí otočí. Filtrování i řazení dělá jediná funkce `visibleEvents()`, kterou
+používá tabulka i export CSV — nerozděluj to zpátky.
+
 ### Období v KPI a Prostojích
 Volby jsou v `RANGES`: 7 / 14 / 30 dní, **Tento měsíc** a **Minulý měsíc**.
 Stav `range` je řetězec (`'7'`, `'14'`, `'30'`, `'m0'`, `'m1'`), ne číslo.
