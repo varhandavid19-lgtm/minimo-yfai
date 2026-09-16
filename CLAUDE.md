@@ -102,8 +102,13 @@ Assembly IP, Glovebox/Decopart, G463**.
   přiřazení jde uložit do `meta/engcfg.procLines = {IMM:['IMM-007',…]}` a má přednost.
   Co se nikam netrefí, spadne do `OTHER` a je vidět na hlavní stránce v žlutém
   proužku „Nezařazené linky".
+- Nad dlaždicemi je přepínač období (`tileWk`): **Celý měsíc** nebo jeden
+  z posledních 8 týdnů. Všechna čísla v dlaždici (prostoje, počet událostí,
+  přestavby, výkon, nejhorší linka, největší důvod) se počítají za vybrané
+  období, srovnání je proti předchozímu měsíci/týdnu a v malém grafu se vybraný
+  týden zvýrazní. Výběr týdne posune i tabulku výkonu linek pod dlaždicemi.
 - Hlavní stránka začíná **velkými dlaždicemi procesů** (`procTiles`): prostoje za
-  poslední měsíc s daty, minulý týden s porovnáním, počet přestaveb s průměrným
+  vybrané období, minulý týden s porovnáním, počet přestaveb s průměrným
   časem, malý sloupcový graf prostojů za posledních 8 týdnů (`sparkWeeks`), výkon,
   otevřené problem solvingy a úkoly, nejhorší linka, největší důvod a linka
   s nejvíc přestavbami. Klik na dlaždici přepne na KPI toho procesu (`proc-kpi`).

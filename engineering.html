@@ -54,6 +54,7 @@
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:12px;margin-bottom:14px}
 
   /* ===== velké dlaždice procesů na hlavní stránce ===== */
+  .ptilebar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
   .ptiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
   @media(max-width:1180px){.ptiles{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:760px){.ptiles{grid-template-columns:1fr}}
@@ -1105,6 +1106,7 @@ let me=null, loginBusy=false, loginErr='';
 let engTab='mgmt';                // modul se otevírá na hlavní stránce
 let dashProc='';                 // '' = celý závod, jinak klíč procesu (KPI podzáložky)
 let drillFrom='';                // proces, ze kterého jsem se proklikl do Prostojů
+let tileWk='';                   // '' = celý měsíc, jinak vybraný týden v dlaždicích procesů
 let days=[], events=[], history=[];
 let scMonths=[], scLoaded=false;
 let mgDays=[], problems=[], actions=[], engcfg=Object.assign({},ENGCFG_DEF);
@@ -1912,21 +1914,29 @@ function procStats(){
   const prevMonth = (()=>{ const [y,m]=month.split('-').map(Number);
     return m===1 ? `${y-1}-12` : `${y}-${pad2(m-1)}`; })();
 
+  /* Dlaždice ukazují buď celý měsíc, nebo jeden vybraný týden (tileWk). */
+  const wk = (tileWk && weeks[tileWk]) ? tileWk : '';
+  const prevOfWk = wk ? weekPrev(wk,1) : '';
+  const inMain = d => wk ? isoWeekOf(d.date)===wk       : String(d.date).slice(0,7)===month;
+  const inPrev = d => wk ? isoWeekOf(d.date)===prevOfWk : String(d.date).slice(0,7)===prevMonth;
+  const mainLabel = wk ? weekLabel(wk) : monthCz(month);
+  const prevLabel = wk ? weekShort(prevOfWk) : monthCz(prevMonth);
+
   const out={};
-  const blank=k=>({k, secMonth:0, secPrevMonth:0, cntMonth:0, lines:{},
+  const blank=k=>({k, sec:0, secPrev:0, cnt:0, lines:{},
     coSec:0, coCnt:0, spark:[], hasCo:false,
     secWeek:0, secPrevWeek:0, perfWeek:null, worst:null, groups:{}, days:new Set()});
   for(const p of PROCESSES) out[p.k]=blank(p.k);
   out.OTHER=blank('OTHER');
 
-  /* měsíční součty z denních souhrnů */
+  /* součty za vybrané období z denních souhrnů */
   for(const d of mgDays){
-    const m=String(d.date).slice(0,7);
-    if(m!==month && m!==prevMonth) continue;
+    const main=inMain(d), prev=inPrev(d);
+    if(!main && !prev) continue;
     for(const v of Object.values(d.segs||{})){
       const pk=procOfLine(v.label), o=out[pk]; if(!o) continue;
-      if(m===month){
-        o.secMonth+=v.sec||0; o.cntMonth+=v.cnt||0; o.days.add(d.date);
+      if(main){
+        o.sec+=v.sec||0; o.cnt+=v.cnt||0; o.days.add(d.date);
         const L=o.lines[v.label]||(o.lines[v.label]={label:v.label,sec:0,coCnt:0,coSec:0});
         L.sec+=v.sec||0;
         if(v.co){ o.hasCo=true;
@@ -1935,29 +1945,30 @@ function procStats(){
         for(const [gk,g] of Object.entries(v.g||{})){
           const x=o.groups[gk]||(o.groups[gk]={label:g.label,sec:0}); x.sec+=g.sec||0;
         }
-      } else o.secPrevMonth+=v.sec||0;
+      } else o.secPrev+=v.sec||0;
     }
   }
   /* posledních 8 týdnů pro malý graf trendu v dlaždici */
   const last8=wks.slice(-8);
-  for(const o of Object.values(out)) o.spark=last8.map(wk=>({wk, sec:0}));
-  last8.forEach((wk,i)=>{
-    const w=weeks[wk]; if(!w) return;
+  for(const o of Object.values(out)) o.spark=last8.map(k=>({wk:k, sec:0, on:k===wk}));
+  last8.forEach((k,i)=>{
+    const w=weeks[k]; if(!w) return;
     for(const l of Object.values(w.lines)){
       const o=out[procOfLine(l.label)]; if(!o) continue;
       o.spark[i].sec += l.sec||0;
     }
   });
 
-  /* týdenní čísla a výkon */
-  for(const [wk,target] of [[lastWk,'secWeek'],[prevWk,'secPrevWeek']]){
-    const w=wk?weeks[wk]:null; if(!w) continue;
+  /* výkon a doplňkový řádek — v režimu měsíce poslední uzavřený týden,
+     v režimu týdne ten vybraný */
+  const perfWk = wk || lastWk;
+  const sideWk = wk ? '' : lastWk;
+  for(const [k,target] of [[perfWk,'_perf'],[sideWk,'secWeek'],[sideWk?prevWk:'','secPrevWeek']]){
+    const w=k?weeks[k]:null; if(!w) continue;
     for(const l of Object.values(w.lines)){
       const o=out[procOfLine(l.label)]; if(!o) continue;
-      o[target]+=l.sec||0;
-      if(target==='secWeek' && l.perf!=null){
-        o._pp=(o._pp||0)+l.perf; o._pn=(o._pn||0)+1;
-      }
+      if(target==='_perf'){ if(l.perf!=null){ o._pp=(o._pp||0)+l.perf; o._pn=(o._pn||0)+1; } }
+      else o[target]+=l.sec||0;
     }
   }
   for(const o of Object.values(out)){
@@ -1965,13 +1976,14 @@ function procStats(){
     o.worst = Object.values(o.lines).sort((a,b)=>b.sec-a.sec)[0]||null;
     o.coWorst = Object.values(o.lines).filter(l=>l.coCnt>0).sort((a,b)=>b.coCnt-a.coCnt)[0]||null;
     o.topGroup = Object.values(o.groups).sort((a,b)=>b.sec-a.sec)[0]||null;
+    o.sparkAvg = o.spark.length ? o.spark.reduce((a,x)=>a+x.sec,0)/o.spark.length : 0;
     o.dayCount = o.days.size; delete o.days; delete o._pp; delete o._pn;
     o.openPs    = problems.filter(p=>p.status!=='uzavřeno' && procOfLine(p.line)===o.k);
     o.psLate    = o.openPs.filter(p=>psLate(p)||needsEscalation(p));
     o.openTasks = tasks.filter(t=>!taskDone(t) && procOfTask(t)===o.k);
     o.lateTasks = o.openTasks.filter(taskLate);
   }
-  return {out, lastWk, prevWk, month, weeks};
+  return {out, lastWk, prevWk, month, weeks, wk, mainLabel, prevLabel, wks:last8};
 }
 const trendArrow = (now, before) => {
   if(!before) return '';
@@ -1997,12 +2009,14 @@ function sparkWeeks(series, color){
      obyčejný text ve stejně širokých sloupcích. */
   const bars=data.map((d,i)=>{
     const h=Math.max(d.sec>0?2.5:0.8,(d.sec/max)*(H-4));
-    const x=i*step+(step-bw)/2, y=H-h, last=i===data.length-1;
+    const x=i*step+(step-bw)/2, y=H-h;
+    const last=data.some(z=>z.on) ? !!d.on : i===data.length-1;
     return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}"
       fill="${color}" opacity="${last?1:.42}"><title>${weekShort(d.wk)} — ${fmtDur(d.sec)}</title></rect>`;
   }).join('');
+  const anyOn=data.some(z=>z.on);
   const labs=data.map((d,i)=>{
-    const last=i===data.length-1;
+    const last=anyOn ? !!d.on : i===data.length-1;
     return `<span class="${last?'now':''}" title="${weekShort(d.wk)} — ${fmtDur(d.sec)}">${weekShort(d.wk)}</span>`;
   }).join('');
   return `<div class="spark">
@@ -2017,9 +2031,9 @@ function sparkWeeks(series, color){
 
 /* ---------- dlaždice procesů na hlavní stránce ---------- */
 function procTiles(){
-  const {out, lastWk, month} = procStats();
+  const {out, lastWk, month, wk, mainLabel, prevLabel, wks} = procStats();
   const card = p => {
-    const o=out[p.k], hMonth=(o.secMonth||0)/3600, hWeek=(o.secWeek||0)/3600;
+    const o=out[p.k], hMain=(o.sec||0)/3600, hWeek=(o.secWeek||0)/3600;
     const bad = o.perfWeek!=null && o.perfWeek < (engcfg.threshold||90);
     const alarm = o.psLate.length || o.lateTasks.length;
     return `
@@ -2028,18 +2042,22 @@ function procTiles(){
       <div class="ph" style="--pc:${p.color}">
         <span class="ic">${p.icon}</span>
         <span class="nm">${esc(p.label)}</span>
-        ${o.perfWeek!=null?`<span class="perf ${bad?'bad':'ok'}">${num(o.perfWeek,1)} %</span>`:''}
+        ${o.perfWeek!=null?`<span class="perf ${bad?'bad':'ok'}" title="Výkon linek ${esc(wk?weekLabel(wk):(lastWk?weekLabel(lastWk):''))}">${num(o.perfWeek,1)} %</span>`:''}
       </div>
       <div class="pbody">
         <div class="pmain">
-          <div class="big">${num(hMonth,1)}<small> h</small></div>
-          <div class="cap">prostoje · ${monthCz(month)}${month===today().slice(0,7)?'':' <b>(poslední data)</b>'}</div>
-          <div class="sub">${Math.round(o.secMonth/60).toLocaleString('cs-CZ')} min · ${o.cntMonth.toLocaleString('cs-CZ')} událostí
-            ${trendArrow(o.secMonth, o.secPrevMonth)}</div>
+          <div class="big">${num(hMain,1)}<small> h</small></div>
+          <div class="cap">prostoje · ${esc(mainLabel)}${
+            (!wk && month!==today().slice(0,7))?' <b>(poslední data)</b>':''}</div>
+          <div class="sub">${Math.round(o.sec/60).toLocaleString('cs-CZ')} min · ${o.cnt.toLocaleString('cs-CZ')} událostí
+            ${trendArrow(o.sec, o.secPrev)}<span class="muted" style="font-size:11px">proti ${esc(prevLabel)}</span></div>
         </div>
         <div class="prow">
-          <div><span class="v">${num(hWeek,1)} h</span><span class="l">minulý týden${lastWk?' ('+weekShort(lastWk)+')':''}</span>
-            <span class="t">${trendArrow(o.secWeek, o.secPrevWeek)}</span></div>
+          ${wk
+            ? `<div><span class="v">${num((o.sparkAvg||0)/3600,1)} h</span><span class="l">průměr za posledních ${o.spark.length} týdnů</span>
+                <span class="t">${trendArrow(o.sec, o.sparkAvg)}</span></div>`
+            : `<div><span class="v">${num(hWeek,1)} h</span><span class="l">minulý týden${lastWk?' ('+weekShort(lastWk)+')':''}</span>
+                <span class="t">${trendArrow(o.secWeek, o.secPrevWeek)}</span></div>`}
           <div><span class="v">${o.hasCo?o.coCnt+'×':'—'}</span><span class="l">přestaveb${
             !o.hasCo ? ' · nahraj report znovu'
             : o.coCnt ? ` · ⌀ ${Math.round(o.coSec/o.coCnt/60)} min · celkem ${fmtDur(o.coSec)}` : ''}</span></div>
@@ -2061,9 +2079,15 @@ function procTiles(){
   };
   const other=out.OTHER;
   return `
+  <div class="ptilebar">
+    <span class="muted" style="font-size:12.5px;font-weight:700">Dlaždice ukazují:</span>
+    <button class="rangebtn ${wk?'':'on'}" data-a="tile-wk" data-v="">Celý měsíc</button>
+    ${(wks||[]).map(k=>`<button class="rangebtn ${wk===k?'on':''}" data-a="tile-wk" data-v="${k}">${weekShort(k)}</button>`).join('')}
+    <span class="muted" style="font-size:11.5px;margin-left:4px">${esc(mainLabel)}</span>
+  </div>
   <div class="ptiles">${PROCESSES.map(card).join('')}</div>
-  ${other.secMonth>0?`<div class="notice warn" style="margin-bottom:14px">
-    <b>Nezařazené linky</b> — ${fmtDur(other.secMonth)} tento měsíc nespadlo do žádného procesu:
+  ${other.sec>0?`<div class="notice warn" style="margin-bottom:14px">
+    <b>Nezařazené linky</b> — ${fmtDur(other.sec)} za ${esc(mainLabel)} nespadlo do žádného procesu:
     ${Object.values(other.lines).sort((a,b)=>b.sec-a.sec).slice(0,8).map(l=>esc(l.label)).join(', ')}.
     Řekni mi, kam patří, a doplním je.</div>`:''}`;
 }
@@ -3376,6 +3400,9 @@ async function act(a,v){
 
     /* ----- řízení výkonu ----- */
     case 'mg-week': mgWeek=v; break;
+    /* Vybraný týden v dlaždicích posune i tabulku výkonu linek pod nimi,
+       ať na stránce nesvítí dva různé týdny. */
+    case 'tile-wk': tileWk=v||''; if(v) mgWeek=v; break;
     case 'dash-proc': dashProc=v||''; break;
     /* Proklik z grafu v KPI do Prostojů — stejné období, jen zúžené na to,
        na co jsem klikl. Ostatní filtry se přitom vynulují. */
