@@ -1037,7 +1037,7 @@ async function saveTask(){
       toast('Uloženo.','ok');
     }
     openTask=null; tMsg='';
-  }catch(e){ tMsg='Uložení selhalo: '+((e&&e.message)||e); }
+  }catch(e){ tMsg='Uložení selhalo. '+writeHint(e); }
   render();
 }
 /* Posun termínu — do žlutých sloupců, s důvodem a stopou v historii */
@@ -1082,7 +1082,7 @@ async function handleTaskFiles(list){
   if(n){
     try{ await updateDoc(doc(db,'tasks',openTask._id), {files:arr, hist}); openTask.files=arr; openTask.hist=hist; syncTask(openTask);
          toast(n===1?'Příloha nahrána.':n+' přílohy nahrány.','ok'); }
-    catch(e){ toast('Uložení příloh selhalo: '+((e&&e.message)||e),'err'); }
+    catch(e){ toast('Uložení příloh selhalo. '+writeHint(e),'err'); }
   }
   tMsg=''; render();
 }
@@ -1096,7 +1096,7 @@ async function removeTaskFile(i){
   files.splice(i,1);
   const hist=(openTask.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${f.name}`);
   try{ await updateDoc(doc(db,'tasks',openTask._id), {files, hist}); openTask.files=files; openTask.hist=hist; syncTask(openTask); }
-  catch(e){ toast('Smazání selhalo: '+((e&&e.message)||e),'err'); }
+  catch(e){ toast('Smazání selhalo. '+writeHint(e),'err'); }
   render();
 }
 const fileSize = b => b>=1048576 ? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' kB';
@@ -1189,6 +1189,20 @@ async function loadProfile(user){
 }
 
 /* ===== načítání dat ===== */
+/* Server zamítl zápis. Nemá smysl ukazovat anglické „Missing or insufficient
+   permissions" — napíšeme, co se s tím dá dělat, a rovnou i pozice, které
+   aplikace u přihlášeného vidí. Z toho je hned poznat, kde je problém. */
+function writeHint(e){
+  const m=String((e&&e.message)||e);
+  if(!/permission|insufficient|PERMISSION_DENIED/i.test(m)) return m;
+  const pos=(me&&me.positions||[]).filter(Boolean);
+  const mine=pos.length ? 'Tvoje pozice: '+pos.join(', ')+'.' : 'V Nastavení nemáš vyplněnou žádnou pozici.';
+  const ok=hasEngPosition(pos) || isOwner(me&&me.email);
+  return 'Server zápis zamítl. '+mine+' '
+    + (ok
+      ? 'Pozici na to máš, takže ve Firebase konzoli nejspíš nejsou publikovaná aktuální pravidla Firestore (Firestore → Rules → Publish). Řekni to správci aplikace.'
+      : 'Zakládat problem solving a úkoly smí jen procesní inženýr nebo PE koordinátor — ať ti v Nastavení přidají pozici (např. IMM PE nebo PE coordinator).');
+}
 function ruleHint(e){
   const m=String((e&&e.message)||e);
   if(/permission|insufficient/i.test(m))
@@ -1660,7 +1674,7 @@ async function createProblem(wk, line, trigger){
     problems.unshift(Object.assign({_id:ref.id}, rec));
     openPs=ref.id; render();
     toast('Založeno '+no+'.','ok');
-  }catch(e){ toast('Nepovedlo se založit: '+((e&&e.message)||e),'err'); }
+  }catch(e){ toast('Nepovedlo se založit. '+writeHint(e),'err'); }
 }
 /* Přenese rozepsané hodnoty z okna do paměti, aby se při překreslení neztratily. */
 function collectPs(){
@@ -1699,7 +1713,7 @@ async function saveProblem(){
     await updateDoc(doc(db,'problems',p._id), next);
     Object.assign(p,next); psMsg=''; openPs=null;
     toast('Uloženo.','ok');
-  }catch(e){ psMsg='Uložení selhalo: '+((e&&e.message)||e); render(); }
+  }catch(e){ psMsg='Uložení selhalo. '+writeHint(e); render(); }
 }
 /* Koordinátor uzavře svou část — problém jde ke schválení manažerovi. */
 async function submitPsForApproval(){
@@ -1718,7 +1732,7 @@ async function submitPsForApproval(){
     await updateDoc(doc(db,'problems',p._id), next);
     Object.assign(p,next); psMsg=''; openPs=null;
     toast(p.no+' čeká na schválení manažera.','ok');
-  }catch(e){ psMsg='Nepovedlo se: '+((e&&e.message)||e); }
+  }catch(e){ psMsg='Nepovedlo se. '+writeHint(e); }
   render();
 }
 /* Manažer schválí — teprve teď je problem solving opravdu uzavřený. */
@@ -1735,7 +1749,7 @@ async function approvePs(){
     await updateDoc(doc(db,'problems',p._id), next);
     Object.assign(p,next); psMsg=''; openPs=null;
     toast(p.no+' uzavřen.','ok');
-  }catch(e){ psMsg='Nepovedlo se: '+((e&&e.message)||e); }
+  }catch(e){ psMsg='Nepovedlo se. '+writeHint(e); }
   render();
 }
 /* Manažer vrátí zpátky k dopracování. */
@@ -1751,7 +1765,7 @@ async function rejectPs(){
     await updateDoc(doc(db,'problems',p._id), next);
     Object.assign(p,next); psMsg='';
     toast(p.no+' vrácen k dopracování.','ok');
-  }catch(e){ psMsg='Nepovedlo se: '+((e&&e.message)||e); }
+  }catch(e){ psMsg='Nepovedlo se. '+writeHint(e); }
   render();
 }
 function canCloseWith(p){
@@ -1778,7 +1792,7 @@ async function addAction(){
       await updateDoc(doc(db,'problems',p._id),{status:'opatření'}); p.status='opatření';
     }
     render();
-  }catch(e){ psMsg='Opatření se neuložilo: '+((e&&e.message)||e); render(); }
+  }catch(e){ psMsg='Opatření se neuložilo. '+writeHint(e); render(); }
 }
 async function setActionStatus(id, st){
   const a=actions.find(x=>x._id===id); if(!a) return;
@@ -1853,7 +1867,7 @@ async function handlePsFiles(list){
   if(n){
     try{ await updateDoc(doc(db,'problems',p._id),{files:arr, hist}); p.files=arr; p.hist=hist;
          toast(n===1?'Příloha nahrána.':n+' přílohy nahrány.','ok'); }
-    catch(e){ toast('Uložení příloh selhalo: '+((e&&e.message)||e),'err'); }
+    catch(e){ toast('Uložení příloh selhalo. '+writeHint(e),'err'); }
   }
   psMsg=''; render();
 }
@@ -1865,7 +1879,7 @@ async function removePsFile(i){
   files.splice(i,1);
   const hist=(p.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${f.name}`);
   try{ await updateDoc(doc(db,'problems',p._id),{files, hist}); p.files=files; p.hist=hist; }
-  catch(e){ toast('Smazání selhalo: '+((e&&e.message)||e),'err'); }
+  catch(e){ toast('Smazání selhalo. '+writeHint(e),'err'); }
   render();
 }
 
@@ -1885,7 +1899,7 @@ async function deleteProblem(id){
     actions=actions.filter(a=>a.problemId!==id);
     if(openPs===id){ openPs=null; psMsg=''; }
     toast('Problem solving '+p.no+' smazán.','ok');
-  }catch(e){ toast('Smazání selhalo: '+((e&&e.message)||e),'err'); }
+  }catch(e){ toast('Smazání selhalo. '+writeHint(e),'err'); }
   busy=''; render();
 }
 

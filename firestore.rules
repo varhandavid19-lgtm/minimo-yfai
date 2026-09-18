@@ -105,7 +105,9 @@ service cloud.firestore {
     // Inženýr smí zvýšit jen čítače čísel — bez toho by nezaložil nový záznam.
     match /meta/engcfg {
       allow read:   if signedIn();
-      allow create: if isAdmin();
+      // Dokument může poprvé vzniknout i pod inženýrem — jinak by nezaložil
+      // vůbec nic, dokud správce neuloží nastavení standardu.
+      allow create: if canEng();
       allow update: if isAdmin()
                     || (canEng()
                         && request.resource.data.diff(resource.data).affectedKeys()

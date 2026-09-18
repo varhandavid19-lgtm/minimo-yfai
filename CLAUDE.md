@@ -82,7 +82,8 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   (`ENG_POSITIONS`), `header.js` (odkaz v menu), `index.html` (dlaždice na portálu)
   a `firestore.rules` (`isEngineer()`). Když ho měníš, uprav ho všude.
 - Inženýři a koordinátoři smí zakládat a upravovat problem solving, opatření
-  a tasky a zvýšit čítače v `meta/engcfg`. **Nesmí importovat, měnit nastavení
+  a tasky, zvýšit čítače v `meta/engcfg` a tenhle dokument i poprvé založit
+  (bez toho by nezaložili nic, dokud správce neuloží nastavení standardu). **Nesmí importovat, měnit nastavení
   standardu ani mazat** — to zůstává správci (`canImport()` = role `admin`).
   Stejně to vynucují pravidla Firestore (`canEng()`).
 - KPI: prostoje po linkách, changeover time, podíl nezařazených prostojů.
@@ -263,6 +264,12 @@ Opatření ukazuje `hotovo/celkem` a značku `P!`, když chybí preventivní opa
   Nepřeváděj na obyčejný zápis — jinak dva lidé naráz dostanou stejné číslo.
 - Logo „YFAI minimo“ v hlavičce je inline SVG ve funkci `logoSvg()`. Neodstraňuj.
 - Podbarvení řádků tabulky podle stavu (nový = bílý). Neruš bez vyžádání.
+
+### Když server zamítne zápis
+Chyby zápisu prohání `writeHint(e)`. Místo anglického „Missing or insufficient
+permissions" napíše česky, jaké pozice u přihlášeného aplikace vidí, a podle toho
+poradí: pozici má → nejsou publikovaná pravidla Firestore; pozici nemá → ať mu ji
+přidají v Nastavení. Nevracej se k vypisování `e.message`.
 
 ## Pracovní postup
 - **Změny commituj rovnou do `main` a pushni.** Nezakládej pull request a nenech
