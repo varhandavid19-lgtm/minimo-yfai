@@ -138,6 +138,22 @@ na nový sloupec řadí u čísel a datumů od největšího, u textu od A; dal�
 pořadí otočí. Filtrování i řazení dělá jediná funkce `visibleEvents()`, kterou
 používá tabulka i export CSV — nerozděluj to zpátky.
 
+### Generovat pareto (záložka `par`)
+Samostatná stránka, která počítá **z jednotlivých prostojů** (kolekce `downtimes`),
+ne z denních souhrnů — jen tam jsou poznámky. Nastavuje se linkami (vyskakovací
+okno se zaškrtávátky po procesech), obdobím (`PAR_PERIODS` + vlastní od–do),
+typy prostojů (`PAR_GROUPS`) a rozpadem (`PAR_DIMS`).
+- Čte se max. 6 000 prostojů na jeden dotaz, při přetečení stránka upozorní.
+- **Shluky podle poznámek** (`clusterComments`) jsou to hlavní: poznámka se zbaví
+  diakritiky a interpunkce, slova se zkrátí na 6znakový kmen (metalbolty /
+  metalboltu / metalbolt → `metalb`) a hledají se slova i dvojice slov, které se
+  opakují. Dvojice mají váhu ×1,35, protože popisují problém líp. Každý prostoj
+  padne k nejsilnějšímu výrazu, který obsahuje; shluk musí mít aspoň dva výskyty,
+  zbytek jde do „Ostatní" a „Bez poznámky". Nepřepisuj to na přesnou shodu textu,
+  lidi píšou poznámky volně.
+- Graf `paretoChart()` je sloupce + kumulativní křivka s hranicí 80 %, sloupce
+  i řádky tabulky jdou rozkliknout a rozbalí jednotlivé prostoje.
+
 ### Období v KPI a Prostojích
 Volby jsou v `RANGES`: 7 / 14 / 30 dní, **Tento měsíc** a **Minulý měsíc**.
 Stav `range` je řetězec (`'7'`, `'14'`, `'30'`, `'m0'`, `'m1'`), ne číslo.

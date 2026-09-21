@@ -137,6 +137,33 @@
   button.bar .ar{flex:none;color:var(--teal-dark);font-weight:800;font-size:15px;width:12px;text-align:center;opacity:.35}
   button.bar:hover .ar{opacity:1}
   .drillhint{margin-top:9px;font-size:11.5px;color:var(--muted)}
+  /* ===== generovat pareto ===== */
+  .pargrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:14px}
+  .pickbtn{display:flex;align-items:center;gap:8px;justify-content:flex-start;width:100%;
+    padding:9px 11px;font-size:13px;font-weight:600;min-height:37px;text-align:left}
+  .pickbtn .ar{margin-left:auto;color:var(--muted)}
+  .pickbtn:hover{border-color:var(--teal);color:var(--teal-dark)}
+  .parper{display:flex;gap:6px;flex-wrap:wrap}
+  .parcustom{display:flex;gap:10px;flex-wrap:wrap;margin-top:7px}
+  .parcustom label{display:flex;align-items:center;gap:6px;font-size:12px;color:#41506b}
+  .parcustom input{width:auto}
+  .parrun{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-top:1px dotted var(--line);padding-top:13px}
+  .parrun .btn-teal{font-size:14px;padding:11px 20px;border-radius:8px}
+  .parchart{overflow-x:auto}
+  .parchart svg{width:100%;min-width:640px;height:auto;display:block}
+  .pbar{cursor:pointer}
+  .pbar:hover rect{opacity:.78}
+  .pbar.on rect{stroke:#16233a;stroke-width:2}
+  .pickwrap{padding:14px 18px;max-height:56vh;overflow-y:auto}
+  .pickgrp{margin-bottom:14px}
+  .pickgrp .h{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text);
+    border-bottom:2px solid var(--teal-bg);padding-bottom:5px;margin-bottom:8px}
+  .pickgrp .h button{margin-left:auto;padding:3px 9px;font-size:11px}
+  .chk{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px}
+  .chk label.check{background:#f6f8fa;border:1px solid var(--line);border-radius:7px;padding:8px 10px;white-space:normal}
+  .chk label.check:hover{border-color:var(--teal);background:var(--teal-bg)}
+  .gdot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+  @media(max-width:680px){ .pargrid{grid-template-columns:1fr} .chk{grid-template-columns:1fr} }
   th.sortth{cursor:pointer;user-select:none;white-space:nowrap}
   th.sortth:hover{background:#22497e}
   th.sortth .sar{margin-left:5px;font-size:10px;opacity:.45}
@@ -2977,6 +3004,346 @@ function visibleEvents(){
     return d;
   });
 }
+/* ==========================================================
+   GENEROVAT PARETO
+   Vyber si linky, období a typy prostojů a vypadne Paretův graf.
+   Rozpad umí tři úrovně: skupina důvodu, konkrétní důvod ze Symesticu
+   a — to je ta zajímavá — shluky podle poznámek, aby se opakující
+   „metalbolty" sečetly do jednoho sloupce.
+   ========================================================== */
+const PAR_PERIODS = [
+  {k:'thisweek',  t:'Tento týden'},
+  {k:'lastweek',  t:'Minulý týden'},
+  {k:'thismonth', t:'Tento měsíc'},
+  {k:'lastmonth', t:'Minulý měsíc'},
+  {k:'custom',    t:'Vlastní období'}
+];
+const PAR_DIMS = [
+  {k:'group',   t:'Skupina důvodu',  d:'Porucha stroje, Přestavba a seřízení…'},
+  {k:'reason',  t:'Konkrétní důvod', d:'kódy tak, jak chodí ze Symesticu'},
+  {k:'comment', t:'Poznámky ve shlucích', d:'opakující se slova z poznámek se sečtou'}
+];
+let par = {lines:[], period:'lastweek', from:'', to:'', groups:[], dim:'group',
+           rows:[], loaded:false, key:'', busy:'', err:'', sel:null,
+           pick:'', q:''};
+
+/* pondělí daného týdne, posun o n týdnů zpět */
+function parWeekBounds(back){
+  const d=new Date(); const day=(d.getDay()||7);
+  d.setDate(d.getDate()-day+1-7*(back||0));
+  const mon=new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+  const iso=x=>`${x.getFullYear()}-${pad2(x.getMonth()+1)}-${pad2(x.getDate())}`;
+  return {from:iso(mon), to:iso(sun)};
+}
+function parMonthBounds(back){
+  const n=new Date(), d=new Date(n.getFullYear(), n.getMonth()-(back||0), 1);
+  const last=new Date(d.getFullYear(), d.getMonth()+1, 0);
+  const iso=x=>`${x.getFullYear()}-${pad2(x.getMonth()+1)}-${pad2(x.getDate())}`;
+  return {from:iso(d), to:iso(last), month:`${d.getFullYear()}-${pad2(d.getMonth()+1)}`};
+}
+function parBounds(){
+  if(par.period==='thisweek'){  const b=parWeekBounds(0);  return {...b, label:'tento týden ('+dayCz(b.from)+' – '+dayCz(b.to)+')'}; }
+  if(par.period==='lastweek'){  const b=parWeekBounds(1);  return {...b, label:'minulý týden ('+dayCz(b.from)+' – '+dayCz(b.to)+')'}; }
+  if(par.period==='thismonth'){ const b=parMonthBounds(0); return {from:b.from,to:b.to, label:monthCz(b.month)}; }
+  if(par.period==='lastmonth'){ const b=parMonthBounds(1); return {from:b.from,to:b.to, label:monthCz(b.month)}; }
+  const from=par.from||today(), to=par.to||today();
+  return {from, to, label:dayCz(from)+' – '+dayCz(to)};
+}
+/* Nabídka linek — co opravdu přišlo z importu, doplněné o stroje z nastavení. */
+function parAllLines(){
+  const set=new Set();
+  mgDays.forEach(d=>Object.values(d.segs||{}).forEach(v=>v.label&&set.add(v.label)));
+  Object.values(engcfg.machines||{}).forEach(arr=>(arr||[]).forEach(m=>m&&set.add(m)));
+  return [...set].sort((a,b)=>a.localeCompare(b,'cs'));
+}
+const PAR_GROUPS = ENG_GROUPS.map(g=>g.g).concat([UNKNOWN]);
+
+async function parGenerate(){
+  const b=parBounds();
+  if(b.from>b.to){ par.err='Datum „od" je až za datem „do".'; render(); return; }
+  par.busy='Načítám prostoje…'; par.err=''; par.sel=null; render();
+  try{
+    const qs=await getDocs(query(collection(db,'downtimes'),
+      where('date','>=',b.from), where('date','<=',b.to), orderBy('date','desc'), limit(6000)));
+    par.rows=qs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    par.more=qs.docs.length>=6000;
+    par.loaded=true; par.key=b.from+'…'+b.to;
+  }catch(e){ par.err=ruleHint(e); }
+  par.busy=''; render();
+}
+/* Co z načtených prostojů projde výběrem linek a typů. */
+function parFiltered(){
+  let r=par.rows.slice();
+  if(par.lines.length) r=r.filter(x=>par.lines.includes(x.seg));
+  if(par.groups.length) r=r.filter(x=>par.groups.includes(x.group||engGroup(x.reason)));
+  return r;
+}
+
+/* ---------- shlukování poznámek ----------
+   Poznámky píšou lidi volně, takže se nedají srovnat na přesnou shodu.
+   Postup: poznámku zbavíme diakritiky a interpunkce, slova zkrátíme na kmen
+   (metalbolty / metalboltu / metalbolt → metalb) a hledáme slova a dvojice
+   slov, které se opakují. Každý prostoj se přiřadí k tomu nejsilnějšímu
+   výrazu, který obsahuje. Co nikam nepasuje, spadne do „Ostatní".        */
+const PAR_STOP = new Set(('a i v k o u s z na se je po do za od to the of and or pro byl byla bylo byly kvuli pri pred nebo ale jen uz tak co ze si ke ku bez pod nad mezi pak asi moc vic min hod hodin hodiny minut minuty cca atd apod ale tam tady ted zase znovu nove novy nova stara stary vse vsechno nic neni bylo jsme jsem bylo mel mela melo musel museli nutne potreba treba prostoj prostoje stroj stroje linka linky smena smeny').split(' '));
+const parNorm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .replace(/[^a-z0-9]+/g,' ').trim();
+const parStem = w => w.length<=5 ? w : w.slice(0,6);
+function parTokens(txt){
+  const words=parNorm(txt).split(' ').filter(w=>w.length>=3 && !PAR_STOP.has(w) && !/^\d+$/.test(w));
+  const out=[];
+  words.forEach((w,i)=>{
+    out.push({key:parStem(w), surf:w});
+    if(i+1<words.length) out.push({key:parStem(w)+' '+parStem(words[i+1]), surf:w+' '+words[i+1]});
+  });
+  return out;
+}
+function clusterComments(rows){
+  const terms=new Map();       // kmen -> {sec, idx:Set, surf:Map}
+  rows.forEach((r,i)=>{
+    const seen=new Set();
+    for(const t of parTokens(r.comment)){
+      if(seen.has(t.key)) continue; seen.add(t.key);
+      const o=terms.get(t.key)||{sec:0,cnt:0,idx:new Set(),surf:new Map()};
+      o.sec+=Number(r.sec)||0; o.cnt++; o.idx.add(i);
+      o.surf.set(t.surf,(o.surf.get(t.surf)||0)+1);
+      terms.set(t.key,o);
+    }
+  });
+  /* dvojice slov popisují problém líp než jedno slovo — malá výhoda */
+  const cand=[...terms.entries()].map(([k,o])=>({k,o,w:o.sec*(k.includes(' ')?1.35:1)}))
+    .sort((a,b)=>b.w-a.w);
+  const taken=new Set(), out=[];
+  for(const c of cand){
+    const mine=[...c.o.idx].filter(i=>!taken.has(i));
+    if(mine.length<2) continue;                       // shluk dává smysl od dvou výskytů
+    mine.forEach(i=>taken.add(i));
+    const label=[...c.o.surf.entries()].sort((a,b)=>b[1]-a[1])[0][0];
+    out.push({label:label.charAt(0).toUpperCase()+label.slice(1),
+      sec:mine.reduce((a,i)=>a+(Number(rows[i].sec)||0),0), cnt:mine.length, items:mine.map(i=>rows[i])});
+  }
+  const rest=rows.map((r,i)=>i).filter(i=>!taken.has(i));
+  const empty=rest.filter(i=>!parNorm(rows[i].comment));
+  const single=rest.filter(i=>parNorm(rows[i].comment));
+  if(single.length) out.push({label:'Ostatní (jednotlivé případy)', other:true,
+    sec:single.reduce((a,i)=>a+(Number(rows[i].sec)||0),0), cnt:single.length, items:single.map(i=>rows[i])});
+  if(empty.length) out.push({label:'Bez poznámky', other:true,
+    sec:empty.reduce((a,i)=>a+(Number(rows[i].sec)||0),0), cnt:empty.length, items:empty.map(i=>rows[i])});
+  return out.sort((a,b)=>b.sec-a.sec);
+}
+/* Položky Paretova grafu podle zvoleného rozpadu. */
+function parItems(){
+  const rows=parFiltered();
+  if(par.dim==='comment') return clusterComments(rows);
+  const key = par.dim==='reason' ? (r=>r.reason||'—') : (r=>r.group||engGroup(r.reason));
+  const m=new Map();
+  for(const r of rows){
+    const k=key(r), o=m.get(k)||{label:k, sec:0, cnt:0, items:[]};
+    o.sec+=Number(r.sec)||0; o.cnt++; o.items.push(r); m.set(k,o);
+  }
+  return [...m.values()].sort((a,b)=>b.sec-a.sec);
+}
+
+/* Paretův graf: sloupce od největšího a kumulativní křivka s hranicí 80 %.
+   Sloupce jdou rozkliknout — pod grafem se vypíšou jednotlivé prostoje. */
+function paretoChart(items){
+  const top=items.slice(0,14);
+  if(!top.length) return '<div class="empty">Za zvolené období a filtr nejsou žádné prostoje.</div>';
+  const total=items.reduce((a,i)=>a+i.sec,0)||1;
+  const W=980, H=330, ml=58, mr=48, mt=16, mb=74;
+  const iw=W-ml-mr, ih=H-mt-mb;
+  const max=Math.max(...top.map(i=>i.sec))||1;
+  const step=iw/top.length, bw=Math.min(62, step*0.66);
+  const yh=v=>ih-(v/max)*ih;
+  /* osa vlevo v hodinách */
+  const ticks=4, grid=[];
+  for(let i=0;i<=ticks;i++){
+    const v=max/ticks*i, y=mt+yh(v);
+    grid.push(`<line x1="${ml}" y1="${y.toFixed(1)}" x2="${ml+iw}" y2="${y.toFixed(1)}" stroke="#e6ebf2"/>
+      <text x="${ml-8}" y="${(y+4).toFixed(1)}" text-anchor="end" font-size="11" fill="#7b8ba3">${num(v/3600,v/3600>=10?0:1)} h</text>`);
+  }
+  /* osa vpravo v procentech */
+  for(let i=0;i<=4;i++){
+    const y=mt+ih-(ih*i/4);
+    grid.push(`<text x="${ml+iw+8}" y="${(y+4).toFixed(1)}" font-size="11" fill="#7b8ba3">${i*25} %</text>`);
+  }
+  let cum=0; const pts=[], bars=[], labs=[];
+  top.forEach((it,i)=>{
+    const x=ml+i*step+(step-bw)/2, h=ih-yh(it.sec), y=mt+yh(it.sec);
+    const on=par.sel===i;
+    bars.push(`<g class="pbar ${on?'on':''}" data-a="par-sel" data-v="${i}">
+      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(2,h).toFixed(1)}" rx="3"
+        fill="${it.other?'#98a5b6':(GROUP_COLOR[it.label]||'#1b4b8f')}"/>
+      <title>${esc(it.label)} — ${fmtDur(it.sec)} · ${it.cnt}×</title>
+      <text x="${(x+bw/2).toFixed(1)}" y="${(y-6).toFixed(1)}" text-anchor="middle" font-size="11.5"
+        font-weight="700" fill="#16233a">${fmtDur(it.sec)}</text></g>`);
+    cum+=it.sec;
+    pts.push([ml+i*step+step/2, mt+ih-(cum/total)*ih]);
+    const short = it.label.length>16 ? it.label.slice(0,15)+'…' : it.label;
+    labs.push(`<text x="${(ml+i*step+step/2).toFixed(1)}" y="${(mt+ih+16).toFixed(1)}" text-anchor="end"
+      font-size="11" fill="#41506b" transform="rotate(-35 ${(ml+i*step+step/2).toFixed(1)} ${(mt+ih+16).toFixed(1)})">${esc(short)}</text>`);
+  });
+  const y80=mt+ih-0.8*ih;
+  const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  return `<div class="parchart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Paretův graf prostojů">
+    ${grid.join('')}
+    <line x1="${ml}" y1="${y80.toFixed(1)}" x2="${ml+iw}" y2="${y80.toFixed(1)}" stroke="#c0392b" stroke-dasharray="6 4"/>
+    <text x="${ml+iw-2}" y="${(y80-6).toFixed(1)}" text-anchor="end" font-size="10.5" fill="#c0392b" font-weight="700">80 %</text>
+    ${bars.join('')}
+    <path d="${line}" fill="none" stroke="#0d7377" stroke-width="2"/>
+    ${pts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="#fff" stroke="#0d7377" stroke-width="2">
+      <title>kumulativně ${num((top.slice(0,i+1).reduce((a,x)=>a+x.sec,0))/total*100,1)} %</title></circle>`).join('')}
+    <line x1="${ml}" y1="${(mt+ih).toFixed(1)}" x2="${ml+iw}" y2="${(mt+ih).toFixed(1)}" stroke="#b9c8da"/>
+    ${labs.join('')}
+  </svg></div>
+  ${items.length>14?`<div class="muted" style="font-size:11.5px;padding:0 4px 6px">V grafu je 14 největších položek z ${items.length}. Zbytek je v tabulce pod ním.</div>`:''}`;
+}
+
+function parPickModal(){
+  if(par.pick==='lines'){
+    const all=parAllLines();
+    const q=parNorm(par.q);
+    const show=q?all.filter(l=>parNorm(l).includes(q)):all;
+    const byProc={};
+    show.forEach(l=>{ const k=procOfLine(l); (byProc[k]=byProc[k]||[]).push(l); });
+    const order=PROCESSES.map(p=>p.k).concat(['OTHER']).filter(k=>byProc[k]);
+    return `<div class="overlay" id="ovl"><div class="modal" style="max-width:760px">
+      <h3>Vyber linky a stroje<button class="x" data-a="par-pickclose" aria-label="Zavřít">✕</button></h3>
+      <div class="robar">
+        <input id="par-q" placeholder="Hledat linku…" value="${esc(par.q)}" style="max-width:260px">
+        <span class="muted">vybráno ${par.lines.length} z ${all.length}</span>
+        <span style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn-ghost" data-a="par-lines-all">Vybrat vše</button>
+          <button class="btn-ghost" data-a="par-lines-none">Zrušit výběr</button></span>
+      </div>
+      <div class="pickwrap">
+        ${order.map(k=>`<div class="pickgrp">
+          <div class="h"><b>${procDef(k).icon} ${esc(procDef(k).label)}</b>
+            <button class="btn-ghost" data-a="par-proc-all" data-v="${k}">celý proces</button></div>
+          <div class="chk">${byProc[k].map(l=>`<label class="check"><input type="checkbox" data-parline="${esc(l)}"
+            ${par.lines.includes(l)?'checked':''}> ${esc(l)}</label>`).join('')}</div>
+        </div>`).join('') || '<div class="empty">Nic neodpovídá hledání.</div>'}
+      </div>
+      <div class="foot"><span class="muted" style="font-size:11.5px">Nic nevybráno = počítají se všechny linky.</span>
+        <button class="btn-ok" style="margin-left:auto" data-a="par-pickclose">Hotovo</button></div>
+    </div></div>`;
+  }
+  if(par.pick==='groups'){
+    return `<div class="overlay" id="ovl"><div class="modal" style="max-width:560px">
+      <h3>Typy prostojů<button class="x" data-a="par-pickclose" aria-label="Zavřít">✕</button></h3>
+      <div class="robar"><span class="muted">vybráno ${par.groups.length} z ${PAR_GROUPS.length}</span>
+        <span style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn-ghost" data-a="par-grp-all">Vybrat vše</button>
+          <button class="btn-ghost" data-a="par-grp-none">Zrušit výběr</button></span></div>
+      <div class="pickwrap"><div class="chk">${PAR_GROUPS.map(g=>`<label class="check"><input type="checkbox"
+        data-pargrp="${esc(g)}" ${par.groups.includes(g)?'checked':''}>
+        <span class="gdot" style="background:${GROUP_COLOR[g]||'#6b7a90'}"></span> ${esc(g)}</label>`).join('')}</div></div>
+      <div class="foot"><span class="muted" style="font-size:11.5px">Nic nevybráno = všechny typy.</span>
+        <button class="btn-ok" style="margin-left:auto" data-a="par-pickclose">Hotovo</button></div>
+    </div></div>`;
+  }
+  return '';
+}
+
+function parView(){
+  const b=parBounds();
+  const rows=par.loaded?parFiltered():[];
+  const items=par.loaded?parItems():[];
+  const total=items.reduce((a,i)=>a+i.sec,0);
+  const sel=par.sel!=null?items[par.sel]:null;
+  const lineTxt = par.lines.length ? (par.lines.length<=2?par.lines.join(', '):par.lines.length+' linek') : 'všechny linky';
+  const grpTxt  = par.groups.length ? (par.groups.length<=2?par.groups.join(', '):par.groups.length+' typů') : 'všechny typy';
+  return `
+  <div class="panel">
+    <h2>Generovat pareto<span class="right">z jednotlivých prostojů, ne z denních souhrnů</span></h2>
+    <div class="body">
+      <div class="pargrid">
+        <div class="f"><label>1 · Linky a stroje</label>
+          <button class="btn-ghost pickbtn" data-a="par-pick" data-v="lines">🏭 ${esc(lineTxt)} <span class="ar">▾</span></button></div>
+        <div class="f"><label>2 · Období</label>
+          <div class="parper">${PAR_PERIODS.map(p=>`<button class="rangebtn ${par.period===p.k?'on':''}"
+            data-a="par-period" data-v="${p.k}">${p.t}</button>`).join('')}</div>
+          ${par.period==='custom'?`<div class="parcustom">
+            <label>od <input id="par-from" type="date" value="${esc(par.from||b.from)}"></label>
+            <label>do <input id="par-to" type="date" value="${esc(par.to||b.to)}"></label></div>`
+            :`<div class="muted" style="font-size:11.5px;margin-top:4px">${esc(b.label)}</div>`}</div>
+        <div class="f"><label>3 · Typy prostojů</label>
+          <button class="btn-ghost pickbtn" data-a="par-pick" data-v="groups">🏷️ ${esc(grpTxt)} <span class="ar">▾</span></button></div>
+        <div class="f"><label>4 · Rozpad podle</label>
+          <select id="par-dim">${PAR_DIMS.map(d=>`<option value="${d.k}" ${par.dim===d.k?'selected':''}>${d.t}</option>`).join('')}</select>
+          <div class="muted" style="font-size:11px">${esc((PAR_DIMS.find(d=>d.k===par.dim)||{}).d||'')}</div></div>
+      </div>
+      <div class="parrun">
+        <button class="btn-teal" data-a="par-run" ${par.busy?'disabled':''}>${par.busy?'Počítám…':'📊 Generovat pareto'}</button>
+        ${par.loaded?`<span class="muted" style="font-size:12px">${rows.length.toLocaleString('cs-CZ')} prostojů · ${fmtDur(total)} · ${esc(b.label)}</span>`:''}
+        ${par.loaded?`<button class="btn-ghost" data-a="par-export" style="margin-left:auto">⭳ Export CSV</button>`:''}
+      </div>
+      ${par.err?`<div class="notice warn" style="margin-top:12px">${esc(par.err)}</div>`:''}
+      ${par.more?`<div class="notice warn" style="margin-top:12px">Období je tak velké, že se načetlo jen prvních 6 000 prostojů. Zkrať ho, ať je pareto úplné.</div>`:''}
+    </div>
+  </div>
+
+  ${!par.loaded ? `<div class="panel"><div class="body" style="text-align:center;padding:34px 18px">
+      <div style="font-size:34px">📊</div>
+      <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Nastav si filtr a dej Generovat</div>
+      <p class="muted" style="max-width:600px;margin:0 auto">Pareto ti ukáže, které problémy žerou nejvíc času.
+        Když v rozpadu zvolíš <b>Poznámky ve shlucích</b> a v typech necháš třeba jen poruchy a seřizování,
+        sečtou se opakující se věci z poznámek dohromady — když se na IMM-007 pořád řeší metalbolty,
+        uvidíš je jako jeden sloupec.</p>
+    </div></div>`
+  : `<div class="panel">
+      <h2>Pareto — ${esc((PAR_DIMS.find(d=>d.k===par.dim)||{}).t||'')}<span class="right">${esc(lineTxt)} · ${esc(b.label)}</span></h2>
+      <div class="body">${paretoChart(items)}</div>
+    </div>
+    <div class="panel">
+      <h2>Rozpad<span class="right">klikni na řádek a uvidíš jednotlivé prostoje</span></h2>
+      <div class="tblwrap"><table>
+        <thead><tr><th>#</th><th>Položka</th><th>Čas</th><th>Případů</th><th>Podíl</th><th>Kumulativně</th><th></th></tr></thead>
+        <tbody>${(()=>{ let c=0; return items.map((it,i)=>{ c+=it.sec;
+          const p=total?it.sec/total*100:0, cp=total?c/total*100:0;
+          return `<tr class="clickable ${par.sel===i?'late':''}" data-a="par-sel" data-v="${i}">
+            <td data-label="#" class="num">${i+1}</td>
+            <td data-label="Položka" class="desc"><b>${esc(it.label)}</b></td>
+            <td data-label="Čas" class="num nowrap"><b>${fmtDur(it.sec)}</b></td>
+            <td data-label="Případů" class="num">${it.cnt}</td>
+            <td data-label="Podíl" class="num">${num(p,1)} %</td>
+            <td data-label="Kumulativně" class="num">${cp<=80.5?`<b style="color:var(--red)">${num(cp,1)} %</b>`:num(cp,1)+' %'}</td>
+            <td data-label=""><button class="btn-ghost" style="padding:3px 9px;font-size:11px">${par.sel===i?'Skrýt':'Detail'}</button></td>
+          </tr>`; }).join(''); })() || `<tr><td colspan="7" class="empty">Za zvolené období a filtr nejsou žádné prostoje.</td></tr>`}
+        </tbody></table></div>
+    </div>
+    ${sel?`<div class="panel">
+      <h2>${esc(sel.label)}<span class="right">${sel.cnt}× · ${fmtDur(sel.sec)}</span></h2>
+      <div class="tblwrap"><table>
+        <thead><tr><th>Datum</th><th>Sm.</th><th>Linka</th><th>Od</th><th>Trvání</th><th>Skupina</th><th>Důvod</th><th>Poznámka</th></tr></thead>
+        <tbody>${sel.items.slice().sort((a,b2)=>(b2.sec||0)-(a.sec||0)).slice(0,200).map(e=>`
+          <tr class="${e.sec>=3600?'long':''}">
+            <td data-label="Datum">${dayCz(e.date)}</td>
+            <td data-label="Směna">${e.shift||''}</td>
+            <td data-label="Linka"><b>${esc(e.seg)}</b></td>
+            <td data-label="Od">${String(e.start).slice(11,16)}</td>
+            <td data-label="Trvání" class="num"><b>${fmtDur(e.sec)}</b></td>
+            <td data-label="Skupina"><span class="badge b-grey">${esc(e.group||engGroup(e.reason))}</span></td>
+            <td data-label="Důvod" class="desc">${esc(e.reason||'')}</td>
+            <td data-label="Poznámka" class="desc muted">${esc(e.comment||'')}</td>
+          </tr>`).join('')}</tbody></table></div>
+      ${sel.items.length>200?`<div class="foot muted">Zobrazeno 200 nejdelších z ${sel.items.length}.</div>`:''}
+    </div>`:''}`}`;
+}
+function parExportCsv(){
+  const items=parItems(), total=items.reduce((a,i)=>a+i.sec,0)||1;
+  const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  let c=0;
+  const csv=[line(['#','Položka','Čas (min)','Případů','Podíl %','Kumulativně %'])]
+    .concat(items.map((it,i)=>{ c+=it.sec;
+      return line([i+1,it.label,Math.round(it.sec/60),it.cnt,(it.sec/total*100).toFixed(1),(c/total*100).toFixed(1)]); })).join('\n');
+  const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url; a.download='pareto_'+today()+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
 function listView(){
   if(!events.length && !busy) return emptyView();
   const r=visibleEvents();
@@ -3236,6 +3603,7 @@ function render(){
               : engTab==='tasks' ? tasksView()
               : engTab==='mgmt'  ? mgmtView()
               : engTab==='dash'  ? dashView()
+              : engTab==='par'   ? parView()
               : engTab==='list'  ? listView()
               : engTab==='scrap' ? scrapView()
               : importView();
@@ -3246,12 +3614,14 @@ function render(){
       <button class="tab ${engTab==='tasks'?'on':''}" data-a="tab" data-v="tasks">Akční plán</button>
       <button class="tab ${engTab==='dash'?'on':''}" data-a="tab" data-v="dash">KPI</button>
       <button class="tab ${engTab==='list'?'on':''}" data-a="tab" data-v="list">Prostoje</button>
+      <button class="tab ${engTab==='par'?'on':''}" data-a="tab" data-v="par">Generovat pareto</button>
       <a class="tab" href="${SCRAP_URL}" title="Otevře aplikaci Quality loss report — Scrap">Scrap ↗</a>
       <span class="sp">
         ${engTab==='ps'?'<span class="muted" style="font-size:11.5px">Problem solving zakládáš na hlavní stránce u linky pod prahem.</span>'
           :engTab==='tasks'?'<span class="muted" style="font-size:11.5px">Akční plán je nezávislý na období — vidíš všechny tasky.</span>'
           :engTab==='mgmt'?'<span class="muted" style="font-size:11.5px">Hlavní stránka počítá po týdnech z posledních 12 týdnů.</span>'
           :engTab==='scrap'?'<span class="muted" style="font-size:11.5px">Scrap se počítá po měsících — posledních 12.</span>'
+          :engTab==='par'?'<span class="muted" style="font-size:11.5px">Období si u parety vybereš přímo na stránce.</span>'
           :`<span class="muted" style="font-size:11.5px">Období:</span>
         ${RANGES.map(r=>`<button class="rangebtn ${range===r.k?'on':''}" data-a="range" data-v="${r.k}">${r.t}</button>`).join('')}`}
         <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
@@ -3260,7 +3630,7 @@ function render(){
     </div>
     ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
     ${busy?`<div class="notice">${esc(busy)}</div>`:''}
-    ${inner}`) + (openPs?problemModal():'') + (openTask?taskModal():'')
+    ${inner}`) + (openPs?problemModal():'') + (openTask?taskModal():'') + parPickModal()
     + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
   bind();
 }
@@ -3293,6 +3663,25 @@ function bind(){
   };
   const lo=document.getElementById('btn-logout'); if(lo) lo.onclick=()=>signOut(auth);
   document.querySelectorAll('[data-a]').forEach(el=>{ el.onclick=ev=>{ ev.stopPropagation(); act(el.dataset.a, el.dataset.v); }; });
+
+  document.querySelectorAll('[data-parline]').forEach(el=>{
+    el.onchange=()=>{ const l=el.dataset.parline;
+      par.lines = el.checked ? [...new Set(par.lines.concat(l))] : par.lines.filter(x=>x!==l);
+      render(); };
+  });
+  document.querySelectorAll('[data-pargrp]').forEach(el=>{
+    el.onchange=()=>{ const g=el.dataset.pargrp;
+      par.groups = el.checked ? [...new Set(par.groups.concat(g))] : par.groups.filter(x=>x!==g);
+      render(); };
+  });
+  const parq=document.getElementById('par-q');
+  if(parq) parq.oninput=()=>{ par.q=parq.value; const c=parq.selectionStart; render();
+    const n=document.getElementById('par-q'); if(n){ n.focus(); n.setSelectionRange(c,c); } };
+  const pdim=document.getElementById('par-dim');
+  if(pdim) pdim.onchange=()=>{ par.dim=pdim.value; par.sel=null; render(); };
+  [['par-from','from'],['par-to','to']].forEach(([id,k])=>{
+    const el=document.getElementById(id); if(el) el.onchange=()=>{ par[k]=el.value; render(); };
+  });
 
   const q=document.getElementById('f-q');
   if(q) q.oninput=()=>{ f.q=q.value; const p=q.selectionStart; render();
@@ -3384,6 +3773,7 @@ async function act(a,v){
       if(v==='tasks') loadTasks();
       if(v==='scrap'){ location.href=SCRAP_URL; return; }
       if(v==='dash') loadDays();
+      if(v==='par') loadMgmt();
       if(v==='imp' && imp.step===3) imp=newImp(imp.kind);
       break;
     case 'range':
@@ -3421,6 +3811,21 @@ async function act(a,v){
        ať na stránce nesvítí dva různé týdny. */
     case 'tile-wk': tileWk=v||''; if(v) mgWeek=v; break;
     case 'dash-proc': dashProc=v||''; break;
+    /* ----- generovat pareto ----- */
+    case 'par-pick':      par.pick=v; par.q=''; break;
+    case 'par-pickclose': par.pick=''; par.q=''; break;
+    case 'par-period':    par.period=v; if(v==='custom'&&!par.from){ const b=parBounds(); par.from=b.from; par.to=b.to; } break;
+    case 'par-lines-all': par.lines=parAllLines(); break;
+    case 'par-lines-none':par.lines=[]; break;
+    case 'par-proc-all':{ const add=parAllLines().filter(l=>procOfLine(l)===v);
+      const has=add.every(l=>par.lines.includes(l));
+      par.lines = has ? par.lines.filter(l=>!add.includes(l)) : [...new Set(par.lines.concat(add))];
+      break; }
+    case 'par-grp-all':   par.groups=PAR_GROUPS.slice(); break;
+    case 'par-grp-none':  par.groups=[]; break;
+    case 'par-sel':       par.sel = par.sel===Number(v) ? null : Number(v); break;
+    case 'par-export':    parExportCsv(); return;
+    case 'par-run':       await parGenerate(); return;
     /* Proklik z grafu v KPI do Prostojů — stejné období, jen zúžené na to,
        na co jsem klikl. Ostatní filtry se přitom vynulují. */
     case 'kpi-drill':{
