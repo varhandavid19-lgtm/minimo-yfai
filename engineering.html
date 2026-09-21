@@ -440,6 +440,9 @@ const ROLE2LEVEL = {zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approve
 const LEVEL_LABEL = {basic:'Basic',warehouse:'Warehouse',approver:'Approver',wadmin:'Warehouse Admin',superadmin:'Super Admin'};
 /* Importovat smí jen ten, koho pustí i pravidla Firestore (role admin). */
 const canImport = () => !!me && me.role==='admin';
+/* Report prostojů ze Symesticu nahraje kdokoli, kdo do modulu vůbec smí —
+   tedy procesní inženýr, koordinátor i správce. Import scrapu zůstal správci. */
+const canImportDt = () => canEnter(me);
 
 /* ==========================================================
    Čtení reportu prostojů ze Symesticu
@@ -1276,7 +1279,7 @@ async function readFile(file){
   return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:true, defval:null, blankrows:false});
 }
 async function takeFile(file){
-  if(!canImport()) return;
+  if(!canImportDt()) return;
   imp.err=''; imp.name=file.name; imp.prog='Čtu soubor…'; render();
   try{
     const aoa = await readFile(file);
@@ -1465,7 +1468,7 @@ function scrapView(){
       <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím tu nejsou žádná data o scrapu</div>
       <p class="muted" style="max-width:540px;margin:0 auto 14px">Nahraj Excel se scrapem v záložce <b>Import</b> — stačí, když
         v něm bude projekt, linka, hodnota scrapu v eurech a tržby. Procenta se dopočítají sama.</p>
-      ${canImport()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
+      ${canImportDt()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
     </div></div>`;
   }
   const last=scLatest();
@@ -2114,7 +2117,7 @@ function mgmtView(){
       <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím není z čeho řídit</div>
       <p class="muted" style="max-width:540px;margin:0 auto 14px">Nahraj prostoje ze Symesticu a tahle stránka sama spočítá
         týdenní výkon linek, označí ty pod ${engcfg.threshold} % a založí k nim povinný problem solving.</p>
-      ${canImport()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
+      ${canImportDt()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
     </div></div>`;
   }
   const weeks=weeklyPerf(mgDays, engcfg);
@@ -2854,7 +2857,7 @@ function emptyView(){
     <div style="font-size:17px;font-weight:800;margin:8px 0 6px">Zatím tu nejsou žádné prostoje</div>
     <p class="muted" style="max-width:520px;margin:0 auto 14px">Vyjeď v Symesticu report prostojů (Downtimes) za období,
       ulož ho do Excelu a nahraj ho v záložce <b>Import</b>. KPI se spočítají samy.</p>
-    ${canImport()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
+    ${canImportDt()?`<button class="btn-primary" data-a="tab" data-v="imp">Přejít na import</button>`:''}
   </div></div>`;
 }
 function dashSubtabs(){
@@ -3035,7 +3038,7 @@ function listView(){
 }
 
 function importView(){
-  if(!canImport()) return `<div class="notice warn">Import reportu dělá správce.</div>`;
+  if(!canImportDt()) return `<div class="notice warn">Import reportu dělá procesní inženýr nebo správce.</div>`;
   const s=imp;
   let body='';
   if(s.step===1){
@@ -3044,8 +3047,8 @@ function importView(){
       <div class="kindpick">
         <button class="kind ${isScrap?'':'on'}" data-a="imp-kind" data-v="dt">
           <span class="i">⏱️</span><span><b>Prostoje</b><i>report Downtimes ze Symesticu</i></span></button>
-        <button class="kind ${isScrap?'on':''}" data-a="imp-kind" data-v="scrap">
-          <span class="i">🧾</span><span><b>Scrap</b><i>zmetky v eurech proti tržbám</i></span></button>
+        ${canImport()?`<button class="kind ${isScrap?'on':''}" data-a="imp-kind" data-v="scrap">
+          <span class="i">🧾</span><span><b>Scrap</b><i>zmetky v eurech proti tržbám</i></span></button>`:''}
       </div>
       <div class="drop" id="drop">
         <div class="big">Přetáhni sem ${isScrap?'Excel se scrapem':'report prostojů ze Symesticu'}</div>
@@ -3253,7 +3256,7 @@ function render(){
         ${RANGES.map(r=>`<button class="rangebtn ${range===r.k?'on':''}" data-a="range" data-v="${r.k}">${r.t}</button>`).join('')}`}
         <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
       </span>
-      ${canImport()?`<button class="tab tab-imp ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
+      ${canImportDt()?`<button class="tab tab-imp ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
     </div>
     ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
     ${busy?`<div class="notice">${esc(busy)}</div>`:''}
@@ -3475,9 +3478,10 @@ async function act(a,v){
       openPs=null; render(); return;
     }
     case 'imp-reset': imp=newImp(imp.kind); break;
-    case 'imp-kind': imp=newImp(v); break;
+    case 'imp-kind': imp=newImp(v==='scrap' && !canImport() ? 'dt' : v); break;
     case 'imp-run':
-      if(!canImport()) return;
+      if(!canImportDt()) return;
+      if(imp.kind==='scrap' && !canImport()){ toast('Scrap nahrává správce.','err'); return; }
       imp.err=''; imp.prog='Připravuji zápis…'; render();
       await runImport();
       break;

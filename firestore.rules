@@ -80,15 +80,16 @@ service cloud.firestore {
     }
 
     // --- Engineering: prostoje ze Symesticu ---
-    // Prostoje a denní souhrny čte každý přihlášený, zapisuje je jen správce
-    // při importu reportu.
+    // Prostoje a denní souhrny čte každý přihlášený. Report nahraje kdokoli
+    // z engineeringu (procesní inženýr, koordinátor, správce) — import je
+    // idempotentní, opakované nahrání téhož reportu nic nezdvojí.
     match /downtimes/{id} {
       allow read:  if signedIn();
-      allow write: if isAdmin();
+      allow write: if canEng();
     }
     match /dt_days/{datum} {
       allow read:  if signedIn();
-      allow write: if isAdmin();
+      allow write: if canEng();
     }
     // --- Engineering: scrap (zmetky v eurech proti tržbám) ---
     match /scrap/{id} {
@@ -138,7 +139,7 @@ service cloud.firestore {
     // Záznam v historii importů jde jen založit, ne měnit ani mazat.
     match /dt_imports/{id} {
       allow read:   if signedIn();
-      allow create: if isAdmin();
+      allow create: if canEng();
       allow update, delete: if false;
     }
 

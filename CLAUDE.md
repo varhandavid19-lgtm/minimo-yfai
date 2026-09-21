@@ -83,8 +83,12 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   a `firestore.rules` (`isEngineer()`). Když ho měníš, uprav ho všude.
 - Inženýři a koordinátoři smí zakládat a upravovat problem solving, opatření
   a tasky, zvýšit čítače v `meta/engcfg` a tenhle dokument i poprvé založit
-  (bez toho by nezaložili nic, dokud správce neuloží nastavení standardu). **Nesmí importovat, měnit nastavení
+  (bez toho by nezaložili nic, dokud správce neuloží nastavení standardu).
+  Smí taky **nahrát report prostojů ze Symesticu** (`canImportDt()` = kdokoli,
+  kdo do modulu smí). Import je idempotentní, opakované nahrání nic nezdvojí. **Nesmí importovat, měnit nastavení
   standardu ani mazat** — to zůstává správci (`canImport()` = role `admin`).
+  Import **scrapu** zůstává správci (`canImport()` = role `admin`) a volba Scrap
+  se ostatním v okně importu vůbec nenabídne.
   Stejně to vynucují pravidla Firestore (`canEng()`).
 - KPI: prostoje po linkách, changeover time, podíl nezařazených prostojů.
   Scrap a cycle time čekají na odpovídající report ze Symesticu — dlaždice pro ně
