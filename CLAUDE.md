@@ -151,8 +151,10 @@ typy prostojů (`PAR_GROUPS`) a rozpadem (`PAR_DIMS`).
   padne k nejsilnějšímu výrazu, který obsahuje; shluk musí mít aspoň dva výskyty,
   zbytek jde do „Ostatní" a „Bez poznámky". Nepřepisuj to na přesnou shodu textu,
   lidi píšou poznámky volně.
-- Graf `paretoChart()` je sloupce + kumulativní křivka s hranicí 80 %, sloupce
-  i řádky tabulky jdou rozkliknout a rozbalí jednotlivé prostoje.
+- Graf `paretoChart()` je sloupce + kumulativní křivka s hranicí 80 %. Klik na
+  sloupec i na řádek tabulky otevře **okno** (`parDetailModal`) s jednotlivými
+  prostoji od nejdelšího po nejkratší, i s poznámkami a s exportem jen té jedné
+  položky. Nevracej se k vypisování detailu do panelu pod grafem.
 
 ### Období v KPI a Prostojích
 Volby jsou v `RANGES`: 7 / 14 / 30 dní, **Tento měsíc** a **Minulý měsíc**.

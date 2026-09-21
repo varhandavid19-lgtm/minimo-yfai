@@ -3251,7 +3251,6 @@ function parView(){
   const rows=par.loaded?parFiltered():[];
   const items=par.loaded?parItems():[];
   const total=items.reduce((a,i)=>a+i.sec,0);
-  const sel=par.sel!=null?items[par.sel]:null;
   const lineTxt = par.lines.length ? (par.lines.length<=2?par.lines.join(', '):par.lines.length+' linek') : 'všechny linky';
   const grpTxt  = par.groups.length ? (par.groups.length<=2?par.groups.join(', '):par.groups.length+' typů') : 'všechny typy';
   return `
@@ -3302,34 +3301,75 @@ function parView(){
         <thead><tr><th>#</th><th>Položka</th><th>Čas</th><th>Případů</th><th>Podíl</th><th>Kumulativně</th><th></th></tr></thead>
         <tbody>${(()=>{ let c=0; return items.map((it,i)=>{ c+=it.sec;
           const p=total?it.sec/total*100:0, cp=total?c/total*100:0;
-          return `<tr class="clickable ${par.sel===i?'late':''}" data-a="par-sel" data-v="${i}">
+          return `<tr class="clickable" data-a="par-sel" data-v="${i}">
             <td data-label="#" class="num">${i+1}</td>
             <td data-label="Položka" class="desc"><b>${esc(it.label)}</b></td>
             <td data-label="Čas" class="num nowrap"><b>${fmtDur(it.sec)}</b></td>
             <td data-label="Případů" class="num">${it.cnt}</td>
             <td data-label="Podíl" class="num">${num(p,1)} %</td>
             <td data-label="Kumulativně" class="num">${cp<=80.5?`<b style="color:var(--red)">${num(cp,1)} %</b>`:num(cp,1)+' %'}</td>
-            <td data-label=""><button class="btn-ghost" style="padding:3px 9px;font-size:11px">${par.sel===i?'Skrýt':'Detail'}</button></td>
+            <td data-label=""><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Detail</button></td>
           </tr>`; }).join(''); })() || `<tr><td colspan="7" class="empty">Za zvolené období a filtr nejsou žádné prostoje.</td></tr>`}
         </tbody></table></div>
     </div>
-    ${sel?`<div class="panel">
-      <h2>${esc(sel.label)}<span class="right">${sel.cnt}× · ${fmtDur(sel.sec)}</span></h2>
-      <div class="tblwrap"><table>
-        <thead><tr><th>Datum</th><th>Sm.</th><th>Linka</th><th>Od</th><th>Trvání</th><th>Skupina</th><th>Důvod</th><th>Poznámka</th></tr></thead>
-        <tbody>${sel.items.slice().sort((a,b2)=>(b2.sec||0)-(a.sec||0)).slice(0,200).map(e=>`
+    `}`;
+}
+/* Okno s jednotlivými prostoji za rozkliknutý sloupec — od nejdelšího po nejkratší. */
+function parDetailModal(){
+  if(engTab!=='par' || par.sel==null) return '';
+  const items=parItems(), it=items[par.sel]; if(!it) return '';
+  const b=parBounds();
+  const rows=it.items.slice().sort((x,y)=>(Number(y.sec)||0)-(Number(x.sec)||0));
+  const show=rows.slice(0,300);
+  return `
+  <div class="overlay" id="ovl"><div class="modal" style="max-width:1180px" role="dialog" aria-modal="true"
+    aria-label="Prostoje položky ${esc(it.label)}">
+    <h3>${esc(it.label)}<button class="x" data-a="par-close" aria-label="Zavřít">✕</button></h3>
+    <div class="robar">
+      <b>${it.cnt}×</b> · celkem <b>${fmtDur(it.sec)}</b> · ${esc(par.lines.length?(par.lines.length<=2?par.lines.join(', '):par.lines.length+' linek'):'všechny linky')}
+      · ${esc(b.label)}
+      <span style="margin-left:auto"><button class="btn-ghost" data-a="par-export-one">⭳ Export CSV</button></span>
+    </div>
+    <div class="tblwrap" style="max-height:62vh;overflow-y:auto">
+      <table>
+        <thead><tr><th>Datum</th><th>Sm.</th><th>Linka / stroj</th><th>Od</th><th>Do</th><th>Trvání</th><th>Skupina</th><th>Důvod</th><th>Poznámka</th></tr></thead>
+        <tbody>${show.map(e=>`
           <tr class="${e.sec>=3600?'long':''}">
-            <td data-label="Datum">${dayCz(e.date)}</td>
+            <td data-label="Datum" class="nowrap">${dayCz(e.date)}</td>
             <td data-label="Směna">${e.shift||''}</td>
             <td data-label="Linka"><b>${esc(e.seg)}</b></td>
             <td data-label="Od">${String(e.start).slice(11,16)}</td>
-            <td data-label="Trvání" class="num"><b>${fmtDur(e.sec)}</b></td>
+            <td data-label="Do">${e.end?String(e.end).slice(11,16):'—'}</td>
+            <td data-label="Trvání" class="num nowrap"><b>${fmtDur(e.sec)}</b></td>
             <td data-label="Skupina"><span class="badge b-grey">${esc(e.group||engGroup(e.reason))}</span></td>
             <td data-label="Důvod" class="desc">${esc(e.reason||'')}</td>
             <td data-label="Poznámka" class="desc muted">${esc(e.comment||'')}</td>
-          </tr>`).join('')}</tbody></table></div>
-      ${sel.items.length>200?`<div class="foot muted">Zobrazeno 200 nejdelších z ${sel.items.length}.</div>`:''}
-    </div>`:''}`}`;
+          </tr>`).join('') || `<tr><td colspan="9" class="empty">Žádné prostoje.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <div class="foot">
+      <span class="muted" style="font-size:11.5px">${rows.length>300
+        ? 'Zobrazeno 300 nejdelších z '+rows.length.toLocaleString('cs-CZ')+' — celý výpis je v exportu.'
+        : 'Seřazeno od nejdelšího prostoje.'}</span>
+      <button class="btn-ghost" style="margin-left:auto" data-a="par-close">Zavřít</button>
+    </div>
+  </div></div>`;
+}
+/* Export jen toho, co je rozkliknuté v okně. */
+function parExportDetail(){
+  const items=parItems(), it=items[par.sel]; if(!it) return;
+  const rows=it.items.slice().sort((x,y)=>(Number(y.sec)||0)-(Number(x.sec)||0));
+  const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  const csv=[line(['Datum','Směna','Linka','Od','Do','Trvání (min)','Skupina','Důvod','Poznámka'])]
+    .concat(rows.map(e=>line([e.date,e.shift,e.seg,String(e.start).slice(11,19),
+      e.end?String(e.end).slice(11,19):'',Math.round((e.sec||0)/60),
+      e.group||engGroup(e.reason),e.reason,e.comment]))).join('\n');
+  const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url;
+  a.download='pareto_'+slug(it.label)+'_'+today()+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 function parExportCsv(){
   const items=parItems(), total=items.reduce((a,i)=>a+i.sec,0)||1;
@@ -3630,7 +3670,7 @@ function render(){
     </div>
     ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
     ${busy?`<div class="notice">${esc(busy)}</div>`:''}
-    ${inner}`) + (openPs?problemModal():'') + (openTask?taskModal():'') + parPickModal()
+    ${inner}`) + (openPs?problemModal():'') + (openTask?taskModal():'') + parPickModal() + parDetailModal()
     + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
   bind();
 }
@@ -3823,7 +3863,9 @@ async function act(a,v){
       break; }
     case 'par-grp-all':   par.groups=PAR_GROUPS.slice(); break;
     case 'par-grp-none':  par.groups=[]; break;
-    case 'par-sel':       par.sel = par.sel===Number(v) ? null : Number(v); break;
+    case 'par-sel':       par.sel=Number(v); break;
+    case 'par-close':     par.sel=null; break;
+    case 'par-export-one': parExportDetail(); return;
     case 'par-export':    parExportCsv(); return;
     case 'par-run':       await parGenerate(); return;
     /* Proklik z grafu v KPI do Prostojů — stejné období, jen zúžené na to,
