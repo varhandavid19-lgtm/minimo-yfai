@@ -66,6 +66,19 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   Práva jsou v kódu a SOUČASNĚ vynucená bezpečnostními pravidly Firestore
   na serveru (soubor `firestore.rules`).
 
+## Modul Nákupní požadavky (`nakup.html`) — import z nabídky
+Tlačítko „+ Import požadavků" vedle „+ Nový požadavek" otevře okno, kde se nahraje
+nabídka (Excel / CSV / PDF), z ní se rozepíšou položky do řádků a z každého řádku
+vznikne jeden požadavek. Knihovny na čtení souborů (SheetJS, pdf.js) se stahují
+z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
+- Nabídka se do úložiště nahraje JEDNOU do `nabidky/import_<čas>_<náhoda>/` a stejná
+  metadata se připnou ke všem požadavkům z importu. Taková příloha má `shared:true`
+  a při mazání se ze **úložiště neodstraňuje** — odkazují na ni i ostatní požadavky
+  z téhož importu. Nepřeváděj na mazání přes `deleteObject`.
+- Políčka řádků importu mají `data-ir="klíč|pole"` (ne `data-a`), aby se okno
+  nepřekreslovalo při každém stisku klávesy a nevyskakoval kurzor z políčka.
+- Každý požadavek z importu vzniká ve stavu `nový`, stejně jako přes „+ Nový požadavek".
+
 ## Modul Engineering (`engineering.html`)
 Prostoje na linkách, KPI a import týdenního reportu z interního systému Symestic.
 - Report (Downtimes) má sloupce `Segment`, `Reason`, `Start time`, `End time`,
