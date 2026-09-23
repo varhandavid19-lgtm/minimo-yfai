@@ -1577,7 +1577,7 @@ async function ireqSheetItems(file){
     const qty=ireqNum(g('mnozstvi'));
     const cena=ireqNum(g('cena'));
     const mena=ireqCurrency(g('mena'))||ireqCurrency(g('cena'))||'CZK';
-    items.push({ sklad:String(g('sklad')??'').trim(), popis,
+    items.push({ sklad:'', popis,
       mnozstvi:(qty===''||qty<=0)?1:qty, jednotka:String(g('jednotka')??'').trim()||'ks',
       cena:cena===''?'':Math.round(cena*100)/100, mena,
       vyrobce:String(g('vyrobce')??'').trim(), dodavatel:String(g('dodavatel')??'').trim(),
@@ -1656,10 +1656,10 @@ function ireqPdfItemsBlocks(lines){
     for(let i=0;i<tok.length;i++){ if(IREQ_UNIT.test(tok[i].replace(/[.,;]$/,''))){ ui=i; unit=tok[i]; break; } }
     if(ui>0){ qty=ireqNum(tok[ui-1]); for(let j=ui+1;j<tok.length;j++){ const n=ireqNum(tok[j]); if(n!==''&&n>0){ price=n; break; } } }
     if(qty===''||price===''){ const nums=tok.map(ireqNum).filter(n=>n!==''&&n>0); if(nums.length>=2){ if(qty==='')qty=nums[0]; if(price==='')price=nums[1]; } }
-    let sklad='', popis=head; const hw=head.split(/\s+/);
-    if(hw.length>1 && /^\d{4,}$/.test(hw[0])){ sklad=hw[0]; popis=hw.slice(1).join(' '); }
-    if(!popis && !sklad) continue;
-    items.push({ sklad, popis:popis||('položka '+sklad), mnozstvi:(qty===''||qty<=0)?1:qty,
+    const popis=head;
+    if(!popis) continue;
+    // Skladové číslo z nabídky NEvyplňujeme — doplní si ho skladník/nákupčí sám.
+    items.push({ sklad:'', popis, mnozstvi:(qty===''||qty<=0)?1:qty,
       jednotka:ireqUnit(unit), cena:price===''?'':Math.round(price*100)/100,
       mena:ireqCurrency(full)||'CZK', vyrobce:'', dodavatel:'', poznamka:'' });
     if(items.length>=300) break;
@@ -1683,9 +1683,8 @@ function ireqPdfItemsFlat(lines){
     let words=tok.slice(0,k);
     // úvodní pořadové číslo položky („1", „1.", „1)") zahoď — není součást popisu
     if(words.length>2 && /^\d{1,3}[.)]?$/.test(words[0])) words=words.slice(1);
-    // kód dílu = první slovo, když vypadá jako kód (číslice + písmeno nebo pomlčka)
-    let sklad='';
-    if(words.length>1 && words[0].length>=5 && /\d/.test(words[0]) && /[A-Za-z\-\/.]/.test(words[0])){ sklad=words[0]; words=words.slice(1); }
+    // Skladové číslo z nabídky NEvyplňujeme — doplní si ho skladník/nákupčí sám.
+    const sklad='';
     const desc=words.join(' ').trim();
     if(desc.replace(/[^A-Za-zÀ-ž]/g,'').length<4) continue;      // bez slov to položka není
     // vyber dvojici množství × cena tak, aby seděl součet na poslední číslo (celkem)
