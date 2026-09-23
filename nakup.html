@@ -1625,7 +1625,48 @@ async function ireqPdfLines(file){
 }
 const IREQ_PDF_SKIP=/(celkem|total|summe|mezisou|součet|soucet|dph|vat|strana|page|www\.|@|ičo|dič|iban|banka|platebn|zdanitel|splatnost|nabídka č|objednávka č|podpis|razítko|dodací|adresa)/i;
 /* Odhad položek z textového řádku PDF: „… popis … množství cena celkem". */
+const IREQ_UNIT=/^(ks|kus|kusy|kusů|pcs|pc|ea|m|bm|mb|kg|g|l|ml|bal|sada|set|par|pár|role|rl)$/i;
+const ireqUnit=u=>{u=String(u||'').toLowerCase();return /^(m|bm|mb)$/.test(u)?'m':(/^(kg|g)$/.test(u)?'kg':'ks');};
+const IREQ_ORD=/^\s*\d{1,3}[.)]\s+/;                 /* „1. …", „2) …" = začátek položky */
+const IREQ_STOP=/^(celkem|mezisou|součet|soucet|dph|vat|list\s*\d|strana|page|poznámk|vyhotovil|platnost|obchodní|e-?mail|telefon|mobil|iban|bic|bankovní|www\.|se zbožím|tato předběž|cenová nabídka)/i;
+/* Čísla rozdělená mezerou jako oddělovač tisíců spoj zpět: 1 728,00 -> 1728,00. */
+function ireqMergeThousands(tok){ const out=[]; for(let i=0;i<tok.length;i++){ let t=tok[i];
+  while(i+1<tok.length && /^\d{1,3}$/.test(t) && /^\d{3}([.,]\d+)?$/.test(tok[i+1])){ t+=tok[i+1]; i++; }
+  out.push(t); } return out; }
+/* Hlavní čtení PDF: nejdřív zkusí položky číslované 1., 2., … (popis a čísla bývají
+   na dvou řádcích), jinak spadne na jednodušší řádkový odhad. */
 function ireqPdfItems(lines){
+  const byBlock=ireqPdfItemsBlocks(lines);
+  return byBlock.length ? byBlock : ireqPdfItemsFlat(lines);
+}
+/* Číslované položky: řádky jedné položky se slepí do bloku; množství a cena podle
+   jednotky — číslo těsně před ks/KS… je množství, první číslo za ním je cena. */
+function ireqPdfItemsBlocks(lines){
+  const blocks=[]; let cur=null;
+  for(const raw of lines){ const t=String(raw||'').trim(); if(!t) continue;
+    if(IREQ_ORD.test(t)){ if(cur) blocks.push(cur); cur=[t]; }
+    else if(cur){ if(IREQ_STOP.test(t)){ blocks.push(cur); cur=null; } else cur.push(t); } }
+  if(cur) blocks.push(cur);
+  const items=[];
+  for(const bl of blocks){
+    const head=bl[0].replace(IREQ_ORD,'').trim();
+    const full=bl.join(' ').replace(/\s+/g,' ');
+    const tok=ireqMergeThousands(full.split(/\s+/));
+    let qty='', price='', unit='ks', ui=-1;
+    for(let i=0;i<tok.length;i++){ if(IREQ_UNIT.test(tok[i].replace(/[.,;]$/,''))){ ui=i; unit=tok[i]; break; } }
+    if(ui>0){ qty=ireqNum(tok[ui-1]); for(let j=ui+1;j<tok.length;j++){ const n=ireqNum(tok[j]); if(n!==''&&n>0){ price=n; break; } } }
+    if(qty===''||price===''){ const nums=tok.map(ireqNum).filter(n=>n!==''&&n>0); if(nums.length>=2){ if(qty==='')qty=nums[0]; if(price==='')price=nums[1]; } }
+    let sklad='', popis=head; const hw=head.split(/\s+/);
+    if(hw.length>1 && /^\d{4,}$/.test(hw[0])){ sklad=hw[0]; popis=hw.slice(1).join(' '); }
+    if(!popis && !sklad) continue;
+    items.push({ sklad, popis:popis||('položka '+sklad), mnozstvi:(qty===''||qty<=0)?1:qty,
+      jednotka:ireqUnit(unit), cena:price===''?'':Math.round(price*100)/100,
+      mena:ireqCurrency(full)||'CZK', vyrobce:'', dodavatel:'', poznamka:'' });
+    if(items.length>=300) break;
+  }
+  return items;
+}
+function ireqPdfItemsFlat(lines){
   const numRe=/^-?\d{1,3}(?:[ . ]\d{3})*(?:[.,]\d+)?$|^-?\d+(?:[.,]\d+)?$/;
   const items=[];
   for(const raw of lines){
