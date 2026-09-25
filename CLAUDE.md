@@ -84,6 +84,17 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
 - Report (Downtimes) má sloupce `Segment`, `Reason`, `Start time`, `End time`,
   `Duration`, `Net duration`, `Comment`. Poznají se podle názvu, na pořadí nezáleží.
   Umí se načíst `.xlsx` i `.csv`.
+- **Druhý formát: report z G463** (soubor yftool). Pozná se sám podle záložek
+  `Line - <linka>` (`g463Sheets`), čte ho `g463Parse`. Struktura záložky: název
+  linky v `[1][7]`, sloupce dnů za buňkou `MTD` v jedenáctém sloupci, tabulka
+  prostojů začíná řádkem s `Kód`. Bere se jen `[min]`, řádky `[Ks]` jsou rework,
+  ne prostoj. Kategorie se mapují přes `G463_CATS`, `TPO PREPRODUCTION DP` patří
+  pod proces G463.
+  Report nedává jednotlivé prostoje, jen součet minut za den a důvod — vzniká
+  proto jeden záznam na den, linku a důvod, s příznakem `daily:true` (v tabulkách
+  se místo času ukáže „celý den"). Id je `datum_linka_kód`, takže opakovaný import
+  nic nezdvojí. Počet přestaveb se bere z řádku „CO – Počet změn" do pole `coN`,
+  jinak by changeover KPI počítalo jednu přestavbu za den.
 - Knihovna na čtení Excelu (SheetJS) se stahuje z CDN, až když někdo opravdu
   importuje. Když se nestáhne, aplikace nabídne CSV, které umí přečíst sama.
 - Časy z Excelu se počítají v UTC (`fromSerial`), aby se prostoj neposunul
