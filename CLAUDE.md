@@ -276,6 +276,9 @@ původní — přejmenoval se jen popisek.
 ### Pravidla úložiště (Storage)
 Soubor `storage.rules` v repozitáři je jen kopie pro přehled — publikuje se RUČNĚ
 v konzoli Firebase → **Storage → Rules**, což je jiné místo než pravidla Firestore.
+**Když se pravidla změní, VYPIŠ JE DAVIDOVI ROVNOU DO CHATU jako text v bloku
+ke zkopírování** — ne jako přílohu ke stažení. Chce je hodit do konzole jedním
+Ctrl+C / Ctrl+V. Platí pro `firestore.rules` i `storage.rules`.
 Cesty: `nabidky/{requestId}/…` (nákup), `tasky/{taskId}/…` (akční plán),
 `ps/{psId}/…` (problem solving), `sfw/{findingId}/…` (shopfloor walk),
 `dt/{importId}/…` (vyfocené denní reporty Gclassu). Když přidáš novou cestu, uprav soubor a napiš
