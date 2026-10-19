@@ -368,6 +368,18 @@
     .why .row{flex-wrap:wrap}.why .n{width:100%}
     .addrow input,.addrow select,.addrow button{width:100%}
   }
+  /* kontrola denního reportu z fotky: fotka vlevo, řádky vpravo */
+  .phwrap{display:grid;grid-template-columns:minmax(260px,34%) 1fr;gap:14px;align-items:start}
+  .phpics{position:sticky;top:8px;display:flex;flex-direction:column;gap:8px}
+  .phpics img{width:100%;border:1px solid var(--line);border-radius:8px;display:block;background:#fff}
+  .phtbl input,.phtbl select{width:100%;min-width:0;font-size:12.5px;padding:6px 7px}
+  .phtbl td{padding:5px 5px}
+  .phtbl tr.bad td{background:#fdf3e2}
+  @media(max-width:900px){
+    .phwrap{grid-template-columns:1fr}
+    .phpics{position:static;flex-direction:row;overflow-x:auto}
+    .phpics img{max-width:70vw}
+  }
   .kindpick{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-bottom:14px}
   .kind{display:flex;align-items:center;gap:11px;text-align:left;background:#fff;border:1px solid var(--line);
     border-radius:10px;padding:13px 15px;font-size:13px;color:var(--text)}
@@ -982,7 +994,7 @@ const PROC_MATCH = [
   ['IMM',   /(^|[^a-z])imm([^a-z]|$)|vstřik|vstrik/i],
   ['SLUSH', /slush/i],
   ['FOAM',  /foam|pěn|pen(a|y|ov)|scoring|skór|skor(ing)?/i],
-  ['G463',  /g\s*-?\s*463|gclass|g\s*class|prefix|tpo\s*prepro/i],
+  ['G463',  /g\s*-?\s*463|gclass|g\s*class|prefix|tpo\s*prepro|tpo\s*mc|3\s*con/i],
   ['GBDP',  /glove\s*box|glovebox|(^|[^a-z])gb([^a-z]|$)|decopart|deco\s*part|(^|[^a-z])dp([^a-z]|$)/i],
   ['ASSY',  /assembly|montáž|montaz|final|inspection|mfa|sk\s*-?336|po\s*-?45|ov\s*-?5\d|ov\s*-?6\d|w\s*-?206|m\s*-?beam|mbeam|eol/i]
 ];
@@ -1372,7 +1384,8 @@ const EV_COLS = [
 ];
 let evSort={k:'date', dir:'desc'};
 const newImp = kind => ({kind:kind||'dt', step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null,
-                         aoa:null, headers:[], headRow:0, map:{}, month:'', src:'', lines:[]});
+                         aoa:null, headers:[], headRow:0, map:{}, month:'', src:'', lines:[],
+                         imgs:[], urls:[], notes:[], ocr:''});
 let imp=newImp('dt');
 let toastMsg=null, toastKind='';
 
@@ -1577,11 +1590,158 @@ function reparseScrap(){
   imp.err = res.rows.length ? '' : 'Z těchhle sloupců nevznikl ani jeden použitelný řádek. Zkontroluj přiřazení, případně doplň měsíc.';
 }
 
+/* ---------- denní report z fotky: nahrání a kontrola ---------- */
+const PHOTO_MAX = 8*1024*1024;        // 8 MB na obrázek, než se zmenší
+async function takePhotos(list){
+  if(!canImportDt()) return;
+  const files=[...(list||[])].filter(f=>/^image\//i.test(f.type||''));
+  if(!files.length){ imp.err='Tohle není obrázek. Přetáhni fotku nebo snímek obrazovky reportu.'; render(); return; }
+  imp.err=''; imp.prog='Připravuji fotky…'; render();
+  for(const f0 of files){
+    if(f0.size>PHOTO_MAX){ toast(`„${f0.name}" je větší než 8 MB, přeskakuji.`,'err'); continue; }
+    const f=await shrinkPhoto(f0);
+    imp.imgs.push(f); imp.urls.push(URL.createObjectURL(f));
+  }
+  if(!imp.imgs.length){ imp.prog=''; imp.err='Ani jedna fotka se nedala použít.'; render(); return; }
+  imp.name = imp.imgs.map(f=>f.name).join(', ');
+  imp.rows = imp.rows || [];
+  imp.step=2; imp.prog='';
+  render();
+  await ocrPhotos();
+}
+/* Fotka se zmenší, ale ne moc — čtečka potřebuje ostrý text. */
+async function shrinkPhoto(f){
+  try{
+    const bmp=await createImageBitmap(f,{imageOrientation:'from-image'});
+    const sc=Math.min(1, 2200/Math.max(bmp.width,bmp.height));
+    if(sc>=1 && f.size<=2.5*1024*1024){ bmp.close&&bmp.close(); return f; }
+    const w=Math.round(bmp.width*sc), h=Math.round(bmp.height*sc);
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    cv.getContext('2d').drawImage(bmp,0,0,w,h);
+    bmp.close&&bmp.close();
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.9));
+    if(!blob||blob.size>=f.size) return f;
+    return new File([blob], f.name.replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg'});
+  }catch(e){ return f; }
+}
+/* Předvyplnění ze čtečky. Když se nestáhne nebo nic nenajde, nevadí —
+   mřížka se vyplní ručně a import jede dál. */
+async function ocrPhotos(){
+  imp.prog='Stahuji čtečku textu… (poprvé to chvíli trvá)'; render();
+  let T;
+  try{ T=await loadOcr(); }
+  catch(e){
+    imp.prog=''; imp.ocr='off';
+    imp.notes=['Čtečku textu se nepodařilo stáhnout, takže se nic nepředvyplnilo. Řádky napiš ručně — jde to taky.'];
+    render(); return;
+  }
+  let worker;
+  try{
+    worker = await T.createWorker('ces', 1, {corePath:OCR_CORE, langPath:OCR_LANG,
+      logger:m=>{ if(m&&m.status==='recognizing text'){
+        imp.prog=`Čtu fotku ${(imp.ocrI||0)+1} z ${imp.imgs.length}… ${Math.round((m.progress||0)*100)} %`; render(); } }});
+    await worker.setParameters({tessedit_pageseg_mode:'6', preserve_interword_spaces:'1'});
+    const all=[], notes=[];
+    for(let i=0;i<imp.imgs.length;i++){
+      imp.ocrI=i; imp.prog=`Čtu fotku ${i+1} z ${imp.imgs.length}…`; render();
+      const {data}=await worker.recognize(imp.urls[i]);
+      const res=photoParse(data.text);
+      res.rows.forEach(r=>{ r.img=i; all.push(r); });
+      notes.push(...res.notes);
+    }
+    await worker.terminate();
+    imp.rows = all.concat(imp.rows||[]);
+    imp.notes = notes;
+    imp.ocr = all.length ? 'ok' : 'empty';
+    if(!all.length) imp.notes=['Ze čtečky nevypadl žádný prostoj ve tvaru „popis (20 min)". Napiš řádky ručně.'];
+  }catch(e){
+    imp.ocr='off';
+    imp.notes=['Čtečka textu skončila chybou: '+((e&&e.message)||e)+'. Řádky napiš ručně.'];
+  }
+  imp.prog=''; render();
+}
+/* Rozepsané řádky z mřížky do paměti, ať je překreslení nesmaže. */
+function collectPhoto(){
+  if(imp.kind!=='photo' || !imp.rows) return;
+  const g=(i,k)=>{ const e=document.getElementById(`ph-${k}-${i}`); return e?(e.type==='checkbox'?e.checked:e.value.trim()):undefined; };
+  imp.rows.forEach((r,i)=>{
+    const d=g(i,'date'), sg=g(i,'seg'), tx=g(i,'text'), mn=g(i,'min'), gr=g(i,'group'), co=g(i,'co');
+    if(d!==undefined) r.date=d;
+    if(sg!==undefined) r.seg=sg;
+    if(tx!==undefined) r.text=tx;
+    if(mn!==undefined) r.min=Number(mn)||0;
+    if(gr!==undefined) r.group=gr;
+    if(co!==undefined) r.co=co;
+  });
+}
+const photoBad = r => !r.date || !r.seg || !r.text || !(r.min>0);
+
 /* ===== zápis importu ===== */
 async function runImport(){
   if(imp.kind==='scrap') return runImportScrap();
   if(imp.kind==='tasks') return runImportTasks();
+  if(imp.kind==='photo') return runImportPhoto();
   return runImportDt();
+}
+/* Zápis prostojů z denního reportu. Jde do stejné kolekce jako Excel import,
+   takže se to rovnou propíše do KPI, Prostojů, Parety i Přestaveb.
+   Záznam má src:'foto', aby šel odlišit, a vlastní pevné id, takže opakované
+   nahrání téže fotky nic nezdvojí. */
+async function runImportPhoto(){
+  collectPhoto();
+  const rows=(imp.rows||[]).filter(r=>!photoBad(r));
+  if(!rows.length){ imp.err='Ani jeden řádek není hotový — chybí datum, linka, popis nebo minuty.'; render(); return; }
+  const dates=[...new Set(rows.map(r=>r.date))].sort();
+  try{
+    /* 1) fotky do úložiště jako doklad */
+    const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+    const shots=[];
+    for(let i=0;i<imp.imgs.length;i++){
+      imp.prog=`Nahrávám fotku ${i+1} z ${imp.imgs.length}…`; render();
+      const f=imp.imgs[i];
+      const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-70);
+      const path=`dt/${stamp}/${i}_${safe}`;
+      const st=sref(storage,path);
+      await uploadBytes(st,f,{contentType:f.type||'image/jpeg'});
+      shots.push({name:f.name, path, url:await getDownloadURL(st)});
+    }
+    /* 2) prostoje po dávkách */
+    for(let i=0;i<rows.length;i+=400){
+      const b=writeBatch(db);
+      rows.slice(i,i+400).forEach(r=>{
+        const sec=Math.round(r.min*60);
+        const shot=shots[r.img||0]||null;
+        const id=`${r.date}_${slug(r.seg)}_${slug(r.text).slice(0,40)}`;
+        b.set(doc(db,'downtimes',id), {
+          seg:r.seg, reason:r.text, group:r.group||photoGroup(r.text), co:!!r.co,
+          start:r.date+'T00:00:00', end:'', date:r.date, shift:'',
+          sec, net:sec, comment:'', daily:true, src:'foto',
+          photo: shot ? {name:shot.name, path:shot.path, url:shot.url} : null,
+          by:me.name, at:new Date().toISOString()});
+      });
+      await b.commit();
+      imp.prog=`Zapisuji prostoje… ${Math.min(i+400,rows.length)} z ${rows.length}`; render();
+    }
+    /* 3) denní souhrny se přepočítají z databáze, ne z fotky */
+    for(let i=0;i<dates.length;i++){
+      const d=dates[i];
+      imp.prog=`Počítám souhrn za ${dayCz(d)} (${i+1} z ${dates.length})…`; render();
+      const qs=await getDocs(query(collection(db,'downtimes'), where('date','==',d)));
+      await setDoc(doc(db,'dt_days',d), Object.assign({date:d, updated:new Date().toISOString()},
+        aggregate(qs.docs.map(x=>x.data()))));
+    }
+    await addDoc(collection(db,'dt_imports'), {kind:'prostoje z fotky', file:imp.name,
+      rows:rows.length, bad:(imp.rows||[]).length-rows.length,
+      from:dates[0], to:dates[dates.length-1], days:dates.length,
+      at:new Date().toISOString(), by:me.uid, byName:me.name});
+    imp.done={rows:rows.length, days:dates.length, from:dates[0], to:dates[dates.length-1],
+              skip:(imp.rows||[]).length-rows.length};
+    imp.step=3; imp.prog='';
+    loaded=false; evLoaded=''; mgLoaded=false;
+    await loadDays(true);
+    toast('Zapsáno '+rows.length+' prostojů z reportu.','ok');
+  }catch(e){ imp.prog=''; imp.err=writeHint(e); }
+  render();
 }
 async function runImportScrap(){
   const list=imp.rows||[];
@@ -1802,6 +1962,118 @@ function trend(proc, only){
     <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="#c8d3e0"/></svg>`;
 }
 
+
+/* ==========================================================
+   DENNÍ REPORT Z FOTKY (Gclass)
+   Report chodí jako obrázek, ne jako Excel. Čtečka textu (Tesseract)
+   se stáhne z CDN, až když je potřeba — stejně jako SheetJS u Excelu.
+   DŮLEŽITÉ: čtečka je jen PŘEDVYPLNĚNÍ. Na vyfocené tabulce spolehlivě
+   nepozná, ke které lince který prostoj patří, takže se výsledek VŽDY
+   ukazuje ke kontrole vedle fotky a zapisuje se až po potvrzení.
+   Když se čtečka nestáhne, mřížka se otevře prázdná a vyplní se ručně —
+   import musí fungovat i bez ní.
+   ========================================================== */
+const OCR_JS   = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+const OCR_CORE = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1';
+const OCR_LANG = 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/ces@1.0.0/4.0.0';
+let ocrP=null;
+function loadOcr(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(ocrP) return ocrP;
+  ocrP = new Promise((res,rej)=>{
+    const sc=document.createElement('script');
+    sc.src=OCR_JS;
+    sc.onload=()=>window.Tesseract?res(window.Tesseract):rej(new Error('Čtečka se načetla, ale nehlásí se.'));
+    sc.onerror=()=>{ ocrP=null; rej(new Error('Čtečku textu se nepodařilo stáhnout.')); };
+    document.head.appendChild(sc);
+  });
+  return ocrP;
+}
+/* Skupinu prostoje poznáme z českého textu. Co nepoznáme, zůstane
+   „Nezařazeno" a v kontrole se to přepne rozbalovátkem. */
+const PHOTO_GROUPS = [
+  [/porucha|zaseknut|zasekl|chyba\s+komunikac|nefunguj|havár|vypadl|prask|rozbit|závad|spadl|kolize|alarm|robot/i, 'Porucha stroje'],
+  [/výměn|seříz|serid|nastaven|čištěn|cisten|přestavb|změna\s+verze|changeover|trysk|teflon|forma|nástroj/i, 'Přestavba a seřízení'],
+  [/vzduch|energi|elektr|tlak|vod[ay]|chlaz|technick|kompresor|výpadek\s+proud/i, 'Technický prostoj'],
+  [/materiál|material|díl[ůy]|chybí\s+díl|logistik|palet|obal|balen|dodávk/i, 'Materiál a logistika'],
+  [/kvalit|zmetk|neshod|reklamac|vada\s+dílu/i, 'Kvalita'],
+  [/personál|operátor|přestávk|školen|chybí\s+lid|obsluh/i, 'Lidé a přestávky'],
+  [/plán|organizac|čekání|nebyl[ao]?\s+co/i, 'Organizace výroby']
+];
+function photoGroup(text){
+  const t=String(text||'');
+  for(const [re,g] of PHOTO_GROUPS) if(re.test(t)) return g;
+  return UNKNOWN;
+}
+/* Přestavba se předškrtne jen u jednoznačných případů. Obyčejná „výměna"
+   (teflonu, řemene, dílu) je oprava, ne přehození výroby — kdyby se počítala,
+   nafoukla by changeover KPI. Co je opravdu přestavba, se zaškrtne v kontrole. */
+const photoIsCo = t => /changeover|přestavb|prestavb|změna\s*verze|zmena\s*verze|výměna\s*(nástroje|formy|typu)|vymena\s*(nastroje|formy|typu)/i.test(String(t||''));
+
+/* Linka z fotky se napáruje na linku, která už v datech je — jinak by vznikla
+   druhá linka s jiným názvem a KPI by se rozdvojilo. */
+const lineKey = x => slug(x).toLowerCase().replace(/[^a-z0-9]/g,'');
+function photoLine(raw){
+  const want=lineKey(raw);
+  if(!want) return '';
+  const known=psLineOpts().map(l=>l.label);
+  /* „Prefix LHEOL" ze čtečky musí trefit „Prefix LH EOL" z dat — proto se
+     při porovnání zahazují mezery i podtržítka. */
+  const exact=known.find(l=>lineKey(l)===want);
+  if(exact) return exact;
+  const part=known.find(l=>{ const k=lineKey(l);
+    return k.length>3 && (k.includes(want)||want.includes(k)); });
+  return part || String(raw||'').trim();
+}
+
+/* Z textu, který vylezl ze čtečky, poskládáme návrh řádků.
+   Hledá se: „… ze dne DD.MM.RRRR" → datum, název linky na řádku
+   a položky prostoje ve tvaru „- popis (N min)". */
+function photoParse(text){
+  const lines=String(text||'').split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const rows=[], notes=[];
+  let date='', seg='', total=null;
+  const LINE_RE=/^\|?\s*((?:assy|prefix|tpo|imm|slush|gclass|g\s*-?463)[^|0-9]{0,28})/i;
+  for(const ln of lines){
+    const dm=ln.match(/ze\s+dne\s+(\d{1,2})\s*[.\/]\s*(\d{1,2})\s*[.\/]\s*(\d{4})/i);
+    if(dm){ date=`${dm[3]}-${pad2(+dm[2])}-${pad2(+dm[1])}`; seg=''; total=null; continue; }
+    const lm=ln.match(LINE_RE);
+    if(lm){
+      seg=photoLine(lm[1]);
+      /* Součet „Prostoje (min)" = poslední celé číslo v řádku, když se odmažou
+         procenta a minuty v závorkách — ty patří k položce, ne k součtu. */
+      const nums=ln.replace(/\(\s*\d+\s*min[^)]*\)/gi,' ')
+                   .replace(/\d+(?:[,.]\d+)?\s*%/g,' ').match(/\b\d{1,4}\b/g);
+      total = nums && nums.length ? Number(nums[nums.length-1]) : null;
+    }
+    /* Položka prostoje: „- popis (20 min)". Když je na stejném řádku i název
+       linky a čísla z tabulky, bereme jen část za pomlčkou. */
+    const im = ln.match(/[-–—•]\s*([^-–—•()|]{3,90}?)\s*\(\s*(\d{1,4})\s*min[^)]*\)/i)
+            || ln.match(/^\s*([^()|]{3,90}?)\s*\(\s*(\d{1,4})\s*min[^)]*\)/i);
+    if(im && im[1].trim().length>2){
+      const txt=im[1].replace(/^[-–—•\s]+/,'').trim();
+      rows.push({date, seg, text:txt, min:Number(im[2]),
+                 group:photoGroup(txt), co:photoIsCo(txt), total});
+    }
+  }
+  /* Detail bývá ve vyfoceném řádku dřív než název linky. Když je na ten den
+     v reportu jen jedna linka, doplníme ji i k řádkům, kde chybí. */
+  for(const d of [...new Set(rows.map(r=>r.date))]){
+    const mine=rows.filter(r=>r.date===d);
+    const segs=[...new Set(mine.map(r=>r.seg).filter(Boolean))];
+    if(segs.length===1) mine.forEach(r=>{ if(!r.seg) r.seg=segs[0]; });
+  }
+  /* kontrolní součet: sedí součet položek proti údaji „Prostoje (min)"? */
+  const byKey={};
+  for(const r of rows){ const k=r.date+'|'+r.seg; (byKey[k]=byKey[k]||[]).push(r); }
+  for(const [k,list] of Object.entries(byKey)){
+    const t=list[0].total;
+    if(t==null) continue;
+    const sum=list.reduce((a,r)=>a+(r.min||0),0);
+    if(sum!==t) notes.push(`${dateCz(list[0].date)} · ${list[0].seg||'?'}: v reportu je ${t} min, z položek vychází ${sum} min`);
+  }
+  return {rows, notes};
+}
 
 /* ==========================================================
    PŘESTAVBY (changeover)
@@ -4048,20 +4320,27 @@ function importView(){
   const s=imp;
   let body='';
   if(s.step===1){
-    const isScrap = s.kind==='scrap', isTasks = s.kind==='tasks';
+    const isScrap = s.kind==='scrap', isTasks = s.kind==='tasks', isPhoto = s.kind==='photo';
     body=`<div class="body">
       <div class="kindpick">
         <button class="kind ${s.kind==='dt'?'on':''}" data-a="imp-kind" data-v="dt">
           <span class="i">⏱️</span><span><b>Prostoje</b><i>report ze Symesticu i z G463 — pozná se sám</i></span></button>
+        <button class="kind ${isPhoto?'on':''}" data-a="imp-kind" data-v="photo">
+          <span class="i">📷</span><span><b>Denní report z fotky</b><i>Gclass — obrázek místo Excelu</i></span></button>
         <button class="kind ${s.kind==='tasks'?'on':''}" data-a="imp-kind" data-v="tasks">
           <span class="i">📋</span><span><b>Akční plán</b><i>úkoly z Excelu ME TASK TRACKER</i></span></button>
         ${canImport()?`<button class="kind ${isScrap?'on':''}" data-a="imp-kind" data-v="scrap">
           <span class="i">🧾</span><span><b>Scrap</b><i>zmetky v eurech proti tržbám</i></span></button>`:''}
       </div>
       <div class="drop" id="drop">
-        <div class="big">Přetáhni sem ${isScrap?'Excel se scrapem':(isTasks?'Excel s akčním plánem':'report prostojů')}</div>
-        <div style="margin:8px 0">nebo <label class="filebtn">Vybrat soubor<input type="file" id="file" accept=".xlsx,.xls,.csv"></label></div>
-        <div style="font-size:12px">Formáty <b>.xlsx</b> a <b>.csv</b> · soubor se zpracuje přímo v prohlížeči, nikam se neposílá.</div>
+        <div class="big">Přetáhni sem ${isScrap?'Excel se scrapem':(isTasks?'Excel s akčním plánem':(isPhoto?'fotky denního reportu':'report prostojů'))}</div>
+        <div style="margin:8px 0">nebo ${isPhoto
+          ? `<label class="btn-cam">📷 Vyfotit<input type="file" id="imp-cam" accept="image/*" capture="environment" multiple></label>
+             <label class="filebtn" style="margin-left:6px">Vybrat obrázky<input type="file" id="imp-img" accept="image/*" multiple></label>`
+          : `<label class="filebtn">Vybrat soubor<input type="file" id="file" accept=".xlsx,.xls,.csv"></label>`}</div>
+        <div style="font-size:12px">${isPhoto
+          ? 'Formáty <b>.jpg</b> a <b>.png</b> · klidně víc dnů najednou · fotka se zpracuje v prohlížeči'
+          : 'Formáty <b>.xlsx</b> a <b>.csv</b> · soubor se zpracuje přímo v prohlížeči, nikam se neposílá.'}</div>
       </div>
       ${s.prog?`<div class="notice" style="margin-top:12px">${esc(s.prog)}</div>`:''}
       ${s.err?`<div class="notice warn" style="margin-top:12px">${esc(s.err)}</div>`:''}
@@ -4071,6 +4350,14 @@ function importView(){
         a můžeš je přiřadit ručně.</div>
       <div class="notice" style="margin-top:8px">Když v souboru není datum ani měsíc, v dalším kroku ho jednou vybereš.
         Opakovaný import stejného měsíce data přepíše, nezdvojí je.</div>`
+      :isPhoto?`
+      <div class="notice" style="margin-top:12px"><b>Jak na to:</b> vyfoť nebo vystřihni denní report výroby a přetáhni ho sem.
+        Aplikace se z něj pokusí vyčíst datum, linku a položky prostojů ve tvaru <b>„popis (20 min)"</b>
+        a předvyplní ti je. <b>Pak si to projdeš vedle fotky a opravíš</b> — zapíše se až to, co potvrdíš.</div>
+      <div class="notice warn" style="margin-top:8px">Čtení z obrázku není spolehlivé — hlavně to, ke které lince prostoj patří.
+        Ber to jako opisovací pomůcku, ne jako hotovou věc. Když se čtečka nestáhne, mřížku vyplníš ručně a import jede dál.</div>
+      <div class="notice" style="margin-top:8px">Stejný prostoj se nezaloží dvakrát — klíč je z data, linky a popisu.
+        Fotka se uloží jako doklad a zůstane u těch řádků.</div>`
       :`
       <div class="notice" style="margin-top:12px"><b>Jak na to:</b> v Symesticu vyjeď report <b>Downtimes</b> za období → export do Excelu → soubor přetáhni sem.
         Sloupce Segment, Reason, Start time, End time, Duration, Net duration a Comment se poznají samy.</div>
@@ -4141,6 +4428,60 @@ function importView(){
       <button class="btn-ok" data-a="imp-run" ${(s.prog||!rows.length)?'disabled':''}>${s.prog?'Importuji…':'Importovat '+rows.length.toLocaleString('cs-CZ')+' řádků'}</button>
     </div>`;
   }
+  if(s.step===2 && s.kind==='photo'){
+    const rows=s.rows||[];
+    const ok=rows.filter(r=>!photoBad(r)), bad=rows.filter(photoBad);
+    const lineOpts=psLineOpts().map(l=>l.label);
+    const grp=[...PAR_GROUPS];
+    /* souhrn po dnech a linkách, ať je vidět, co se zapíše */
+    const sum={};
+    ok.forEach(r=>{ const k=r.date+'|'+r.seg; (sum[k]=sum[k]||{date:r.date,seg:r.seg,min:0,n:0});
+      sum[k].min+=r.min; sum[k].n++; });
+    body=`<div class="body">
+      ${s.prog?`<div class="notice">${esc(s.prog)}</div>`:''}
+      ${s.err?`<div class="notice warn">${esc(s.err)}</div>`:''}
+      ${(s.notes||[]).length?`<div class="notice warn">${s.notes.map(esc).join('<br>')}</div>`:''}
+      ${s.ocr==='ok'?`<div class="notice">Čtečka předvyplnila ${rows.length} ${rows.length===1?'řádek':(rows.length<5?'řádky':'řádků')}.
+        <b>Projdi je vedle fotky a oprav, co nesedí</b> — hlavně linku. Zapíše se jen to, co potvrdíš.</div>`:''}
+      <div class="phwrap">
+        <div class="phpics">
+          ${(s.urls||[]).map((u,i)=>`<a href="${u}" target="_blank" rel="noopener" title="Otevřít ve velkém">
+            <img src="${u}" alt="Denní report ${i+1}"></a>`).join('')}
+          <label class="filebtn" style="display:block;text-align:center;margin-top:8px">+ Přidat další fotku
+            <input type="file" id="imp-img2" accept="image/*" multiple></label>
+        </div>
+        <div class="phrows">
+          <div class="tblwrap"><table class="phtbl">
+            <thead><tr><th>Datum</th><th>Linka</th><th>Co se stalo</th><th>Min</th><th>Skupina</th><th>Přest.</th><th></th></tr></thead>
+            <tbody>${rows.map((r,i)=>`
+              <tr class="${photoBad(r)?'bad':''}">
+                <td data-label="Datum"><input id="ph-date-${i}" type="date" value="${esc(r.date||'')}"></td>
+                <td data-label="Linka"><input id="ph-seg-${i}" list="ph-lines" value="${esc(r.seg||'')}" placeholder="např. Prefix LH EOL"></td>
+                <td data-label="Co se stalo"><input id="ph-text-${i}" value="${esc(r.text||'')}" placeholder="chyba komunikace stroje"></td>
+                <td data-label="Min"><input id="ph-min-${i}" type="number" min="1" step="1" value="${r.min||''}" style="min-width:64px"></td>
+                <td data-label="Skupina"><select id="ph-group-${i}">${grp.map(g=>`<option ${((r.group||UNKNOWN)===g)?'selected':''}>${esc(g)}</option>`).join('')}</select></td>
+                <td data-label="Přestavba"><input id="ph-co-${i}" type="checkbox" ${r.co?'checked':''} style="width:18px;height:18px"></td>
+                <td data-label=""><button class="btn-del" style="padding:3px 9px;font-size:11px" data-a="ph-del" data-v="${i}">Smazat</button></td>
+              </tr>`).join('') || `<tr><td colspan="7" class="empty">Zatím žádný řádek — přidej ho tlačítkem dole.</td></tr>`}
+            </tbody></table></div>
+          <datalist id="ph-lines">${lineOpts.map(l=>`<option>${esc(l)}</option>`).join('')}</datalist>
+          <div style="padding:10px 0"><button class="btn-ghost" data-a="ph-add">+ Přidat řádek</button></div>
+        </div>
+      </div>
+      ${Object.keys(sum).length?`<div class="notice" style="margin-top:4px"><b>Zapíše se:</b>
+        ${Object.values(sum).sort((a,b)=>a.date.localeCompare(b.date)||a.seg.localeCompare(b.seg,'cs'))
+          .map(x=>`${dateCz(x.date)} · ${esc(x.seg)} — <b>${x.min} min</b> (${x.n})`).join(' &nbsp;·&nbsp; ')}</div>`:''}
+      ${bad.length?`<div class="notice warn" style="margin-top:8px">${bad.length} ${bad.length===1?'řádek nemá':'řádků nemá'}
+        vyplněné datum, linku, popis nebo minuty — ${bad.length===1?'ten se':'ty se'} nezapíše. Dopiš ${bad.length===1?'ho':'je'}, nebo smaž.</div>`:''}
+    </div>
+    <div class="foot">
+      <button class="btn-ghost" data-a="imp-reset">Zpět</button>
+      ${s.prog?`<span class="muted">${esc(s.prog)}</span>`:''}
+      <span style="margin-left:auto"></span>
+      <button class="btn-ok" data-a="imp-run" ${(s.prog||!ok.length)?'disabled':''}>${
+        s.prog?'Zapisuji…':'Zapsat '+ok.length+' '+(ok.length===1?'prostoj':(ok.length<5?'prostoje':'prostojů'))}</button>
+    </div>`;
+  }
   if(s.step===2 && s.kind==='tasks'){
     const rows=s.rows||[];
     const bezTerm=rows.filter(r=>!r.dueOrig).length;
@@ -4189,7 +4530,7 @@ function importView(){
       </div>
     </div>`;
   }
-  if(s.step===2 && s.kind!=='scrap' && s.kind!=='tasks'){
+  if(s.step===2 && s.kind!=='scrap' && s.kind!=='tasks' && s.kind!=='photo'){
     const rows=s.rows||[];
     const dates=[...new Set(rows.map(r=>r.date))].sort();
     const segs=[...new Set(rows.map(r=>r.seg))].sort((a,b)=>a.localeCompare(b,'cs'));
@@ -4244,6 +4585,10 @@ function importView(){
         : s.kind==='scrap'
         ? `Uloženo <b>${(d.rows||0).toLocaleString('cs-CZ')}</b> řádků scrapu za ${d.days} ${d.days===1?'měsíc':(d.days<5?'měsíce':'měsíců')}
            (${monthCz(d.from||'')} – ${monthCz(d.to||'')}), celkem ${eur(d.scrapEur||0)}.`
+        : s.kind==='photo'
+        ? `Zapsáno <b>${(d.rows||0)}</b> ${(d.rows===1?'prostoj':(d.rows<5?'prostoje':'prostojů'))} z denního reportu
+           za ${d.days} ${d.days===1?'den':(d.days<5?'dny':'dní')} (${dayCz(d.from||'')} – ${dayCz(d.to||'')}).
+           ${d.skip?`${d.skip} nedokončených řádků jsem vynechal.`:''} Fotka zůstala uložená jako doklad.`
         : `Uloženo <b>${(d.rows||0).toLocaleString('cs-CZ')}</b> prostojů za ${d.days} dní (${dayCz(d.from||'')} – ${dayCz(d.to||'')}).`}</div>
       <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
         ${s.kind==='tasks'
@@ -4251,14 +4596,14 @@ function importView(){
           : s.kind==='scrap'
           ? `<a class="btn-primary" style="display:inline-block;padding:8px 14px;border-radius:var(--radius);text-decoration:none;font-size:12px;font-weight:600" href="${SCRAP_URL}">Otevřít Quality loss report ↗</a>`
           : `<button class="btn-primary" data-a="tab" data-v="dash">Zobrazit přehled</button>`}
-        <button class="btn-ghost" data-a="imp-reset">Importovat další soubor</button>
+        <button class="btn-ghost" data-a="imp-reset">${s.kind==='photo'?'Nahrát další report':'Importovat další soubor'}</button>
       </div>
     </div>`;
   }
   const stepsHtml = `<ul class="steps">${[['1','Vybrat a nahrát'],['2','Kontrola'],['3','Hotovo']].map(([n,t],i)=>{
     const idx=i+1; return `<li class="${idx===s.step?'on':''} ${idx<s.step?'done':''}"><b>${idx<s.step?'✓':n}</b>${t}</li>`;}).join('')}</ul>`;
   return stepsHtml + `
-  <div class="panel"><h2>Import — ${s.kind==='scrap'?'scrap':(s.kind==='tasks'?'akční plán':(s.src==='g463'?'prostoje z G463':'prostoje'))}<span class="right">krok ${s.step} ze 3</span></h2>${body}</div>
+  <div class="panel"><h2>Import — ${s.kind==='scrap'?'scrap':(s.kind==='tasks'?'akční plán':(s.kind==='photo'?'denní report z fotky':(s.src==='g463'?'prostoje z G463':'prostoje')))}<span class="right">krok ${s.step} ze 3</span></h2>${body}</div>
   <div class="panel">
     <h2>Historie importů</h2>
     <div class="tblwrap"><table>
@@ -4458,15 +4803,21 @@ function bind(){
 
   const fi=document.getElementById('file');
   if(fi) fi.onchange=()=>{ if(fi.files&&fi.files[0]) takeFile(fi.files[0]); };
+  ['imp-cam','imp-img','imp-img2'].forEach(id=>{ const el=document.getElementById(id);
+    if(el) el.onchange=()=>{ if(el.files&&el.files.length) takePhotos(el.files); }; });
   const dz=document.getElementById('drop');
   if(dz){
     ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('hot');}));
     ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('hot');}));
-    dz.addEventListener('drop',e=>{ const file=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(file) takeFile(file); });
+    dz.addEventListener('drop',e=>{
+      const fl=e.dataTransfer&&e.dataTransfer.files; if(!fl||!fl.length) return;
+      if(imp.kind==='photo') takePhotos(fl); else takeFile(fl[0]);
+    });
   }
 }
 async function act(a,v){
   collectPsNew();
+  if(imp.kind==='photo' && imp.step===2 && a!=='ph-del' && a!=='ph-add') collectPhoto();
   switch(a){
     case 'tab':
       engTab=v;
@@ -4619,8 +4970,22 @@ async function act(a,v){
       for(const l of miss) await createProblem(v, l, l.repeated?'opakovaný problém':'výkon pod prahem');
       openPs=null; render(); return;
     }
-    case 'imp-reset': imp=newImp(imp.kind); break;
-    case 'imp-kind': imp=newImp(v==='scrap' && !canImport() ? 'dt' : v); break;
+    case 'imp-reset':
+      (imp.urls||[]).forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(e){} });
+      imp=newImp(imp.kind); break;
+    case 'ph-add':
+      collectPhoto();
+      imp.rows=(imp.rows||[]).concat({date:(imp.rows&&imp.rows.length?imp.rows[imp.rows.length-1].date:today()),
+        seg:(imp.rows&&imp.rows.length?imp.rows[imp.rows.length-1].seg:''), text:'', min:0,
+        group:UNKNOWN, co:false, img:0});
+      break;
+    case 'ph-del':
+      collectPhoto();
+      imp.rows=(imp.rows||[]).filter((_,i)=>i!==Number(v));
+      break;
+    case 'imp-kind':
+      (imp.urls||[]).forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(e){} });
+      imp=newImp(v==='scrap' && !canImport() ? 'dt' : v); break;
     case 'imp-run':
       if(!canImportDt()) return;
       if(imp.kind==='scrap' && !canImport()){ toast('Scrap nahrává správce.','err'); return; }

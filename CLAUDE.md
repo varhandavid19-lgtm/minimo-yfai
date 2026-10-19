@@ -99,6 +99,27 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   se místo času ukáže „celý den"). Id je `datum_linka_kód`, takže opakovaný import
   nic nezdvojí. Počet přestaveb se bere z řádku „CO – Počet změn" do pole `coN`,
   jinak by changeover KPI počítalo jednu přestavbu za den.
+- **Třetí formát: denní report výroby z Gclassu jako OBRÁZEK.** Chodí vyfocený,
+  ne jako Excel. Volba „📷 Denní report z fotky" v Importu (`imp.kind==='photo'`).
+  - Čtečka textu (Tesseract) se stahuje z CDN až při použití, stejně jako SheetJS.
+    Je to POUZE PŘEDVYPLNĚNÍ — na vyfocené tabulce spolehlivě nepozná, ke které
+    lince prostoj patří. Výsledek se proto vždy ukazuje ke kontrole vedle fotky
+    a zapisuje se až po potvrzení. **Nikdy z toho nedělej automatický import.**
+  - Když se čtečka nestáhne nebo nic nenajde, mřížka se otevře prázdná a vyplní
+    se ručně. Import musí fungovat i bez čtečky — nerozbíjej to.
+  - `photoParse` hledá „… ze dne DD.MM.RRRR" → datum, název linky na řádku
+    a položky „- popis (N min)". Součet „Prostoje (min)" slouží jako kontrola:
+    když se nerovná součtu položek, napíše se to nad mřížku.
+  - Linka se páruje na linku, která už v datech je (`photoLine`, porovnání bez
+    mezer a diakritiky) — jinak by vznikla druhá linka s jiným názvem a KPI by
+    se rozdvojilo. „Prefix LHEOL" tak trefí „Prefix LH EOL".
+  - Skupina důvodu se hádá z českého textu (`PHOTO_GROUPS`) a jde přepnout
+    rozbalovátkem. Příznak přestavby (`photoIsCo`) se předškrtne jen u
+    jednoznačných případů (changeover, výměna nástroje/formy/typu) — obyčejná
+    „výměna teflonu" je oprava a nafoukla by changeover KPI.
+  - Zapisuje se do `downtimes` s `src:'foto'`, `daily:true` a pevným id
+    `datum_linka_popis`, takže opakované nahrání téže fotky nic nezdvojí.
+    Fotka se uloží do `dt/<časRazítko>/` a zůstane u záznamů jako doklad.
 - Knihovna na čtení Excelu (SheetJS) se stahuje z CDN, až když někdo opravdu
   importuje. Když se nestáhne, aplikace nabídne CSV, které umí přečíst sama.
 - Časy z Excelu se počítají v UTC (`fromSerial`), aby se prostoj neposunul
@@ -256,7 +277,8 @@ původní — přejmenoval se jen popisek.
 Soubor `storage.rules` v repozitáři je jen kopie pro přehled — publikuje se RUČNĚ
 v konzoli Firebase → **Storage → Rules**, což je jiné místo než pravidla Firestore.
 Cesty: `nabidky/{requestId}/…` (nákup), `tasky/{taskId}/…` (akční plán),
-`ps/{psId}/…` (problem solving). Když přidáš novou cestu, uprav soubor a napiš
+`ps/{psId}/…` (problem solving), `sfw/{findingId}/…` (shopfloor walk),
+`dt/{importId}/…` (vyfocené denní reporty Gclassu). Když přidáš novou cestu, uprav soubor a napiš
 Davidovi, ať ji publikuje.
 
 ## Modul Shopfloor walk (`shopfloor.html`)
