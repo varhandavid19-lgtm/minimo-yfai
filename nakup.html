@@ -393,14 +393,16 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <script type="module">
-import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword }
-  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
   onSnapshot, query, orderBy, serverTimestamp, runTransaction }
-  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 import { getStorage, ref as sref, uploadBytes, getDownloadURL, deleteObject }
-  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
+  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider }
+  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 
 /* ====== FIREBASE KONFIGURACE (David / projekt nakupni-pozadavky) ====== */
 const firebaseConfig = {
@@ -416,6 +418,60 @@ const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 const storage = getStorage(fbApp);   // úložiště na soubory (přílohy / nabídky)
+
+/* ===== App Check – ochrana proti zneužití (reCAPTCHA Enterprise) =====
+   Chrání hlavně volání AI (čtení nabídek). Pozn.: samotná inicializace NEomezí
+   Firestore/Auth, dokud se u nich ve Firebase konzoli ručně nezapne „Enforce".
+   Obalené v try/catch, ať případná chyba App Checku nikdy neshodí celou appku. */
+const APPCHECK_SITE_KEY = '6Lf-KfctAAAAALPIoLS5CTAAA-2atWyDg4NX3_lX';
+try{
+  initializeAppCheck(fbApp, {
+    provider: new ReCaptchaEnterpriseProvider(APPCHECK_SITE_KEY),
+    isTokenAutoRefreshEnabled: true
+  });
+}catch(e){ console.warn('App Check se nepodařilo zapnout:', e&&e.message||e); }
+
+/* ===== AI čtení nabídek (Gemini přes Firebase AI Logic) =====
+   Model jde kdykoli změnit tady. Knihovna se načítá až při prvním použití. */
+const AI_MODEL = 'gemini-2.5-flash';
+let _aiModelP = null;
+async function aiOfferModel(){
+  if(_aiModelP) return _aiModelP;
+  _aiModelP = (async()=>{
+    const { getAI, getGenerativeModel, GoogleAIBackend, Schema } =
+      await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js");
+    const schema = Schema.object({ properties:{
+      polozky: Schema.array({ items: Schema.object({
+        properties:{
+          popis:     Schema.string(),
+          mnozstvi:  Schema.number(),
+          jednotka:  Schema.string(),
+          cena:      Schema.number(),
+          mena:      Schema.string()
+        },
+        optionalProperties:['mnozstvi','jednotka','cena','mena']
+      }) })
+    }});
+    const ai = getAI(fbApp, { backend: new GoogleAIBackend() });
+    return getGenerativeModel(ai, { model: AI_MODEL,
+      generationConfig:{ responseMimeType:'application/json', responseSchema: schema } });
+  })();
+  return _aiModelP;
+}
+const AI_OFFER_PROMPT =
+`Jsi asistent nákupního oddělení. V přiloženém souboru je cenová NABÍDKA od dodavatele.
+Vypiš POUZE skutečné položky k objednání (každý produkt = jedna položka). Pro každou vrať:
+- popis: název/označení položky (klidně včetně kódu dílu od dodavatele)
+- mnozstvi: objednávané množství jako číslo (když není uvedené, dej 1)
+- jednotka: ks / m / kg (když nevíš, dej ks)
+- cena: cena za JEDNU jednotku (cena/ks) BEZ DPH jako číslo (ne celková cena řádku, ne s DPH)
+- mena: CZK / EUR / USD
+Pravidla:
+- NEVYPLŇUJ skladové číslo.
+- Přeskoč souhrnné řádky (mezisoučet, DPH, celkem), hlavičky, patičky, adresy, bankovní údaje.
+- Čísla vracej jako čísla (desetinná tečka), bez měny a mezer uvnitř.
+- Když je cena uvedená jen jako celková za řádek, přepočti ji na cenu za jednotku (celkem ÷ množství).
+Vrať výsledek přesně podle zadaného JSON schématu.`;
 function logoSvg(){
   return `<svg viewBox="0 0 300 138" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YFAI minimo">
     <defs>
@@ -1710,6 +1766,43 @@ function ireqPdfItemsFlat(lines){
   return items;
 }
 
+/* ---------- AI čtení nabídky (Gemini přes Firebase AI Logic) ---------- */
+function fileToBase64(file){
+  return file.arrayBuffer().then(buf=>{
+    const bytes=new Uint8Array(buf); let bin=''; const CH=0x8000;
+    for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode.apply(null, bytes.subarray(i,i+CH));
+    return btoa(bin);
+  });
+}
+const IREQ_IMG=/\.(png|jpe?g|webp|gif|bmp|heic|heif|tiff?)$/i;
+function ireqMime(file){
+  if(file.type) return file.type;
+  const e=(file.name.split('.').pop()||'').toLowerCase();
+  return e==='pdf'?'application/pdf':(e==='png'?'image/png':(/jpe?g/.test(e)?'image/jpeg':'application/octet-stream'));
+}
+/* Pošle nabídku (PDF/obrázek) přímo Gemini a vrátí rozpoznané položky. */
+async function ireqAiExtract(file){
+  const model=await aiOfferModel();
+  const data=await fileToBase64(file);
+  const res=await model.generateContent([
+    { inlineData:{ mimeType: ireqMime(file), data } },
+    { text: AI_OFFER_PROMPT }
+  ]);
+  let txt=''; try{ txt=res.response.text(); }catch(_){ txt=''; }
+  let parsed=null;
+  try{ parsed=JSON.parse(txt); }
+  catch(_){ const m=txt&&txt.match(/[\[{][\s\S]*[\]}]/); if(m){ try{ parsed=JSON.parse(m[0]); }catch(e){} } }
+  const arr=(parsed&&(parsed.polozky||parsed.items))||(Array.isArray(parsed)?parsed:[]);
+  return (arr||[]).filter(x=>x&&String(x.popis||'').trim()).map(x=>{
+    const q=Number(x.mnozstvi), c=Number(x.cena), mena=String(x.mena||'').toUpperCase();
+    return { sklad:'', popis:String(x.popis).trim(),
+      mnozstvi:(isFinite(q)&&q>0)?q:1, jednotka:ireqUnit(x.jednotka),
+      cena:(isFinite(c)&&c>0)?Math.round(c*100)/100:'',
+      mena:['CZK','EUR','USD'].includes(mena)?mena:'CZK',
+      vyrobce:'', dodavatel:'', poznamka:'' };
+  });
+}
+
 /* ---------- načtení nabídky ---------- */
 async function ireqTakeFile(file){
   if(!impReq || !file) return;
@@ -1717,17 +1810,29 @@ async function ireqTakeFile(file){
   impReq.file=file; impReq.fileInfo={name:file.name,size:file.size};
   impReq.parseMsg='Čtu nabídku…'; impReq.parseErr=''; impReq.pdfText=''; render();
   const ext=(file.name.split('.').pop()||'').toLowerCase();
+  const isImg=IREQ_IMG.test(file.name);
   try{
     let items=[], note='';
     if(['xlsx','xls','xlsm','csv'].includes(ext)){
       const res=await ireqSheetItems(file); items=res.items; note=res.note;
-    }else if(ext==='pdf'){
-      const lines=await ireqPdfLines(file);
-      impReq.pdfText=lines.join('\n');
-      items=ireqPdfItems(lines);
-      note='PDF se čte odhadem — <b>překontroluj množství a ceny</b>, ne každá nabídka je stejná.';
+    }else if(ext==='pdf' || isImg){
+      impReq.parseMsg='🧠 Nabídku čte AI… chvilku strpení.'; render();
+      try{
+        items=await ireqAiExtract(file);
+        note='Nabídku přečetla <b>AI</b> — pro jistotu <b>překontroluj množství a ceny</b> před založením.';
+      }catch(aiErr){
+        console.warn('AI čtení nabídky selhalo:', aiErr);
+        if(ext==='pdf'){
+          const lines=await ireqPdfLines(file); impReq.pdfText=lines.join('\n');
+          items=ireqPdfItems(lines);
+          note='AI teď nebyla dostupná, nabídku jsem přečetl náhradním (odhadovým) způsobem — <b>pečlivě překontroluj</b>.';
+        }else{
+          impReq.parseMsg=`AI se nepodařilo nabídku přečíst: ${esc(aiErr&&aiErr.message||'chyba')} Soubor zůstane připnutý, řádky přidej ručně tlačítkem <b>+ Přidat řádek</b>.`;
+          render(); return;
+        }
+      }
     }else{
-      impReq.parseMsg=`Soubor je připnutý jako nabídka, ale položky z <b>.${esc(ext)}</b> přečíst neumím (jde to z Excelu, CSV a PDF). Přidej řádky ručně tlačítkem <b>+ Přidat řádek</b>.`;
+      impReq.parseMsg=`Soubor je připnutý jako nabídka, ale položky z <b>.${esc(ext)}</b> přečíst neumím (jde to z Excelu, CSV, PDF a obrázků). Přidej řádky ručně tlačítkem <b>+ Přidat řádek</b>.`;
       render(); return;
     }
     if(!items.length){
@@ -1738,7 +1843,7 @@ async function ireqTakeFile(file){
     const added=items.map(d=>ireqApplyHead(ireqNewRow(d),impReq.head));
     impReq.rows=impReq.rows.concat(added);
     added.forEach(r=>impReq.sel.add(r._k));
-    impReq.parseMsg=`Načetl jsem <b>${items.length}</b> ${ireqPlural(items.length,'položku','položky','položek')} — každá je jeden budoucí požadavek.`+(note?' '+note:'');
+    impReq.parseMsg=`Načteno <b>${items.length}</b> ${ireqPlural(items.length,'položku','položky','položek')} — každá je jeden budoucí požadavek.`+(note?' '+note:'');
     impReq.errs={};
   }catch(e){
     impReq.parseMsg=`Položky se z nabídky přečíst nepovedly: ${esc(e.message||'neznámá chyba')} Soubor zůstane připnutý, řádky přidej ručně.`;
@@ -1788,7 +1893,7 @@ function ireqView(){
          <button class="x" data-a="ireq-clearfile" ${impReq.busy?'disabled':''}>Odebrat</button></div>`
     : `<div class="ireq-drop" id="ireq-drop">
          <b>📄 Přetáhni sem nabídku</b>
-         Excel, CSV nebo PDF — položky se z ní samy rozepíšou do řádků. Ostatní soubory se jen připnou jako příloha. Max 5 MB.
+         PDF nebo foto/sken přečte <b>🧠 AI</b>, Excel a CSV se načtou z tabulky — položky se samy rozepíšou do řádků. Ostatní soubory se jen připnou jako příloha. Max 5 MB.
          <label class="ireq-pick">Vybrat soubor z disku<input type="file" data-a="ireq-file" accept="${esc(ATT_ACCEPT)}" hidden></label>
        </div>`;
   const msg = impReq.parseMsg?`<div class="notice" style="margin:0 12px 12px">${impReq.parseMsg}</div>`:'';
