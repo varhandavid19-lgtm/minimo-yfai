@@ -1825,7 +1825,7 @@ async function ireqTakeFile(file){
         if(ext==='pdf'){
           const lines=await ireqPdfLines(file); impReq.pdfText=lines.join('\n');
           items=ireqPdfItems(lines);
-          note='AI teď nebyla dostupná, nabídku jsem přečetl náhradním (odhadovým) způsobem — <b>pečlivě překontroluj</b>.';
+          note='AI teď nebyla dostupná (<b>'+esc(aiErr&&aiErr.message||'neznámá chyba')+'</b>), nabídku jsem přečetl náhradním (odhadovým) způsobem — <b>pečlivě překontroluj</b>.';
         }else{
           impReq.parseMsg=`AI se nepodařilo nabídku přečíst: ${esc(aiErr&&aiErr.message||'chyba')} Soubor zůstane připnutý, řádky přidej ručně tlačítkem <b>+ Přidat řádek</b>.`;
           render(); return;
