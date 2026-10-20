@@ -19,6 +19,8 @@ modul je vlastní stránka.
   (vidí správci a lidé s pozicí PE nebo PE coordinator)
 - `shopfloor.html` — Shopfloor walk: nálezy z obchůzky s plant manažerem
   (vidí správci a PE koordinátoři; komukoli dalšímu přístup přidá David v Nastavení)
+- `lama.html` — Úkoly pro LAMA AGENCY: úkoly pro externí agenturu
+  (vidí jen správci; komukoli dalšímu přístup přidá David v Nastavení)
 - `nastaveni.html` — uživatelé, úrovně a přístupy k modulům
 - `header.js` + `header.css` — SPOLEČNÁ hlavička všech modulů.
   Nová stránka ji vykreslí přes `window.uheaderHTML({module, cur, user, level,
@@ -65,6 +67,8 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
 - dokument `meta/engcfg` — nastavení standardu řízení výkonu a čítače čísel
 - kolekce `sfw` — nálezy ze shopfloor walku (jeden dokument = jeden nález)
 - dokument `meta/sfwcfg` — jediné pole `seq`, čítač čísel nálezů
+- kolekce `lama` — úkoly pro LAMA AGENCY (jeden dokument = jeden úkol)
+- dokument `meta/lamacfg` — jediné pole `seq`, čítač čísel úkolů
 - Úrovně uživatelů: `basic`, `warehouse`, `approver`, `wadmin`, `superadmin`,
   s můstkem na staré role (`zadavatel`, `skladnik`, `schvalovatel`, `admin`).
   Práva jsou v kódu a SOUČASNĚ vynucená bezpečnostními pravidly Firestore
@@ -281,6 +285,7 @@ ke zkopírování** — ne jako přílohu ke stažení. Chce je hodit do konzole
 Ctrl+C / Ctrl+V. Platí pro `firestore.rules` i `storage.rules`.
 Cesty: `nabidky/{requestId}/…` (nákup), `tasky/{taskId}/…` (akční plán),
 `ps/{psId}/…` (problem solving), `sfw/{findingId}/…` (shopfloor walk),
+`lama/{taskId}/…` (úkoly pro LAMA AGENCY),
 `dt/{importId}/…` (vyfocené denní reporty Gclassu). Když přidáš novou cestu, uprav soubor a napiš
 Davidovi, ať ji publikuje.
 
@@ -334,6 +339,27 @@ Pole `files`, v úložišti pod `sfw/{idNálezu}/…`, limit 5 MB na soubor.
   JPEG 0.72). Nepřeváděj na nahrávání originálu.
 - U nového nálezu se fotky drží ve frontě (`pending`) a nahrají se až po uložení,
   když je známé id dokumentu.
+
+## Modul Úkoly pro LAMA AGENCY (`lama.html`)
+Úkoly, které firma zadává externí agentuře LAMA AGENCY. Jejich teamleader má
+v minimu vlastní účet a sám zapisuje stav a vyjádření.
+- **Kdo tam smí:** bez ručního nastavení jen správci podle e-mailu (`OWNERS`),
+  ostatní modul nevidí. Komukoli dalšímu (teamleaderovi agentury) David nastaví
+  přístup v `nastaveni.html` → uživatel → Přístup k modulům → **Úkoly pro LAMA
+  AGENCY** (Skryté / Jen číst / Zapisovat). Ruční nastavení má vždy přednost.
+  Mazat smí jen správce.
+- **Tahle logika je na pěti místech a musí zůstat shodná:** `lama.html`
+  (`lamaAccess`), `index.html` (dlaždice, `lamaAccess`), `header.js` (`lamaLink`),
+  `nastaveni.html` (`resolveModule` + `MODULES_LIST`) a `firestore.rules`
+  (`lamaAccess()`).
+- Pole úkolu: číslo (`no`, prosté pořadové z `meta/lamacfg.seq`, TRANSAKCÍ),
+  zadáno (`createdOn`), zadal (`createdBy`), úkol (`task`), oblast / linka
+  (`area`, výběr z `AREAS` nebo volný text), termín (`due`), stav (`status`:
+  nový / v řešení / hotovo), poznámka / vyjádření agentury (`note`), hotovo dne
+  (`closedOn`, nastaví se samo při přepnutí na hotovo), přílohy (`files`, úložiště
+  `lama/{idÚkolu}/…`, limit 5 MB, fotky se před nahráním zmenší jako jinde).
+- „Po termínu" se neukládá, počítá se z `due`. Úkoly po termínu svítí červeně
+  a řadí se nahoru, hotové jsou zelené a dospod.
 
 ## Řízení výkonu linek (záložka Hlavní stránka v modulu Engineering)
 Standard vyžádaný vedením: týdenní výkon linky pod prahem (výchozí 90 %) povinně

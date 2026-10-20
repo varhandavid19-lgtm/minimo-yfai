@@ -41,6 +41,21 @@ service cloud.firestore {
     }
     function canSfwRead()  { return signedIn() && sfwAccess() != 'none'; }
     function canSfwWrite() { return signedIn() && sfwAccess() == 'write'; }
+    // Úkoly pro LAMA AGENCY: přístup z users.modules.lama (none/read/write).
+    // Bez ručního nastavení zapisují jen správci podle e-mailu, ostatní modul nevidí.
+    // Stejná logika je v index.html, header.js, nastaveni.html a lama.html.
+    function lamaSet() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+             .get('modules', {}).get('lama', '');
+    }
+    function lamaAccess() {
+      return !signedIn() ? 'none'
+           : lamaSet() in ['none','read','write'] ? lamaSet()
+           : isEmailAdmin() ? 'write'
+           : 'none';
+    }
+    function canLamaRead()  { return signedIn() && lamaAccess() != 'none'; }
+    function canLamaWrite() { return signedIn() && lamaAccess() == 'write'; }
     function isSklad()        { return signedIn() && myRole() == 'skladnik'; }
     function isSchvalovatel() { return signedIn() && myRole() == 'schvalovatel'; }
     function canEdit()        { return isAdmin() || isSklad(); }
@@ -167,6 +182,24 @@ service cloud.firestore {
       allow create: if canSfwWrite();
       allow update: if isAdmin()
                     || (canSfwWrite()
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq']));
+      allow delete: if isAdmin();
+    }
+
+    // --- Úkoly pro LAMA AGENCY ---
+    // Vidí jen ti, kdo do modulu smí. Zapisuje i teamleader agentury,
+    // mazat smí jen správce.
+    match /lama/{id} {
+      allow read:   if canLamaRead();
+      allow create, update: if canLamaWrite();
+      allow delete: if isAdmin();
+    }
+    // Čítač čísel úkolů. Smí ho zvýšit každý, kdo smí zapisovat.
+    match /meta/lamacfg {
+      allow read:   if canLamaRead();
+      allow create: if canLamaWrite();
+      allow update: if isAdmin()
+                    || (canLamaWrite()
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq']));
       allow delete: if isAdmin();
     }

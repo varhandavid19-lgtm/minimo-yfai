@@ -177,6 +177,7 @@ const MODULES_LIST = [
   {key:'plan',      label:'Plánování směn a přítomnosti'},
   {key:'nastaveni', label:'Nastavení'},
   {key:'shopfloor', label:'Shopfloor walk'},
+  {key:'lama',      label:'Úkoly pro LAMA AGENCY'},
 ];
 const MODSTATES = [
   {key:'none',  label:'Skryté'},
@@ -198,6 +199,9 @@ const sfwDefault = u => {
 const resolveModule = (mods, level, key, u) => { const p=mods&&mods[key];
   if(MODSTATE_BY[p]) return p;
   if(key==='shopfloor') return sfwDefault(u);
+  // Úkoly pro LAMA AGENCY: bez ručního nastavení zapisují jen správci, ostatní modul nevidí.
+  // Stejná logika je v index.html, header.js, lama.html a v pravidlech Firestore.
+  if(key==='lama') return OPRAVY_OWNERS.includes(String((u&&u.email)||'').trim().toLowerCase()) ? 'write' : 'none';
   return key==='nastaveni' ? (rankOf(level)>=5?'write':'none') : 'write'; };   // výchozí podle levelu
 const allowedMods = (mods, level) => ['portal',
   resolveModule(mods,level,'nakup')!=='none'?'nakup':null,

@@ -63,6 +63,17 @@
       if(!ok) return '';
       return '<a class="'+(o.cur==='shopfloor'?'cur':'')+'" href="shopfloor.html">🚶 Shopfloor walk</a>';
     }
+    // Úkoly pro LAMA AGENCY: výchozí přístup mají jen správci. Komukoli dalšímu
+    // (třeba teamleaderovi agentury) ho David nastaví v Nastavení (o.mods.lama).
+    // Stejná logika je v index.html, lama.html, nastaveni.html a v pravidlech Firestore.
+    function lamaLink(){
+      var set = (o.mods || {}).lama;
+      if(set==='none') return '';
+      var ok = (set==='read' || set==='write')
+        || OPRAVY_OWNERS.indexOf(String(o.email||o.user||'').trim().toLowerCase())>=0;
+      if(!ok) return '';
+      return '<a class="'+(o.cur==='lama'?'cur':'')+'" href="lama.html">🤝 Úkoly pro LAMA AGENCY</a>';
+    }
     return '<header class="uhdr">'
       + '<div class="uh-menuwrap">'
         + '<button class="uh-menu" id="mm-btn" aria-label="Menu modulů" title="Moduly">☰</button>'
@@ -74,6 +85,7 @@
           + opravyLink()
           + engineeringLink()
           + shopfloorLink()
+          + lamaLink()
           + link('nastaveni.html','⚙️','Nastavení','nastaveni')
           + '<div class="mm-sep"></div>'
           + '<button class="mm-view">🖥️ Zobrazit jako na počítači</button>'

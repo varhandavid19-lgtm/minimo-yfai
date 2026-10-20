@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%20100%20100%27%3E%3Crect%20width=%27100%27%20height=%27100%27%20rx=%2722%27%20fill=%27%231b4b8f%27/%3E%3Ctext%20x=%2750%27%20y=%2776%27%20font-size=%2774%27%20font-family=%27Arial,sans-serif%27%20font-weight=%27bold%27%20fill=%27white%27%20text-anchor=%27middle%27%3Em%3C/text%3E%3C/svg%3E">
+<title>Úkoly pro LAMA AGENCY — YFAI minimo</title>
+<link rel="stylesheet" href="header.css">
+<style>
+  :root{--navy-1:#0f2f5f;--navy-2:#1b4b8f;--bg:#f4f6f9;--card:#fff;--line:#dde4ec;--text:#16233a;--muted:#6b7a90;
+    --green:#1f9254;--red:#c0392b;--amber:#b7791f;--blue:#2563a8;
+    --teal:#0d7377;--teal-bg:#e4f2f2;--teal-dark:#0a5b5e;--radius:6px}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:13px}
+  button{font-family:inherit;font-size:12px;cursor:pointer;border-radius:var(--radius);border:1px solid transparent;padding:7px 12px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input,select,textarea{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:var(--radius);background:#fff;color:var(--text);width:100%}
+  textarea{resize:vertical}
+  input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{outline:2px solid #2a5ea3;outline-offset:1px}
+  main{padding:14px 16px 40px}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b}
+  .btn-ok{background:var(--green);color:#fff}
+  .btn-teal{background:var(--teal);color:#fff;font-weight:700}
+  .btn-del{background:#fff;border:1px solid #e3b7b1;color:var(--red);font-weight:600}
+  .btn-del:hover{background:var(--red);border-color:var(--red);color:#fff}
+  .muted{color:var(--muted)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+
+  .notice{background:#eef4fc;border:1px solid #cfe0f5;color:#274a74;border-radius:8px;padding:10px 13px;margin-bottom:12px;font-size:12.5px}
+  .notice.warn{background:#fdf3e2;border-color:#f2dfb8;color:#7a5410}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:14px}
+  .panel>h2{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:11px 15px;
+    font-size:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .panel>h2 .right{margin-left:auto;font-weight:500;font-size:11px;opacity:.85}
+  .panel .body{padding:13px}
+  .empty{padding:26px;text-align:center;color:var(--muted)}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px;margin-bottom:14px}
+  .kcard{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy-2);border-radius:var(--radius);padding:11px 13px}
+  .kcard .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
+  .kcard .val{font-size:23px;font-weight:800;margin:3px 0 1px}
+  .kcard .note{font-size:11px;color:var(--muted)}
+
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid transparent;white-space:nowrap}
+  .b-blue{background:#eef4fc;color:var(--blue);border-color:#cfe0f5}
+  .b-green{background:#e8f6ee;color:var(--green);border-color:#c4e6d3}
+  .b-red{background:#fdecea;color:var(--red);border-color:#f5cfca}
+  .b-amber{background:#fdf6e6;color:var(--amber);border-color:#f0e0b8}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);background:#fafbfd}
+  .filters input,.filters select{width:auto;min-width:150px}
+  .filters .grow{flex:1 1 240px;max-width:460px}
+  label.check{display:inline-flex;gap:7px;align-items:center;font-size:12.5px;color:#41506b;white-space:nowrap;cursor:pointer;font-weight:600}
+  label.check input{width:16px;height:16px;min-width:0;margin:0;flex:none}
+
+  .tblwrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  thead th{background:#16355f;color:#fff;text-align:left;padding:9px 10px;font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+  tbody td{padding:7px 8px;border-bottom:1px solid #eef1f5;vertical-align:top}
+  tbody tr:hover td{background:#fafbfd}
+  tbody tr.clickable{cursor:pointer}
+  tbody tr.late td{background:#fdecea}
+  tbody tr.closed td{background:#e8f6ee;color:#1b5e3a}
+  tbody tr.closed td b{color:#1b5e3a}
+  td.desc{min-width:180px;white-space:normal}
+  td.nowrap{white-space:nowrap}
+  .clip{color:#2563a8;font-weight:700;font-size:11px}
+
+  /* ===== okno úkolu ===== */
+  .overlay{position:fixed;inset:0;background:rgba(12,26,48,.55);display:flex;align-items:flex-start;
+    justify-content:center;padding:24px 14px;overflow:auto;z-index:60}
+  .modal{background:#fff;border-radius:10px;width:100%;max-width:880px;margin:auto;box-shadow:0 18px 50px rgba(0,0,0,.3)}
+  .modal h3{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:14px 18px;
+    font-size:16px;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:10px}
+  .modal h3 .x{margin-left:auto;background:transparent;border:0;color:#fff;font-size:20px;line-height:1;padding:0 4px}
+  .robar{padding:9px 16px;background:#eef1f5;border-bottom:1px solid var(--line);font-size:12px;color:#41506b;
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .form{padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .f{display:flex;flex-direction:column;gap:4px}
+  .f label{font-size:12.5px;font-weight:700;color:#41506b}
+  .f .ro{background:#f4f6f9;border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;min-height:35px}
+  .f.span2{grid-column:span 2}.f.span4{grid-column:span 4}
+  .sect{grid-column:span 4;font-size:11px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+    color:var(--teal-dark);border-bottom:2px solid var(--teal-bg);padding-bottom:5px;margin-top:6px}
+  .foot{padding:12px 13px;border-top:1px solid var(--line);background:#fafbfd;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .hist{padding:0 18px 14px;font-size:11px;color:var(--muted)}
+  .hist div{padding:3px 0;border-top:1px dotted var(--line)}
+
+  /* přílohy a fotky */
+  .photobtns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+  .btn-cam{display:inline-flex;align-items:center;gap:7px;background:var(--teal);color:#fff;font-weight:700;
+    border-radius:var(--radius);padding:10px 15px;font-size:13.5px;cursor:pointer}
+  .btn-cam:hover{background:var(--teal-dark)}
+  .btn-cam input{display:none}
+  .filebtn{border:1px dashed #c8d3e0;background:#fafbfd;border-radius:var(--radius);padding:10px 15px;
+    font-size:13px;color:#41506b;cursor:pointer;display:inline-block}
+  .filebtn input{display:none}
+  .photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:9px}
+  .photo{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#f4f6f9}
+  .photo img{display:block;width:100%;height:104px;object-fit:cover}
+  .photo .doc{display:flex;align-items:center;justify-content:center;height:104px;font-size:26px;color:#8ea0b6;text-decoration:none}
+  .photo .nm{font-size:10.5px;padding:4px 6px;color:var(--muted);word-break:break-word;background:#fff}
+  .photo .rm{position:absolute;top:4px;right:4px;background:rgba(192,57,43,.92);color:#fff;border:0;
+    border-radius:50%;width:24px;height:24px;font-size:13px;line-height:1;padding:0}
+
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,#0f2f5f,#2a5ea3);padding:16px}
+  .login{background:#fff;border-radius:14px;width:340px;padding:24px;box-shadow:0 22px 55px rgba(0,0,0,.35)}
+  .login h2{margin:0 0 2px;font-size:18px;text-align:center}
+  .login p{font-size:11.5px;color:var(--muted);text-align:center;margin:0 0 16px}
+  .login input{margin-bottom:10px}
+  .login button{width:100%;padding:10px;font-size:13px;background:var(--navy-2);color:#fff;font-weight:700}
+  .loginerr{background:#fdecea;border:1px solid #f5cfca;color:#c0392b;font-size:11.5px;padding:8px 10px;
+    border-radius:8px;margin-bottom:10px;font-weight:600}
+
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#16233a;color:#fff;
+    padding:10px 16px;border-radius:8px;font-size:12.5px;box-shadow:0 10px 26px rgba(0,0,0,.3);z-index:90}
+  .toast.ok{background:#157347}
+  .toast.err{background:#c0392b}
+
+  @media(max-width:900px){.form{grid-template-columns:repeat(2,1fr)}.f.span4,.sect{grid-column:span 2}}
+  /* Telefon: tabulka se rozloží do karet, okno přes celou obrazovku, políčka nad 16 px (iOS jinak zoomuje). */
+  @media(max-width:680px){
+    main{padding:12px 10px 34px}
+    .filters{flex-direction:column;align-items:stretch}
+    .filters input,.filters select,.filters .grow,.filters button{width:100%;max-width:none}
+    .filters .grow{flex:none}
+    .tblwrap{overflow-x:visible}
+    thead{display:none}
+    tbody tr{display:block;border:1px solid var(--line);border-radius:8px;margin:0 0 11px;padding:6px 12px;background:#fff}
+    tbody td{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border:0;border-bottom:1px solid #eef1f5;text-align:right}
+    tbody td:last-child{border-bottom:0}
+    tbody td::before{content:attr(data-label);font-weight:700;color:var(--muted);text-align:left;flex:none;
+      font-size:11px;text-transform:uppercase}
+    tbody tr.late td,tbody tr.closed td{background:none}
+    tbody tr.late{border-left:4px solid var(--red)}
+    tbody tr.closed{border-left:4px solid var(--green)}
+    .overlay{padding:0}
+    .modal{border-radius:0;max-width:none;margin:0;min-height:100%}
+    .modal h3{border-radius:0;position:sticky;top:0;z-index:3;padding:13px 14px;font-size:15px}
+    .modal h3 .x{font-size:26px;padding:0 6px}
+    .form{grid-template-columns:1fr;padding:14px}
+    .f.span2,.f.span4,.sect{grid-column:span 1}
+    .foot{position:sticky;bottom:0;z-index:3;box-shadow:0 -3px 10px rgba(16,35,58,.12);padding:9px 10px;gap:6px}
+    .foot>span:first-child{width:100%}
+    .foot>span:last-child{width:100%;display:flex;gap:6px;margin-left:0!important}
+    .foot button{flex:1 1 0;min-width:0;padding:12px 6px;font-size:12.5px;white-space:nowrap}
+    input,select,textarea{font-size:16px}
+    .btn-cam,.filebtn{flex:1 1 100%;justify-content:center;text-align:center}
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="login-wrap"><div class="login"><h2>Načítám…</h2><p>Připojuji se k Firebase.</p></div></div></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
+         query, orderBy, limit, runTransaction }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+import { getStorage, ref as sref, uploadBytes, getDownloadURL, deleteObject }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
+
+/* Společný Firebase projekt celého portálu. Veřejné frontendové klíče —
+   je správné je mít v kódu, zabezpečení řeší pravidla Firestore. */
+const firebaseConfig = {
+  apiKey: "AIzaSyDi3OVq2Al0WXFPgqhMAN9lPGuExOU80Cc",
+  authDomain: "nakupni-pozadavky.firebaseapp.com",
+  projectId: "nakupni-pozadavky",
+  storageBucket: "nakupni-pozadavky.firebasestorage.app",
+  messagingSenderId: "214674774365",
+  appId: "1:214674774365:web:7f7b51c8169b75f8acb0b4",
+  measurementId: "G-BGDMXEWBQH"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+const storage = getStorage(fbApp);
+
+/* ==========================================================
+   Kdo do modulu smí
+   Výchozí stav: správci podle e-mailu smí zapisovat, ostatní modul vůbec
+   nevidí. Komukoli dalšímu (např. teamleaderovi agentury) se přístup nastaví
+   v Nastavení → uživatel → Přístup k modulům → Úkoly pro LAMA AGENCY
+   (Skryté / Jen číst / Zapisovat). Ruční nastavení má vždy přednost.
+   Stejná logika je v index.html, header.js, nastaveni.html
+   a v pravidlech Firestore — když ji měníš, uprav ji všude.
+   ========================================================== */
+const OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
+const isOwner = e => OWNERS.includes(String(e||'').trim().toLowerCase());
+const lamaAccess = u => {
+  if(!u) return 'none';
+  const set=(u.modules||{}).lama;
+  if(set==='none'||set==='read'||set==='write') return set;
+  return isOwner(u.email) ? 'write' : 'none';
+};
+const canEnter = () => lamaAccess(me)!=='none';
+const canWrite = () => lamaAccess(me)==='write';
+const canDelete = () => !!me && (me.role==='admin' || isOwner(me.email));
+
+/* ===== číselníky ===== */
+const AREAS = ['IMM','Slush','Foaming / Scoring','Assembly IP','Glovebox / Decopart','G463',
+               'Sklad a logistika','Údržba a dílna','Kvalita','Zázemí a okolí','Ostatní'];
+const STATUS = [
+  {k:'nový',     cls:'b-blue',  done:false},
+  {k:'v řešení', cls:'b-amber', done:false},
+  {k:'hotovo',   cls:'b-green', done:true}
+];
+const MAX_FILE = 5*1024*1024;      // 5 MB na soubor, stejně jako jinde v minimu
+const PHOTO_EDGE = 1600;           // delší hrana fotky po zmenšení
+const PHOTO_Q = 0.72;              // kvalita JPEG — typicky pětinová velikost
+
+/* ===== drobné pomůcky ===== */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad2 = n => String(n).padStart(2,'0');
+const today = () => { const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
+const dateCz = s => { if(!s) return ''; const p=String(s).slice(0,10).split('-');
+  return p.length===3 ? `${+p[2]}. ${+p[1]}. ${p[0]}` : String(s); };
+const fileSize = b => b>=1048576 ? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' kB';
+const isImg = f => /^image\//i.test(f.type||'') || /\.(jpe?g|png|gif|webp|heic)$/i.test(f.name||'');
+
+const stDef = k => STATUS.find(s=>s.k===k) || STATUS[0];
+const isDone = t => stDef(t.status).done;
+const isLate = t => !isDone(t) && t.due && t.due < today();
+const lateDays = t => isLate(t) ? Math.floor((Date.parse(today())-Date.parse(t.due))/86400000) : 0;
+
+/* Server zamítl zápis — anglické „Missing or insufficient permissions" nikomu nepomůže. */
+function writeHint(e){
+  const code=(e&&(e.code||e.message))||'';
+  if(/permission|insufficient/i.test(String(code))){
+    return lamaAccess(me)==='read'
+      ? 'K úkolům pro LAMA AGENCY máš přístup jen na čtení. O zápis požádej Davida — nastaví ho v Nastavení u tvého jména.'
+      : 'Server zápis odmítl. Zkontroluj v Nastavení, že máš u Úkolů pro LAMA AGENCY „Zapisovat". Pokud ano, nejspíš nejsou publikovaná pravidla Firestore.';
+  }
+  return String((e&&e.message)||e||'Neznámá chyba');
+}
+
+/* ===== stav stránky ===== */
+let me=null, loginBusy=false, loginErr='';
+let items=[], loaded=false, busy='', errMsg='';
+let open=null, oMsg='', pending=[];
+let f={area:'',status:'',q:''};
+let hideDone=true, toastMsg=null, toastKind='';
+const appEl=document.getElementById('app');
+function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t);
+  toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
+
+/* ===== přihlášení a profil ===== */
+const ROLE2LEVEL={zadavatel:'basic',skladnik:'warehouse',schvalovatel:'approver',admin:'superadmin'};
+const LEVEL_LABEL={basic:'Basic',warehouse:'Warehouse',approver:'Approver',wadmin:'Warehouse Admin',superadmin:'Super Admin'};
+async function loadProfile(user){
+  const ref=doc(db,'users',user.uid);
+  let d={};
+  try{ const s=await getDoc(ref); if(s.exists()) d=s.data(); }catch(e){}
+  const role = isOwner(user.email) ? 'admin' : (d.role||'zadavatel');
+  return {uid:user.uid, email:user.email, name:d.name||(user.email||'').split('@')[0], role,
+          positions:d.positions||[], modules:d.modules||{},
+          level:d.level || ROLE2LEVEL[role] || 'basic'};
+}
+onAuthStateChanged(auth, async user=>{
+  loginBusy=false;
+  if(!user){ me=null; items=[]; loaded=false; render(); return; }
+  me=await loadProfile(user);
+  render();
+  if(canEnter()) load();
+});
+
+/* ===== data ===== */
+async function load(force){
+  if(loaded && !force) return;
+  errMsg=''; busy='Načítám úkoly…'; render();
+  try{
+    const qs=await getDocs(query(collection(db,'lama'), orderBy('createdOn','desc'), limit(1000)));
+    items=qs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    loaded=true;
+  }catch(e){ errMsg=writeHint(e); }
+  busy=''; render();
+}
+/* Číslo úkolu je prosté pořadové číslo — 1, 2, 3… Generuje se TRANSAKCÍ,
+   jinak by dva lidi naráz dostali stejné. */
+async function nextNo(){
+  const ref=doc(db,'meta','lamacfg');
+  const n=await runTransaction(db, async tx=>{
+    const s=await tx.get(ref);
+    const cur=(((s.data()||{}).seq)||0)+1;
+    if(s.exists()) tx.update(ref,{seq:cur}); else tx.set(ref,{seq:cur});
+    return cur;
+  });
+  return String(n);
+}
+function sync(t){
+  if(!t||!t._id) return;
+  const i=items.findIndex(x=>x._id===t._id);
+  if(i>=0) items[i]=JSON.parse(JSON.stringify(t));
+}
+function emptyItem(){
+  return {_id:null, no:'', createdOn:today(), createdBy:me.name, task:'', area:'', due:'',
+    status:'nový', closedOn:'', note:'', files:[], hist:[]};
+}
+
+/* ===== zápis ===== */
+/* Rozepsané hodnoty z okna do paměti, ať je překreslení nesmaže. */
+function collect(){
+  if(!open) return null;
+  const g=id=>{const e=document.getElementById(id); return e?e.value.trim():'';};
+  if(!document.getElementById('lm-task')) return open;     // okno není vykreslené
+  Object.assign(open,{
+    createdOn:g('lm-created')||open.createdOn, task:g('lm-task'), area:g('lm-area'),
+    due:g('lm-due'), status:g('lm-status')||open.status, note:g('lm-note')
+  });
+  return open;
+}
+async function save(){
+  const t=collect(); if(!t) return;
+  if(!canWrite()){ oMsg='Máš přístup jen na čtení.'; render(); return; }
+  if(!t.task){ oMsg='Popiš úkol.'; render(); return; }
+  if(!t.due){ oMsg='Vyplň termín.'; render(); return; }
+  const closing = isDone(t) && !t.closedOn;
+  if(closing) t.closedOn=today();
+  if(!isDone(t)) t.closedOn='';
+  oMsg='Ukládám…'; render();
+  try{
+    if(!t._id){
+      const no=await nextNo();
+      const rec={no, createdOn:t.createdOn||today(), createdBy:me.name, task:t.task, area:t.area||'',
+        due:t.due, status:t.status, closedOn:t.closedOn, note:t.note||'', files:[],
+        hist:[`${today()} · ${me.name} · úkol zadán`]};
+      const ref=await addDoc(collection(db,'lama'), rec);
+      /* přílohy vybrané ještě před uložením nahrajeme teď, když máme id */
+      if(pending.length){
+        const arr=[], hist=rec.hist.slice();
+        for(const fl of pending){
+          try{ arr.push(await upload(ref.id,fl)); hist.push(`${today()} · ${me.name} · přidal přílohu ${fl.name}`); }
+          catch(e){ toast('Příloha '+fl.name+' se nenahrála: '+((e&&e.message)||e),'err'); }
+        }
+        if(arr.length){ await updateDoc(ref,{files:arr,hist}); rec.files=arr; rec.hist=hist; }
+        pending=[];
+      }
+      items.unshift(Object.assign({_id:ref.id}, rec));
+      toast('Úkol '+no+' uložen.','ok');
+    }else{
+      const hist=(t.hist||[]).concat(`${today()} · ${me.name} · ${closing?'úkol hotov':'upraveno'}`);
+      const {_id,...data}=t; data.hist=hist;
+      await updateDoc(doc(db,'lama',t._id), data);
+      t.hist=hist; sync(t);
+      toast('Uloženo.','ok');
+    }
+    open=null; oMsg='';
+  }catch(e){ oMsg='Uložení selhalo. '+writeHint(e); }
+  render();
+}
+async function removeItem(id){
+  const t=items.find(x=>x._id===id); if(!t) return;
+  if(!canDelete()) return;
+  const n=(t.files||[]).length;
+  if(!confirm(`Opravdu smazat úkol ${t.no}?\n\n„${(t.task||'').slice(0,90)}"`
+    +(n?`\nSmaže se i ${n===1?'1 příloha':n+' příloh'}.`:'')+'\n\nTohle se nedá vrátit.')) return;
+  busy='Mažu úkol…'; render();
+  try{
+    for(const fl of (t.files||[])){ try{ await deleteObject(sref(storage,fl.path)); }catch(e){ /* nemusí tam být */ } }
+    await deleteDoc(doc(db,'lama',id));
+    items=items.filter(x=>x._id!==id);
+    if(open && open._id===id){ open=null; oMsg=''; }
+    toast('Úkol '+t.no+' smazán.','ok');
+  }catch(e){ toast('Smazání selhalo. '+writeHint(e),'err'); }
+  busy=''; render();
+}
+
+/* ===== přílohy a fotky ===== */
+/* Fotku zmenšíme ještě v telefonu, než se nahraje — jinak by šly do úložiště
+   čtyřmegové originály. Delší hrana 1600 px, JPEG 0.72. */
+async function shrink(f){
+  if(!/^image\//i.test(f.type||'') || /svg/i.test(f.type||'')) return f;
+  try{
+    const bmp=await createImageBitmap(f,{imageOrientation:'from-image'});
+    const sc=Math.min(1, PHOTO_EDGE/Math.max(bmp.width,bmp.height));
+    if(sc>=1 && f.size<=900*1024){ bmp.close && bmp.close(); return f; }
+    const w=Math.max(1,Math.round(bmp.width*sc)), h=Math.max(1,Math.round(bmp.height*sc));
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    cv.getContext('2d').drawImage(bmp,0,0,w,h);
+    bmp.close && bmp.close();
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',PHOTO_Q));
+    if(!blob || blob.size>=f.size) return f;
+    return new File([blob], f.name.replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg', lastModified:Date.now()});
+  }catch(e){ return f; }
+}
+async function upload(id, f){
+  const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-80);
+  const path='lama/'+id+'/'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'_'+safe;
+  const st=sref(storage,path);
+  await uploadBytes(st,f,{contentType:f.type||'application/octet-stream'});
+  return {name:f.name, path, url:await getDownloadURL(st), size:f.size, type:f.type||'', at:today(), by:me.name};
+}
+async function addFiles(list){
+  const t=collect(); if(!t) return;
+  if(!canWrite()){ toast('Máš přístup jen na čtení.','err'); return; }
+  const raw=[...(list||[])].filter(Boolean); if(!raw.length) return;
+  oMsg='Zpracovávám přílohy…'; render();
+  const ok=[];
+  for(const f0 of raw){
+    const fl=await shrink(f0);
+    if(fl.size>MAX_FILE){ toast(`„${fl.name}" je větší než 5 MB.`,'err'); continue; }
+    ok.push(fl);
+  }
+  if(!ok.length){ oMsg=''; render(); return; }
+  if(!t._id){ pending.push(...ok); oMsg=''; render(); return; }   // nový úkol → nahraje se po uložení
+  oMsg='Nahrávám přílohy…'; render();
+  const arr=(t.files||[]).slice(), hist=(t.hist||[]).slice();
+  let n=0;
+  for(const fl of ok){
+    try{ arr.push(await upload(t._id,fl)); hist.push(`${today()} · ${me.name} · přidal přílohu ${fl.name}`); n++; }
+    catch(e){ toast('Nenahrálo se: '+fl.name+' — '+((e&&e.message)||e),'err'); }
+  }
+  if(n){
+    try{ await updateDoc(doc(db,'lama',t._id), {files:arr, hist});
+         t.files=arr; t.hist=hist; sync(t);
+         toast(n===1?'Příloha nahrána.':n+' příloh nahráno.','ok'); }
+    catch(e){ toast('Uložení příloh selhalo. '+writeHint(e),'err'); }
+  }
+  oMsg=''; render();
+}
+async function removeFile(i){
+  const t=collect(); if(!t) return;
+  if(!canWrite()) return;
+  if(!t._id){ pending.splice(i,1); render(); return; }
+  const files=(t.files||[]).slice(), fl=files[i]; if(!fl) return;
+  try{ await deleteObject(sref(storage,fl.path)); }catch(e){ /* v úložišti už být nemusí */ }
+  files.splice(i,1);
+  const hist=(t.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${fl.name}`);
+  try{ await updateDoc(doc(db,'lama',t._id), {files, hist}); t.files=files; t.hist=hist; sync(t); }
+  catch(e){ toast('Smazání selhalo. '+writeHint(e),'err'); }
+  render();
+}
+
+/* ===== výběr řádků ===== */
+function visible(){
+  let r=items.slice();
+  if(f.area)   r=r.filter(t=>t.area===f.area);
+  if(f.status) r=r.filter(t=>t.status===f.status);
+  if(hideDone) r=r.filter(t=>!isDone(t));
+  const q=f.q.trim().toLowerCase();
+  if(q) r=r.filter(t=>[t.no,t.task,t.area,t.note,t.createdBy]
+    .some(v=>String(v||'').toLowerCase().includes(q)));
+  /* po termínu nahoru, pak podle termínu, hotové dospod */
+  return r.sort((a,b)=>{
+    if(isDone(a)!==isDone(b)) return isDone(a)?1:-1;
+    if(isLate(a)!==isLate(b)) return isLate(a)?-1:1;
+    return String(a.due||'9999').localeCompare(String(b.due||'9999'))
+      || Number(a.no||0)-Number(b.no||0);
+  });
+}
+
+/* ==========================================================
+   Obrazovky
+   ========================================================== */
+function listView(){
+  const rows=visible();
+  const open2=items.filter(t=>!isDone(t));
+  const late=open2.filter(isLate);
+  const areas=[...new Set(AREAS.concat(items.map(t=>t.area)))].filter(Boolean);
+  return `
+  <div class="cards">
+    <div class="kcard" style="border-left-color:#2563a8"><div class="lbl">Nové</div>
+      <div class="val">${items.filter(t=>t.status==='nový').length}</div><div class="note">čeká na převzetí</div></div>
+    <div class="kcard" style="border-left-color:#b7791f"><div class="lbl">V řešení</div>
+      <div class="val">${items.filter(t=>t.status==='v řešení').length}</div><div class="note">agentura na tom pracuje</div></div>
+    <div class="kcard" style="border-left-color:${late.length?'#c0392b':'#1f9254'}"><div class="lbl">Po termínu</div>
+      <div class="val">${late.length}</div><div class="note">${late.length?'řeš hned':'všechno v termínu'}</div></div>
+    <div class="kcard" style="border-left-color:#1f9254"><div class="lbl">Hotovo</div>
+      <div class="val">${items.filter(isDone).length}</div><div class="note">celkem ${items.length} úkolů</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Úkoly pro LAMA AGENCY<span class="right">${rows.length} z ${items.length} · klikni na řádek pro detail</span></h2>
+    <div class="filters">
+      ${canWrite()?`<button class="btn-teal" data-a="new">+ Nový úkol</button>`:''}
+      <input class="grow" id="lm-q" placeholder="Hledat v úkolu, poznámce, oblasti…" value="${esc(f.q)}">
+      <select id="lm-farea"><option value="">Všechny oblasti</option>${areas.map(a=>`<option ${f.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
+      <select id="lm-fstatus"><option value="">Všechny stavy</option>${STATUS.map(s=>`<option ${f.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
+      <label class="check"><input type="checkbox" id="lm-hide" ${hideDone?'checked':''}> skrýt hotové</label>
+      <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
+      <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
+    </div>
+    <div class="tblwrap"><table>
+      <thead><tr>
+        <th>Č.</th><th>Zadáno</th><th>Zadal</th><th>Úkol</th><th>Oblast / linka</th>
+        <th>Termín</th><th>Stav</th><th>Po termínu</th><th>Poznámka / vyjádření agentury</th><th>Hotovo</th><th></th>
+      </tr></thead>
+      <tbody>${rows.map(t=>{
+        const lt=isLate(t), nf=(t.files||[]).length;
+        return `<tr class="clickable ${lt?'late':''} ${isDone(t)?'closed':''}" data-a="open" data-v="${t._id}">
+          <td data-label="Č."><b>${esc(t.no)}</b>${nf?` <span class="clip" title="Přílohy">📎${nf}</span>`:''}</td>
+          <td data-label="Zadáno" class="nowrap">${dateCz(t.createdOn)}</td>
+          <td data-label="Zadal">${esc(t.createdBy||'')}</td>
+          <td data-label="Úkol" class="desc">${esc(t.task)}</td>
+          <td data-label="Oblast / linka" class="nowrap">${esc(t.area||'')||'<span class="muted">—</span>'}</td>
+          <td data-label="Termín" class="nowrap"><b${lt?' style="color:var(--red)"':''}>${dateCz(t.due)}</b></td>
+          <td data-label="Stav"><span class="badge ${stDef(t.status).cls}">${esc(t.status)}</span></td>
+          <td data-label="Po termínu" class="num">${lt?`<b style="color:var(--red)">${lateDays(t)} dní</b>`:'<span class="muted">—</span>'}</td>
+          <td data-label="Poznámka" class="desc muted">${esc(t.note||'')}</td>
+          <td data-label="Hotovo" class="nowrap">${t.closedOn?dateCz(t.closedOn):'<span class="muted">—</span>'}</td>
+          <td data-label="" class="nowrap"><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button>${
+            canDelete()?` <button class="btn-del" style="padding:3px 9px;font-size:11px" data-a="del" data-v="${t._id}" title="Smazat úkol">Smazat</button>`:''}</td>
+        </tr>`;}).join('') || `<tr><td colspan="11" class="empty">${items.length?'Nic neodpovídá filtru.'
+          :(canWrite()?'Zatím tu nejsou žádné úkoly. Klikni na <b>+ Nový úkol</b>.':'Zatím tu nejsou žádné úkoly.')}</td></tr>`}
+      </tbody></table></div>
+  </div>`;
+}
+
+function itemModal(){
+  const t=open; if(!t) return '';
+  const isNew=!t._id, ro=!canWrite(), lt=isLate(t);
+  const files=isNew ? pending.map(fl=>({name:fl.name,size:fl.size,pending:true,url:'',type:fl.type}))
+                    : (t.files||[]);
+  return `
+  <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Úkol pro LAMA AGENCY">
+    <h3>${isNew?'Nový úkol pro LAMA AGENCY':'Úkol '+esc(t.no)}
+      <button class="x" data-a="close" aria-label="Zavřít">✕</button></h3>
+    <div class="robar">
+      ${ro?'<span class="badge b-blue">jen čtení</span>':'Pole s <span style="color:var(--red)">*</span> jsou povinná.'}
+      ${!isNew&&lt?`<span class="badge b-red" style="margin-left:auto">po termínu ${lateDays(t)} dní</span>`:''}
+    </div>
+    <div class="form">
+      <div class="f"><label>Zadáno</label>
+        <input id="lm-created" type="date" value="${esc(t.createdOn||'')}" ${ro?'disabled':''}></div>
+      <div class="f"><label>Zadal</label><div class="ro">${esc(t.createdBy||'')}</div></div>
+      <div class="f span2"><label>Oblast / linka</label>
+        <input id="lm-area" list="lm-areas" value="${esc(t.area||'')}" placeholder="vyber nebo napiš, např. IMM07" ${ro?'disabled':''}>
+        <datalist id="lm-areas">${AREAS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist></div>
+
+      <div class="f span4"><label>Úkol <span style="color:var(--red)">*</span></label>
+        <textarea id="lm-task" rows="3" placeholder="Co má agentura udělat" ${ro?'disabled':''}>${esc(t.task||'')}</textarea></div>
+
+      <div class="f"><label>Termín <span style="color:var(--red)">*</span></label>
+        <input id="lm-due" type="date" value="${esc(t.due||'')}" ${ro?'disabled':''}${lt?' style="color:var(--red);font-weight:700"':''}></div>
+      <div class="f"><label>Stav</label>
+        <select id="lm-status" ${ro?'disabled':''}>${STATUS.map(s=>`<option ${t.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select></div>
+      <div class="f"><label>Hotovo dne</label><div class="ro">${t.closedOn?dateCz(t.closedOn):'—'}</div></div>
+      <div class="f"></div>
+
+      <div class="f span4"><label>Poznámka / vyjádření agentury</label>
+        <textarea id="lm-note" rows="3" placeholder="Co agentura udělala, co chybí, na co čeká…" ${ro?'disabled':''}>${esc(t.note||'')}</textarea></div>
+
+      <div class="sect">Přílohy a fotky</div>
+      <div class="f span4">
+        ${ro?'':`<div class="photobtns">
+          <label class="btn-cam">📷 Vyfotit<input type="file" id="lm-cam" accept="image/*" capture="environment" multiple></label>
+          <label class="filebtn">📎 Přidat soubor<input type="file" id="lm-file" multiple></label>
+        </div>`}
+        ${files.length?`<div class="photos">${files.map((fl,i)=>`
+          <div class="photo">
+            ${(fl.url&&isImg(fl))?`<a href="${esc(fl.url)}" target="_blank" rel="noopener">
+              <img src="${esc(fl.url)}" alt="${esc(fl.name)}" loading="lazy"></a>`
+              :fl.url?`<a class="doc" href="${esc(fl.url)}" target="_blank" rel="noopener">📄</a>`
+              :`<div class="doc">⏳</div>`}
+            <div class="nm">${esc(fl.name)}<br><span class="muted">${fileSize(fl.size||0)}${fl.pending?' · nahraje se po uložení':''}</span></div>
+            ${ro?'':`<button class="rm" data-a="delfile" data-v="${i}" title="Odebrat">✕</button>`}
+          </div>`).join('')}</div>`
+          :`<div class="muted" style="font-size:12.5px">Zatím bez příloh.${ro?'':' Na telefonu otevře „Vyfotit" rovnou fotoaparát — fotka se před nahráním sama zmenší.'}</div>`}
+      </div>
+    </div>
+    ${(t.hist||[]).length?`<div class="hist">${(t.hist||[]).slice().reverse().slice(0,8).map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
+    <div class="foot">
+      ${oMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(oMsg)}</span>`
+            :`<span class="muted" style="font-size:11.5px">${isNew?'Číslo se přidělí po uložení.':'Změny se zapíšou do historie.'}</span>`}
+      <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        ${(!isNew && canDelete())?`<button class="btn-del" data-a="del" data-v="${t._id}">Smazat</button>`:''}
+        ${ro?'':`<button class="btn-ok" data-a="save">${isNew?'Uložit úkol':'Uložit'}</button>`}
+        <button class="btn-ghost" data-a="close">Zavřít</button>
+      </span>
+    </div>
+  </div></div>`;
+}
+
+function exportCsv(){
+  const rows=visible();
+  const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  const head=['Č.','Zadáno','Zadal','Úkol','Oblast / linka','Termín','Stav','Po termínu (dní)',
+    'Poznámka / vyjádření agentury','Hotovo','Příloh'];
+  const csv=[line(head)].concat(rows.map(t=>line([t.no,t.createdOn,t.createdBy||'',t.task,t.area||'',t.due,
+    t.status,isLate(t)?lateDays(t):'',t.note||'',t.closedOn||'',(t.files||[]).length]))).join('\n');
+  const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url; a.download='ukoly_lama_agency_'+today()+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+/* ==========================================================
+   Vykreslení a ovládání
+   ========================================================== */
+function render(){
+  if(!me){ appEl.innerHTML=loginView(); bind(); return; }
+  if(!canEnter()){ appEl.innerHTML=shell(noAccessView()); bind(); return; }
+  appEl.innerHTML = shell(`
+    ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
+    ${busy?`<div class="notice">${esc(busy)}</div>`:''}
+    ${canWrite()?'':`<div class="notice">K úkolům máš přístup jen na čtení — vidíš je, ale neměníš.</div>`}
+    ${listView()}`)
+    + (open?itemModal():'')
+    + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
+  bind();
+}
+function noAccessView(){
+  return `<div class="panel"><div class="body empty">
+    <div style="font-size:34px">🔒</div>
+    <div style="font-size:17px;font-weight:800;margin:8px 0 6px">K úkolům pro LAMA AGENCY zatím nemáš přístup</div>
+    <p class="muted" style="max-width:520px;margin:0 auto">
+      Přístup nastavuje David v <b>Nastavení → uživatel → Přístup k modulům → Úkoly pro LAMA AGENCY</b>.
+      Napiš mu, jestli potřebuješ jen číst, nebo i zapisovat.</p>
+  </div></div>`;
+}
+function shell(inner){
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Úkoly pro LAMA AGENCY', cur:'lama',
+    user:esc(me.email), email:esc(me.email), level:(LEVEL_LABEL[me.level]||''),
+    positions:me.positions||[], mods:me.modules||{}, logoutAttr:'id="btn-logout"',
+    modules:['portal','nakup','dovolenky','nastaveni','opravy','engineering','shopfloor','lama']}) : '';
+  return uh + `<main>${inner}</main>`;
+}
+function loginView(){
+  return `<div class="login-wrap"><form class="login" id="loginForm">
+    <h2>minimo · YFAI</h2><p>Úkoly pro LAMA AGENCY</p>
+    ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
+    <input type="email" id="li-email" placeholder="E-mail" autocomplete="username">
+    <input type="password" id="li-pass" placeholder="Heslo" autocomplete="current-password">
+    <button type="submit" ${loginBusy?'disabled':''}>${loginBusy?'Přihlašuji…':'Přihlásit se'}</button>
+  </form></div>`;
+}
+
+function bind(){
+  const lf=document.getElementById('loginForm');
+  if(lf) lf.onsubmit=async e=>{
+    e.preventDefault();
+    const email=document.getElementById('li-email').value.trim();
+    const pass=document.getElementById('li-pass').value;
+    loginBusy=true; loginErr=''; render();
+    try{ await signInWithEmailAndPassword(auth,email,pass); }
+    catch(err){ loginBusy=false; loginErr=loginErrMsg(err.code); render(); }
+  };
+  const lo=document.getElementById('btn-logout'); if(lo) lo.onclick=()=>signOut(auth);
+  document.querySelectorAll('[data-a]').forEach(el=>{
+    el.onclick=ev=>{ ev.stopPropagation(); act(el.dataset.a, el.dataset.v); };
+  });
+  /* filtry */
+  const q=document.getElementById('lm-q');
+  if(q) q.oninput=()=>{ f.q=q.value; const p=q.selectionStart; render();
+    const n=document.getElementById('lm-q'); if(n){ n.focus(); try{n.setSelectionRange(p,p);}catch(e){} } };
+  for(const [id,key] of [['lm-farea','area'],['lm-fstatus','status']]){
+    const el=document.getElementById(id); if(el) el.onchange=()=>{ f[key]=el.value; render(); };
+  }
+  const hc=document.getElementById('lm-hide'); if(hc) hc.onchange=()=>{ hideDone=hc.checked; render(); };
+  /* přílohy — fotoaparát i soubory */
+  ['lm-cam','lm-file'].forEach(id=>{ const el=document.getElementById(id);
+    if(el) el.onchange=()=>{ if(el.files&&el.files.length) addFiles(el.files); }; });
+  const ovl=document.getElementById('ovl');
+  if(ovl) ovl.onclick=e=>{ if(e.target.id==='ovl'){ collect(); open=null; oMsg=''; render(); } };
+}
+
+async function act(a,v){
+  switch(a){
+    case 'reload': loaded=false; await load(true); return;
+    case 'new':
+      if(!canWrite()) return;
+      open=emptyItem(); pending=[]; oMsg='';
+      break;
+    case 'open':
+      open=JSON.parse(JSON.stringify(items.find(x=>x._id===v)||{}));
+      if(!open._id) open=null;
+      pending=[]; oMsg='';
+      break;
+    case 'close': collect(); open=null; oMsg=''; break;
+    case 'save': await save(); return;
+    case 'del':  await removeItem(v); return;
+    case 'delfile': await removeFile(Number(v)); return;
+    case 'export': exportCsv(); return;
+  }
+  render();
+}
+function loginErrMsg(code){
+  const m={'auth/invalid-email':'Neplatný e-mail.','auth/user-not-found':'Účet neexistuje.',
+    'auth/wrong-password':'Nesprávné heslo.','auth/invalid-credential':'Nesprávný e-mail nebo heslo.',
+    'auth/too-many-requests':'Příliš mnoho pokusů, zkuste to za chvíli.',
+    'auth/operation-not-allowed':'Přihlašování e-mailem není ve Firebase zapnuté.'};
+  return m[code]||('Přihlášení se nezdařilo ('+code+').');
+}
+
+render();
+</script>
+<script src="header.js"></script>
+</body>
+</html>
