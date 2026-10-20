@@ -432,14 +432,17 @@ try{
 }catch(e){ console.warn('App Check se nepodařilo zapnout:', e&&e.message||e); }
 
 /* ===== AI čtení nabídek (Gemini přes Firebase AI Logic) =====
-   Model jde kdykoli změnit tady. Knihovna se načítá až při prvním použití. */
-const AI_MODEL = 'gemini-3.8-flash';
-let _aiModelP = null;
-async function aiOfferModel(){
-  if(_aiModelP) return _aiModelP;
-  _aiModelP = (async()=>{
-    const { getAI, getGenerativeModel, GoogleAIBackend, Schema } =
-      await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js");
+   Účtuje se přes VERTEX AI backend = standardní Google Cloud / Blaze (platí na něj
+   i free-trial kredit), ne oddělená peněženka Developer API. Modely se zkoušejí
+   v pořadí – kdyby se název změnil, použije se další. Knihovna se načítá až při
+   prvním použití. */
+const AI_MODELS = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-001','gemini-flash-latest'];
+let _aiReadyP = null;
+async function aiReady(){
+  if(_aiReadyP) return _aiReadyP;
+  _aiReadyP = (async()=>{
+    const mod = await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js");
+    const { getAI, VertexAIBackend, Schema } = mod;
     const schema = Schema.object({ properties:{
       polozky: Schema.array({ items: Schema.object({
         properties:{
@@ -452,11 +455,10 @@ async function aiOfferModel(){
         optionalProperties:['mnozstvi','jednotka','cena','mena']
       }) })
     }});
-    const ai = getAI(fbApp, { backend: new GoogleAIBackend() });
-    return getGenerativeModel(ai, { model: AI_MODEL,
-      generationConfig:{ responseMimeType:'application/json', responseSchema: schema } });
+    const backend = getAI(fbApp, { backend: new VertexAIBackend() });
+    return { getGenerativeModel: mod.getGenerativeModel, backend, schema };
   })();
-  return _aiModelP;
+  return _aiReadyP;
 }
 const AI_OFFER_PROMPT =
 `Jsi asistent nákupního oddělení. V přiloženém souboru je cenová NABÍDKA od dodavatele.
@@ -1780,27 +1782,39 @@ function ireqMime(file){
   const e=(file.name.split('.').pop()||'').toLowerCase();
   return e==='pdf'?'application/pdf':(e==='png'?'image/png':(/jpe?g/.test(e)?'image/jpeg':'application/octet-stream'));
 }
-/* Pošle nabídku (PDF/obrázek) přímo Gemini a vrátí rozpoznané položky. */
+/* Pošle nabídku (PDF/obrázek) přímo Gemini a vrátí rozpoznané položky.
+   Zkusí modely v pořadí AI_MODELS; neznámý/zrušený model přeskočí, jiné chyby
+   (účtování, oprávnění) vyhodí hned. */
 async function ireqAiExtract(file){
-  const model=await aiOfferModel();
+  const { getGenerativeModel, backend, schema } = await aiReady();
   const data=await fileToBase64(file);
-  const res=await model.generateContent([
-    { inlineData:{ mimeType: ireqMime(file), data } },
-    { text: AI_OFFER_PROMPT }
-  ]);
-  let txt=''; try{ txt=res.response.text(); }catch(_){ txt=''; }
-  let parsed=null;
-  try{ parsed=JSON.parse(txt); }
-  catch(_){ const m=txt&&txt.match(/[\[{][\s\S]*[\]}]/); if(m){ try{ parsed=JSON.parse(m[0]); }catch(e){} } }
-  const arr=(parsed&&(parsed.polozky||parsed.items))||(Array.isArray(parsed)?parsed:[]);
-  return (arr||[]).filter(x=>x&&String(x.popis||'').trim()).map(x=>{
-    const q=Number(x.mnozstvi), c=Number(x.cena), mena=String(x.mena||'').toUpperCase();
-    return { sklad:'', popis:String(x.popis).trim(),
-      mnozstvi:(isFinite(q)&&q>0)?q:1, jednotka:ireqUnit(x.jednotka),
-      cena:(isFinite(c)&&c>0)?Math.round(c*100)/100:'',
-      mena:['CZK','EUR','USD'].includes(mena)?mena:'CZK',
-      vyrobce:'', dodavatel:'', poznamka:'' };
-  });
+  const parts=[ { inlineData:{ mimeType: ireqMime(file), data } }, { text: AI_OFFER_PROMPT } ];
+  let lastErr=null;
+  for(const name of AI_MODELS){
+    try{
+      const model=getGenerativeModel(backend, { model:name,
+        generationConfig:{ responseMimeType:'application/json', responseSchema: schema } });
+      const res=await model.generateContent(parts);
+      let txt=''; try{ txt=res.response.text(); }catch(_){ txt=''; }
+      let parsed=null;
+      try{ parsed=JSON.parse(txt); }
+      catch(_){ const m=txt&&txt.match(/[\[{][\s\S]*[\]}]/); if(m){ try{ parsed=JSON.parse(m[0]); }catch(e){} } }
+      const arr=(parsed&&(parsed.polozky||parsed.items))||(Array.isArray(parsed)?parsed:[]);
+      return (arr||[]).filter(x=>x&&String(x.popis||'').trim()).map(x=>{
+        const q=Number(x.mnozstvi), c=Number(x.cena), mena=String(x.mena||'').toUpperCase();
+        return { sklad:'', popis:String(x.popis).trim(),
+          mnozstvi:(isFinite(q)&&q>0)?q:1, jednotka:ireqUnit(x.jednotka),
+          cena:(isFinite(c)&&c>0)?Math.round(c*100)/100:'',
+          mena:['CZK','EUR','USD'].includes(mena)?mena:'CZK',
+          vyrobce:'', dodavatel:'', poznamka:'' };
+      });
+    }catch(e){
+      lastErr=e; const msg=String(e&&e.message||'');
+      if(/not found|not available|no longer available|unsupported|not supported|404/i.test(msg)) continue;
+      throw e;
+    }
+  }
+  throw lastErr||new Error('žádný dostupný model');
 }
 
 /* ---------- načtení nabídky ---------- */
