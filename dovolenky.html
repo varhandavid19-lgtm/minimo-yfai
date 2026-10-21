@@ -432,7 +432,8 @@ function activeSeg(personId, ds){
 function rotationCodeFor(personId, ds){
   const seg=activeSeg(personId, ds); if(!seg || !seg.plan) return null;
   const plan=ROT_PLANS[seg.plan]; if(!plan) return null;
-  const L=plan.cycle.length, i=((daysSince(plan.anchor,ds)%L)+L)%L, tok=plan.cycle[i];
+  // segment s vlastní kotvou začíná cyklus od začátku (viz rotAnchor); starší segmenty bez ní jedou podle kotvy plánu
+  const L=plan.cycle.length, i=((daysSince(seg.anchor||plan.anchor,ds)%L)+L)%L, tok=plan.cycle[i];
   if(!tok || tok==='V') return null;
   return plan.map[tok] || tok;
 }
@@ -740,6 +741,14 @@ function findCollisions(person, from, to){
 }
 
 /* ---- Rotace (automatické rozplánování celého roku) — v okně jména ---- */
+/* Kde začne cyklus nově nastaveného rytmu: týdenní rytmy začínají první směnou
+   z popisu (O→N→R začne odpolední) v pondělí tohoto týdne — o víkendu až příští
+   pondělí. Týmy H1–H4 kopírují skutečný rozpis týmů, ty mají pevnou kotvu plánu. */
+function rotAnchor(planKey, from){
+  if(/^H\d$/.test(planKey)) return null;
+  const dow=new Date(from+'T00:00:00').getDay();           // 0 = neděle
+  return dow===0 ? addDays(from,1) : dow===6 ? addDays(from,2) : addDays(from,1-dow);
+}
 async function assignRotation(personId, plan){
   const p=allUsers.find(x=>x.id===personId);
   if(!p){ toast('Vyberte zaměstnance.','err'); return; }
@@ -749,7 +758,8 @@ async function assignRotation(personId, plan){
     const from=today();
     // minulost (segmenty starší než dnešek) zachováme, od dneška nastavíme nový rytmus
     const past=rotSegments(p.id).filter(s=>s.from<from);
-    const segments=past.concat([{plan, from}]);
+    const anchor=rotAnchor(plan, from);
+    const segments=past.concat([anchor?{plan, from, anchor}:{plan, from}]);
     await setDoc(doc(db,'rotations',p.id),{segments, personName:p.name, by:me.email, at:serverTimestamp()});
     toast('Rozplánováno od '+dCz(from)+' dál. Minulost zůstala beze změny.','ok'); pdlg=null; render();
   }catch(e){ toast('Nepodařilo se uložit rotaci: '+e.message,'err'); }
