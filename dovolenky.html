@@ -376,8 +376,6 @@ const SECTION_SHIFTS = {
   maintenance: ['D12','O12','N12','R','O','N','SAL'],
 };
 const sectionShifts = key => (SECTION_SHIFTS[key]||[]).map(k=>SHIFT_BY[k]).filter(Boolean);
-/* Maintenance jede 24/7 → plánuje se i o víkendu a svátcích (i dovolená). */
-const is247 = u => ((u&&u.positions)||[]).some(p=>POS2SECTION[p]==='maintenance');
 
 /* ---- Směnové rotace (automatické rozplánování celého roku jedním kliknutím) ----
    4směnný 12h (týmy H1–H4) je vytěžený z reálného rozpisu „Směny 2026" (28denní
@@ -549,8 +547,10 @@ function workingDays(from,to){
   let n=0; eachDay(from,to,ds=>{ if(isWorkday(ds)) n++; });
   return n;
 }
-/* Den, který se pro danou osobu plánuje: běžně jen pracovní den; u 24/7 (Maintenance) i víkend a svátek. */
-const isPlannable = (u,ds) => is247(u) ? true : isWorkday(ds);
+/* Plánovat jde každý den včetně víkendů a svátků — co se v kalendáři označí,
+   to se naplánuje (David, 10/2026). Nárok na dovolenou (vacStats) dál počítá
+   jen pracovní dny. */
+const isPlannable = () => true;
 /* Počet plánovatelných dnů v rozsahu pro danou osobu. */
 function plannableDays(u,from,to){
   if(!from||!to||to<from) return 0;
@@ -973,7 +973,7 @@ function selBarView(){
     <span class="sw" style="background:${fill}"></span>${esc(label)}</button>`;
   return `<div class="selbar" id="selbar">
     <div class="sb-head"><b>${esc(p.name)}</b> · ${single?dCz(from):dCz(from)+' – '+dCz(to)}
-      <span class="muted">(${dayLabel(n)}${n===0?' — samý víkend/svátek':''})</span>
+      <span class="muted">(${dayLabel(n)})</span>
       <button class="sb-x" id="sb-cancel" title="Zrušit výběr (Esc)">✕</button></div>
     <div class="sb-row"><span class="sb-lbl">Nepřítomnost</span>
       ${TYPES.map(t=>btn(`data-abs="${esc(t.k)}"`, t.fill, t.k)).join('')}
@@ -1044,7 +1044,7 @@ function vacStats(personId, year){
 }
 const personById = id => allUsers.find(u=>u.id===id) || null;
 /* Mapa nepřítomností pro rozsah dat: personId → { 'YYYY-MM-DD': absence }.
-   Vyplňují se plánovatelné dny osoby (u Maintenance 24/7 i víkend/svátek).
+   Vyplňují se všechny dny rozsahu včetně víkendů a svátků.
    Půlden (days===0.5) je jen jeden den. */
 function absenceMap(startDs,endDs){
   const by={};
