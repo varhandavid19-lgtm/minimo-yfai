@@ -20,6 +20,9 @@
     + '<path d="M30 0V40M0 20H60" stroke="#fff" stroke-width="12"/>'
     + '<path d="M30 0V40M0 20H60" stroke="#c8102e" stroke-width="6"/></svg>';
 
+  // Hlava lamy — ikona modulu Úkoly pro LAMA AGENCY (stejná je v index.html).
+  var LLAMA = '<svg viewBox="0 0 64 64" width="1.2em" height="1.2em" style="vertical-align:-.25em;flex:none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lama"><g stroke="#5a3b22" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M20 27C14 20 12 9 16 3c5 5 8 14 8 22z" fill="#f3e3c7"/><path d="M44 27c6-7 8-18 4-24-5 5-8 14-8 22z" fill="#f3e3c7"/><path d="M18 21c-2-5-2-10-1-13 2 4 4 9 4 13z" fill="#eba9a2" stroke="none"/><path d="M46 21c2-5 2-10 1-13-2 4-4 9-4 13z" fill="#eba9a2" stroke="none"/><path d="M20 25c0-7 6-10 12-10s12 3 12 10v15c0 10-5 18-12 18s-12-8-12-18z" fill="#f3e3c7"/><path d="M21 22c-2-6 3-10 7-8 1-5 7-5 8 0 4-2 9 2 7 8-5 3-17 3-22 0z" fill="#fff8ec"/><ellipse cx="32" cy="47" rx="9" ry="8" fill="#fff8ec" stroke-width="1.6"/><path d="M29.5 43.5Q32 45 34.5 43.5M32 44.5v3M29 49.5q3 2.5 6 0" fill="none" stroke-width="1.6"/></g><ellipse cx="26" cy="32" rx="2.6" ry="3.2" fill="#2b1d12"/><ellipse cx="38" cy="32" rx="2.6" ry="3.2" fill="#2b1d12"/><circle cx="26.9" cy="30.9" r=".9" fill="#fff"/><circle cx="38.9" cy="30.9" r=".9" fill="#fff"/><circle cx="23" cy="39" r="2.6" fill="#f0a3a0" opacity=".55"/><circle cx="41" cy="39" r="2.6" fill="#f0a3a0" opacity=".55"/></svg>';
+
   window.uheaderHTML = function(o){
     o = o || {};
     function link(href, ico, label, key){
@@ -72,7 +75,7 @@
       var ok = (set==='read' || set==='write')
         || OPRAVY_OWNERS.indexOf(String(o.email||o.user||'').trim().toLowerCase())>=0;
       if(!ok) return '';
-      return '<a class="'+(o.cur==='lama'?'cur':'')+'" href="lama.html">🦙 Úkoly pro LAMA AGENCY</a>';
+      return '<a class="'+(o.cur==='lama'?'cur':'')+'" href="lama.html">'+LLAMA+' Úkoly pro LAMA AGENCY</a>';
     }
     return '<header class="uhdr">'
       + '<div class="uh-menuwrap">'
