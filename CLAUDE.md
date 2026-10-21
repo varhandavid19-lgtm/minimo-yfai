@@ -66,6 +66,11 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   jména (od dneška) i v liště výběru (řádek Rytmus, od prvního označeného dne,
   `rotRowView`). Do minulosti NE — `assignRotation`/`clearRotation` to odmítnou.
   Nevracej horní formuláře.
+  Záložka **💰 Výpočet bonusů** (`mainTab='bonus'`, `bonusRows`): příplatky za
+  měsíc z naplánovaných směn (ručních i z rytmu) — 12h směna (D12/O12/N12)
+  +200 Kč, směna v sobotu/neděli (den začátku) +1000 Kč, obojí se sčítá
+  (`BONUS_12H`, `BONUS_WEEKEND`). Celodenní nepřítomnost směnu ruší, půl dne
+  dovolené ne. Svátky příplatek nemají. Vidí jen kdo má v sekci „Zapisovat všechny".
   Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
   v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky
   a šipky posouvají po měsících (`calMonth`), v roce po letech.

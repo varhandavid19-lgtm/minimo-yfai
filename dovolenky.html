@@ -99,6 +99,11 @@
   .ptable .rm{background:transparent;border:0;color:#9aa7b8;font-size:16px;line-height:1;padding:2px 6px}
   .ptable .rm:hover{color:var(--red)}
   .ptable .tempty{color:var(--muted);text-align:center;padding:22px}
+  .ptable.bonus tr.zero td{color:#9aa7b8}
+  .ptable.bonus tfoot td{background:#eef3fb;border-top:2px solid #c3d0e2;font-weight:700;padding:9px 11px}
+  .tab.tab-bonus{margin-left:12px}
+  .tabbar{overflow-x:auto;max-width:100vw}
+  .tabbar .tab{flex:none;white-space:nowrap}
 
   /* ---- lidé ---- */
   .people{display:flex;flex-direction:column;gap:7px;max-height:210px;overflow:auto}
@@ -494,6 +499,8 @@ let calMonth=_now0.getMonth();     // měsíc v zobrazení „Měsíc" (0 = lede
 /* Zobrazení: 'year' = celý rok s posuvníkem, 'month' = jeden měsíc roztažený na šířku.
    Volba si pamatuje prohlížeč (jen pohodlí jednoho uživatele). */
 let calView='year';
+let mainTab='plan';                // 'plan' = kalendář sekce, 'bonus' = výpočet bonusů
+let bonusYear=_now0.getFullYear(), bonusMonth=_now0.getMonth();
 try{ if(localStorage.getItem('plan-view')==='month') calView='month'; }catch(e){}
 let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
 let loginBusy=false, loginErr='';
@@ -958,6 +965,11 @@ function appView(){
     return `${headerView()}<main><div class="empty-cal" style="margin-top:20px">
       Nemáte přístup k žádné sekci plánování.<br>Obraťte se prosím na správce (modul ⚙️ Nastavení).</div></main>`;
   }
+  if(mainTab==='bonus' && bonusSections().length){
+    return `${headerView()}
+  ${tabBar()}
+  <main>${bonusView()}</main>`;
+  }
   return `${headerView()}
   ${tabBar()}
   <main class="${sel?'hassel':''}">
@@ -973,10 +985,89 @@ function appView(){
 
 function tabBar(){
   const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
-  const t=(s)=>`<button class="tab ${section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
-  const permNote = curPerm()==='all' ? 'Tažením v řádku člověka označ dny, dole pak vyber, co v nich má být.'
+  const isBonus = mainTab==='bonus' && bonusSections().length;
+  const t=(s)=>`<button class="tab ${!isBonus&&section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
+  const permNote = isBonus ? 'Příplatky se počítají z naplánovaných směn (ručních i z rytmu).'
+    : curPerm()==='all' ? 'Tažením v řádku člověka označ dny, dole pak vyber, co v nich má být.'
     : 'Tuto sekci můžete jen prohlížet.';
-  return `<div class="tabbar">${visible.map(t).join('')}<span class="tb-note">${permNote}</span></div>`;
+  const bonusTab = bonusSections().length ? `<button class="tab tab-bonus ${isBonus?'active':''}" data-maintab="bonus">💰 Výpočet bonusů</button>` : '';
+  return `<div class="tabbar">${visible.map(t).join('')}${bonusTab}<span class="tb-note">${permNote}</span></div>`;
+}
+
+/* ==========================================================
+   VÝPOČET BONUSŮ — příplatky za směny (David, 10/2026)
+   Za každou naplánovanou směnu (ruční i z rytmu): 12h směna +200 Kč,
+   směna v sobotu/neděli (podle dne začátku) +1000 Kč, obojí se sčítá.
+   Den s celodenní nepřítomností se nepočítá (půl dne dovolené směnu neruší).
+   Svátky příplatek nemají. Vidí jen kdo má v sekci „Zapisovat všechny".
+   ========================================================== */
+const BONUS_12H = 200;
+const BONUS_WEEKEND = 1000;
+const SHIFTS_12H = ['D12','O12','N12'];
+const bonusSections = () => SECTIONS.filter(s=>secPerm(s.key)==='all');
+const czk = n => n.toLocaleString('cs-CZ')+' Kč';
+/* Spočítá příplatky za měsíc pro lidi vybraných sekcí. */
+function bonusRows(y, m){
+  const from=iso(y,m,1), to=iso(y,m,new Date(y,m+1,0).getDate());
+  const abs=absenceMap(from,to), sm=shiftMap(from,to);
+  const rows=[];
+  bonusSections().forEach(sec=>{
+    const secPos=sec.positions;
+    allUsers.filter(u=>inSection(u,sec.key)).sort(bySurname).forEach(p=>{
+      const r={sec:sec.label, pos:(p.positions||[]).find(x=>secPos.includes(x))||'', name:p.name,
+        shifts:0, n12:0, nWe:0, b12:0, bWe:0, total:0, days:[]};
+      eachDay(from,to,ds=>{
+        const a=(abs[p.id]||{})[ds];
+        if(a && a.days!==0.5) return;                  // celý den nepřítomen → žádná směna
+        const man=(sm[p.id]||{})[ds];
+        const code = man ? man.shift : rotationCodeFor(p.id, ds);
+        if(!code) return;
+        const dow=new Date(ds+'T00:00:00').getDay(), we=(dow===0||dow===6), h12=SHIFTS_12H.includes(code);
+        r.shifts++;
+        if(h12){ r.n12++; r.b12+=BONUS_12H; }
+        if(we){ r.nWe++; r.bWe+=BONUS_WEEKEND; }
+        if(h12||we) r.days.push(`${dCz(ds)} ${code}${we?' (víkend)':''}`);
+      });
+      r.total=r.b12+r.bWe;
+      rows.push(r);
+    });
+  });
+  return rows;
+}
+function bonusView(){
+  const rows=bonusRows(bonusYear, bonusMonth);
+  const sum=k=>rows.reduce((a,r)=>a+r[k],0);
+  const body=rows.length ? rows.map(r=>`<tr class="${r.total?'':'zero'}" title="${esc(r.days.join('\n')||'Bez příplatků')}">
+      <td>${esc(r.sec)}</td><td>${esc(r.pos)}</td><td class="nm">${esc(r.name)}</td>
+      <td class="num">${r.shifts}</td><td class="num">${r.n12}</td><td class="num">${r.nWe}</td>
+      <td class="num">${r.b12?czk(r.b12):'—'}</td><td class="num">${r.bWe?czk(r.bWe):'—'}</td>
+      <td class="num"><b>${r.total?czk(r.total):'—'}</b></td></tr>`).join('')
+    : `<tr><td colspan="9" class="tempty">V sekcích zatím nejsou žádní lidé.</td></tr>`;
+  return `<div class="calbar">
+      <button class="nav" id="bn-prev" title="Předchozí měsíc">‹</button>
+      <div class="yr">${MONTHS[bonusMonth]} ${bonusYear}</div>
+      <button class="nav" id="bn-next" title="Další měsíc">›</button>
+      <button class="btn-ghost" id="bn-today">Tento měsíc</button>
+      <button class="btn-ghost" id="bn-export">⭳ Export CSV</button>
+      <span class="hint">12h směna +${czk(BONUS_12H)} · směna v sobotu/neděli +${czk(BONUS_WEEKEND)} · obojí se sčítá · najetím na řádek uvidíš dny</span>
+    </div>
+    <div class="panel"><div class="tblwrap"><table class="ptable bonus">
+      <thead><tr><th>Sekce</th><th>Úsek</th><th>Jméno</th><th class="num">Směn</th><th class="num">z toho 12h</th>
+        <th class="num">Víkendových</th><th class="num">Příplatek 12h</th><th class="num">Příplatek víkend</th><th class="num">Celkem</th></tr></thead>
+      <tbody>${body}</tbody>
+      ${rows.length?`<tfoot><tr><td colspan="3"><b>Celkem</b></td><td class="num">${sum('shifts')}</td><td class="num">${sum('n12')}</td>
+        <td class="num">${sum('nWe')}</td><td class="num">${czk(sum('b12'))}</td><td class="num">${czk(sum('bWe'))}</td>
+        <td class="num"><b>${czk(sum('total'))}</b></td></tr></tfoot>`:''}
+    </table></div></div>`;
+}
+function exportBonusCsv(){
+  const rows=bonusRows(bonusYear, bonusMonth);
+  const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  const csv=[line(['Měsíc','Sekce','Úsek','Jméno','Směn','z toho 12h','Víkendových','Příplatek 12h (Kč)','Příplatek víkend (Kč)','Celkem (Kč)','Dny s příplatkem'])]
+    .concat(rows.map(r=>line([`${MONTHS[bonusMonth]} ${bonusYear}`,r.sec,r.pos,r.name,r.shifts,r.n12,r.nWe,r.b12,r.bWe,r.total,r.days.join(', ')]))).join('\n');
+  const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url; a.download=`bonusy_${bonusYear}-${String(bonusMonth+1).padStart(2,'0')}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 
 function headerView(){
@@ -1271,8 +1362,15 @@ function wireApp(){
   // přepínání sekcí (Engineering / Maintenance / Toolsetters)
   document.querySelectorAll('[data-section]').forEach(b=>
     b.addEventListener('click',()=>{
-      section=b.getAttribute('data-section'); sel=null; alignedYear=null; render();
+      section=b.getAttribute('data-section'); mainTab='plan'; sel=null; alignedYear=null; render();
     }));
+  document.querySelector('[data-maintab="bonus"]')?.addEventListener('click',()=>{ mainTab='bonus'; sel=null; render(); });
+  // výpočet bonusů: měsíc a export
+  const bshift=dir=>{ bonusMonth+=dir; if(bonusMonth<0){bonusMonth=11;bonusYear--;} else if(bonusMonth>11){bonusMonth=0;bonusYear++;} render(); };
+  document.getElementById('bn-prev')?.addEventListener('click',()=>bshift(-1));
+  document.getElementById('bn-next')?.addEventListener('click',()=>bshift(1));
+  document.getElementById('bn-today')?.addEventListener('click',()=>{ const n=new Date(); bonusYear=n.getFullYear(); bonusMonth=n.getMonth(); render(); });
+  document.getElementById('bn-export')?.addEventListener('click',exportBonusCsv);
 
   // rok kalendáře + skok na dnešek
   // šipky posouvají o rok, v zobrazení „Měsíc" o měsíc
