@@ -62,7 +62,9 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   dovolené, směnami sekce a „Vymazat". Zápis nejdřív uvolní vybrané dny
   (`clearRange` — přesahující záznamy se rozdělí), pak uloží nový záznam. Směna
   přebije i nepřítomnost, nepřítomnost směnu jen překryje. Během tažení se
-  nepřekresluje (`dragging`). Směnový rytmus na rok (rotace) je v okně jména.
+  nepřekresluje (`dragging`). Směnový rytmus na rok (rotace) jde nastavit v okně
+  jména (od dneška) i v liště výběru (řádek Rytmus, od prvního označeného dne,
+  `rotRowView`). Do minulosti NE — `assignRotation`/`clearRotation` to odmítnou.
   Nevracej horní formuláře.
   Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
   v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky

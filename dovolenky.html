@@ -179,6 +179,7 @@
   .sb-clear{color:var(--red);border-color:#f0c8c3}
   .sb-clear:hover{background:#fdecea;border-color:var(--red)}
   #sb-note{width:200px;padding:6px 9px;font-size:12.5px}
+  #sb-plan{width:auto;max-width:260px;padding:6px 9px;font-size:12.5px}
   main.hassel{padding-bottom:230px}
   .rotbox{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:7px}
   .rotbox label{font-size:12px;font-weight:700;color:#41506b}
@@ -499,6 +500,7 @@ let loginBusy=false, loginErr='';
 let dlg=null;              // {personName, dateStr, items:[...]} – náhled dne pro toho, kdo jen čte
 let sel=null;              // označené dny v kalendáři {personId, a, b} (a = kde výběr začal)
 let selNote='';            // poznámka k nepřítomnosti z lišty výběru
+let selPlan='';            // rytmus vybraný v liště výběru
 let busySel=false;         // ukládá se výběr
 let dragging=false, pendingRender=false;   // během tažení se nepřekresluje (zrušilo by tah)
 let collision=null;        // {list:[...], from, to, onOk} – upozornění na kolizi ve stejném úseku
@@ -762,33 +764,37 @@ function rotAnchor(planKey, from){
   const dow=new Date(from+'T00:00:00').getDay();           // 0 = neděle
   return dow===0 ? addDays(from,1) : dow===6 ? addDays(from,2) : addDays(from,1-dow);
 }
-async function assignRotation(personId, plan){
+/* Rytmus se nastavuje od zvoleného dne dál (z okna jména od dneška, z lišty výběru
+   od prvního označeného dne). Do minulosti nejde — co už proběhlo, se nepřepisuje.
+   Segmenty před tímto dnem zůstanou, ty od něj dál nahradí nový rytmus. */
+async function assignRotation(personId, plan, from){
+  from=from||today();
   const p=allUsers.find(x=>x.id===personId);
   if(!p){ toast('Vyberte zaměstnance.','err'); return; }
   if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
   if(!ROT_PLANS[plan]){ toast('Vyberte směnový rytmus.','err'); return; }
+  if(from<today()){ toast('Rytmus nejde nastavit do minulosti — začni nejdřív dneškem.','err'); return; }
   try{
-    const from=today();
-    // minulost (segmenty starší než dnešek) zachováme, od dneška nastavíme nový rytmus
     const past=rotSegments(p.id).filter(s=>s.from<from);
     const anchor=rotAnchor(plan, from);
     const segments=past.concat([anchor?{plan, from, anchor}:{plan, from}]);
     await setDoc(doc(db,'rotations',p.id),{segments, personName:p.name, by:me.email, at:serverTimestamp()});
-    toast('Rozplánováno od '+dCz(from)+' dál. Minulost zůstala beze změny.','ok'); pdlg=null; render();
+    toast('Rozplánováno od '+dCz(from)+' dál. Co bylo předtím, zůstalo beze změny.','ok'); pdlg=null; sel=null; render();
   }catch(e){ toast('Nepodařilo se uložit rotaci: '+e.message,'err'); }
 }
-async function clearRotation(personId){
+async function clearRotation(personId, from){
+  from=from||today();
   const p=allUsers.find(x=>x.id===personId);
   if(p && !canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
+  if(from<today()){ toast('Rytmus nejde ukončit v minulosti.','err'); return; }
   try{
-    const from=today();
     const past=rotSegments(personId).filter(s=>s.from<from);
-    if(past.length){   // ponech minulost, od dneška ukonči rytmus
+    if(past.length){   // ponech, co bylo před tímto dnem, od něj rytmus ukonči
       await setDoc(doc(db,'rotations',personId),{segments:past.concat([{plan:'',from}]), by:me.email, at:serverTimestamp()});
     }else{
       await deleteDoc(doc(db,'rotations',personId));
     }
-    toast('Rytmus ukončen od dneška. Minulost zůstala beze změny.','ok'); pdlg=null; render();
+    toast('Rytmus ukončen od '+dCz(from)+'. Co bylo předtím, zůstalo beze změny.','ok'); pdlg=null; sel=null; render();
   }catch(e){ toast('Nepodařilo se zrušit: '+e.message,'err'); }
 }
 
@@ -977,6 +983,21 @@ function headerView(){
   return window.uheaderHTML ? window.uheaderHTML({module:'Plánování směn a přítomnosti',cur:'dovolenky',user:esc(me.email),level:'',logoutAttr:'id="btn-logout"',modules:allowedMods(myDoc&&myDoc.modules, levelOf(myDoc)),mods:(myDoc&&myDoc.modules)||{},email:esc(me.email),positions:(myDoc&&myDoc.positions)||[]}) : '';
 }
 
+/* Řádek „Rytmus" v liště: rozplánovat / ukončit rytmus od prvního označeného dne.
+   Do minulosti nejde — tlačítka se zamknou a řádek řekne proč. */
+function rotRowView(p, from){
+  const allPlanKeys=ROT_GROUPS.flatMap(g=>g.plans);
+  const cur=activeSeg(p.id, from);
+  if(!allPlanKeys.includes(selPlan)) selPlan=(cur&&allPlanKeys.includes(cur.plan))?cur.plan:allPlanKeys[0];
+  const past=from<today(), dis=(past||busySel)?'disabled':'';
+  const pOpts=ROT_GROUPS.map(g=>`<optgroup label="${esc(g.label)}">${g.plans.map(k=>
+    `<option value="${k}" ${selPlan===k?'selected':''}>${esc(ROT_PLANS[k].label)}</option>`).join('')}</optgroup>`).join('');
+  return `<div class="sb-row"><span class="sb-lbl">Rytmus</span>
+    <select id="sb-plan" ${dis}>${pOpts}</select>
+    <button class="sb-btn" id="sb-rot" ${dis}>🔁 Rozplánovat od ${dCz(from)}</button>
+    ${rotSegments(p.id).length?`<button class="sb-btn" id="sb-rotclear" ${dis}>Ukončit rytmus od ${dCz(from)}</button>`:''}
+    ${past?'<span class="hintmini" style="color:var(--red)">Rytmus nejde nastavit do minulosti — označ jako první den dnešek nebo později.</span>':''}</div>`;
+}
 /* Lišta dole: co se má stát s označenými dny. */
 function selBarView(){
   const p=personById(sel.personId); const r=selRange(); if(!p||!r) return '';
@@ -995,9 +1016,10 @@ function selBarView(){
       <input type="text" id="sb-note" value="${esc(selNote)}" placeholder="poznámka (nepovinné)"></div>
     ${sh.length?`<div class="sb-row"><span class="sb-lbl">Směna</span>
       ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?s.name:(s.k+' · '+s.name), s.name+(s.hours?' ('+s.hours+')':''))).join('')}</div>`:''}
+    ${rotRowView(p, from)}
     <div class="sb-row"><span class="sb-lbl"></span>
       <button class="sb-btn sb-clear" id="sb-clear" ${busySel?'disabled':''}>🗑 Vymazat vybrané dny</button>
-      <span class="hintmini">${busySel?'Ukládám…':'Shift+klik rozšíří výběr · Esc výběr zruší · směny z rotace zůstávají, dokud rytmus neukončíš (klik na jméno)'}</span></div>
+      <span class="hintmini">${busySel?'Ukládám…':'Shift+klik rozšíří výběr · Esc výběr zruší · směny z rytmu Vymazat neumí — přepiš je nebo rytmus ukonči'}</span></div>
   </div>`;
 }
 
@@ -1298,6 +1320,10 @@ function wireApp(){
   document.getElementById('sb-clear')?.addEventListener('click',()=>{
     const r=selRange(); if(r && confirm(`Vymazat nepřítomnosti a ručně naplánované směny ve vybraných dnech (${r[0]===r[1]?dCz(r[0]):dCz(r[0])+' – '+dCz(r[1])})?`)) clearSelection(); });
   document.getElementById('sb-cancel')?.addEventListener('click',()=>{sel=null;render();});
+  document.getElementById('sb-plan')?.addEventListener('change',e=>{selPlan=e.target.value;});
+  document.getElementById('sb-rot')?.addEventListener('click',()=>{ const r=selRange(); if(r) assignRotation(sel.personId, selPlan, r[0]); });
+  document.getElementById('sb-rotclear')?.addEventListener('click',()=>{ const r=selRange();
+    if(r && confirm(`Ukončit směnový rytmus od ${dCz(r[0])}? Co bylo předtím, zůstane.`)) clearRotation(sel.personId, r[0]); });
   const sn=document.getElementById('sb-note'); sn?.addEventListener('input',()=>{selNote=sn.value;});
 
   // kalendář: myší se dny označují tažením, na dotykové obrazovce dvěma ťuknutími
