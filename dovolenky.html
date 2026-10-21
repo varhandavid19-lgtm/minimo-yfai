@@ -180,8 +180,7 @@
   .cal tr.grp .grp-add{margin-left:6px;padding:1px 7px;font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;
     background:#fff;border:1px solid #c3d0e2;color:var(--navy-2);border-radius:10px;cursor:pointer;vertical-align:1px}
   .cal tr.grp .grp-add:hover{background:var(--navy-2);color:#fff}
-  /* jméno bez účtu v minimu: kurzívou, kdo smí upravovat, klikne a otevře úpravu */
-  .cal td.name.ext{font-style:italic;color:#41506b}
+  /* jméno v plánu: kdo smí upravovat, klikne a otevře úpravu */
   .cal td.name.ext.edit{cursor:pointer}
   .cal td.name.ext.edit:hover{color:var(--navy-2);text-decoration:underline}
 
@@ -434,7 +433,10 @@ const allowedMods=(mods,level)=>['portal',
 const modCap = () => resolveModule(myDoc&&myDoc.modules, levelOf(myDoc), 'plan');
 /* Výsledné právo v sekci = právo sekce omezené přístupem k modulu
    (modul „Jen číst" → i sekce jen čtou; modul „Skryté" → nic). */
-const secPerm = s => { const base=resolvePerm(myDoc,s), cap=modCap();
+/* „Zapisovat jen sebe" už nemá na koho ukázat (jména v plánu nejsou účty),
+   proto se chová jako „Jen číst". Zapisuje jen ten, kdo má „Zapisovat všechny". */
+const secPerm = s => { let base=resolvePerm(myDoc,s); const cap=modCap();
+  if(base==='self') base='read';
   if(cap==='none') return 'none';
   if(cap==='read') return base==='none'?'none':'read';
   return base; };
@@ -544,7 +546,10 @@ function dayLabel(n){ n=Number(n);
    FIREBASE — přihlášení a načítání dat
    ========================================================== */
 let unsubPeople=null, unsubExt=null, unsubAbs=null, unsubShifts=null, unsubRot=null;
-const mergePeople = () => { allUsers=userPeople.concat(extPeople); };
+/* Lidé v plánu se zadávají JEN ručně (kolekce people, ext:true) — nejsou propojení
+   s účty ani pozicemi uživatelů (rozhodnutí 10/2026). Uživatelé (users) slouží už
+   jen k právům přihlášeného (myDoc). */
+const mergePeople = () => { allUsers=extPeople.slice(); };
 
 onAuthStateChanged(auth, (user)=>{
   loginBusy=false;
@@ -824,15 +829,14 @@ function personDlgView(){
   const secPositions=(SECTIONS.find(s=>s.key===section)||{}).positions||[];
   const pOpts=secPositions.map(p=>`<option ${pdlg.pos===p?'selected':''}>${esc(p)}</option>`).join('');
   return `<div class="dlg-wrap" id="pd-wrap"><div class="dlg">
-    <div class="t">👤 ${pdlg.id?'Jméno bez účtu':'Přidat jméno do plánování'}<button class="x" id="pd-x">✕</button></div>
+    <div class="t">👤 ${pdlg.id?'Úprava jména v plánu':'Přidat jméno do plánování'}<button class="x" id="pd-x">✕</button></div>
     <div class="c">
       <div class="egrid">
         <div class="f span3"><label>Jméno a příjmení</label>
           <input type="text" id="pd-name" value="${esc(pdlg.name||'')}" placeholder="např. Jan Novák" autocomplete="off"></div>
         <div class="f span3"><label>Úsek (pozice)</label><select id="pd-pos">${pOpts}</select></div>
       </div>
-      <p style="margin:12px 0 0;color:var(--muted);font-size:12px">Člověk nemusí mít účet v minimu — jde jen o řádek v plánu.
-        Účet a přístupy se zakládají zvlášť v Nastavení.</p>
+      <p style="margin:12px 0 0;color:var(--muted);font-size:12px">Jde jen o řádek v plánu — s účty v minimu to nijak nesouvisí.</p>
       ${pdlg.msg?`<div class="formfoot"><span class="msg err">${esc(pdlg.msg)}</span></div>`:''}
     </div>
     <div class="b">
@@ -963,7 +967,7 @@ function formPanel(){
   const opts=editable.map(p=>`<option value="${p.id}" ${form.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
   const tOpts=TYPES.map(t=>`<option value="${esc(t.k)}" ${form.type===t.k?'selected':''}>${esc(t.k)}</option>`).join('');
   const noPeople = !editable.length;
-  const emptyMsg = !people.length ? '— v této sekci nejsou lidé (přiřaďte pozice v Nastavení) —'
+  const emptyMsg = !people.length ? '— v této sekci nejsou lidé (přidejte je tlačítkem „Přidat jméno" nad kalendářem) —'
                                   : '— nemáte koho upravovat —';
   return `<div class="panel"><h2>➕ Nová nepřítomnost</h2><div class="body">
     <div class="formrow">
@@ -1131,8 +1135,8 @@ function shiftMap(startDs,endDs){
 function calendarView(){
   if(!people.length){
     const sl=SECTIONS.find(s=>s.key===section);
-    return `<div class="cal-wrap"><div class="empty-cal">V sekci <b>${esc(sl?sl.label:'')}</b> zatím nejsou žádní lidé.<br>Přiřaď lidem pozice této sekce v modulu <b>⚙️ Nastavení</b>${
-      canEditAll()?', nebo jméno vepiš rovnou tlačítkem <b>👤 + Přidat jméno</b> nad kalendářem':''}.</div></div>`;
+    return `<div class="cal-wrap"><div class="empty-cal">V sekci <b>${esc(sl?sl.label:'')}</b> zatím nejsou žádní lidé.<br>${
+      canEditAll()?'Přidej je tlačítkem <b>👤 + Přidat jméno</b> nad kalendářem.':'Lidi do plánu přidává ten, kdo má v sekci právo zapisovat.'}</div></div>`;
   }
   const mob=window.innerWidth<=680;
   const NC=mob?110:180, DC=mob?30:34;
@@ -1191,8 +1195,8 @@ function calendarView(){
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
     const nameCell = (p.ext && canEditAll())
-      ? `<td class="name ext edit" data-ext="${p.id}" title="${esc(p.name)} — bez účtu v minimu, kliknutím upravíš">${esc(p.name)}</td>`
-      : p.ext ? `<td class="name ext" title="${esc(p.name)} — bez účtu v minimu">${esc(p.name)}</td>`
+      ? `<td class="name ext edit" data-ext="${p.id}" title="${esc(p.name)} — kliknutím upravíš nebo odebereš">${esc(p.name)}</td>`
+      : p.ext ? `<td class="name ext" title="${esc(p.name)}">${esc(p.name)}</td>`
       : `<td class="name" title="${esc(p.name)}">${esc(p.name)}</td>`;
     return `<tr>${nameCell}${cells}</tr>`;
   };

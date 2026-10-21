@@ -48,12 +48,14 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
 - kolekce `requests` — jeden dokument = jeden nákupní požadavek
 - kolekce `opravy` — externí opravy
 - kolekce `people`, `absences`, `shifts`, `rotations` — plánování směn.
-  Lidé v plánu = uživatelé z `users` (podle pozic) + **jména bez účtu** z `people`
-  (`{name, pos, ext:true}`). Jména bez účtu přidává v plánování kdo má v sekci
-  „Zapisovat všechny" (tlačítko „👤 + Přidat jméno" nad kalendářem a „+ jméno"
-  u úseku), kliknutím na jméno (kurzíva) se upraví nebo odebere — odebrání smaže
-  i jeho nepřítomnosti, směny a rotaci. Staré záznamy v `people` bez `ext:true`
-  (z původní aplikace Dovolenky) se ignorují. Nenuť lidi zakládat účet jen kvůli plánu.
+  **Lidé v plánu se zadávají JEN ručně** (David, 10/2026) — kolekce `people`
+  (`{name, pos, ext:true}`). NEJSOU propojení s účty (`users`) ani s jejich
+  pozicemi; `users` slouží v plánování jen k právům přihlášeného. Nevracej
+  propojení s pozicemi. Jména přidává kdo má v sekci „Zapisovat všechny"
+  (tlačítko „👤 + Přidat jméno" nad kalendářem a „+ jméno" u úseku), kliknutím
+  na jméno se upraví nebo odebere — odebrání smaže i jeho nepřítomnosti, směny
+  a rotaci. Staré záznamy v `people` bez `ext:true` se ignorují.
+  Právo „Zapisovat jen sebe" se v plánování chová jako „Jen číst" (`secPerm`).
 - kolekce `users` — id dokumentu = uid uživatele; pole `name`, `level`, `role`,
   `positions`, `perms`, `modules` (přístup k modulům: none / read / write)
 - dokument `meta/config` — účty, úseky, stroje, povinná pole, kurzy, čítače
