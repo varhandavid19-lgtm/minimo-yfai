@@ -56,6 +56,14 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   na jméno se upraví nebo odebere — odebrání smaže i jeho nepřítomnosti, směny
   a rotaci. Staré záznamy v `people` bez `ext:true` se ignorují.
   Právo „Zapisovat jen sebe" se v plánování chová jako „Jen číst" (`secPerm`).
+  **Plánuje se přímo v kalendáři, bez formulářů s datumy** (David, 10/2026):
+  tažením myší v řádku člověka se označí dny (na dotyku dvě ťuknutí, Shift+klik
+  rozšíří), dole se objeví lišta (`selBarView`) s druhy nepřítomnosti, ½ dne
+  dovolené, směnami sekce a „Vymazat". Zápis nejdřív uvolní vybrané dny
+  (`clearRange` — přesahující záznamy se rozdělí), pak uloží nový záznam. Směna
+  přebije i nepřítomnost, nepřítomnost směnu jen překryje. Během tažení se
+  nepřekresluje (`dragging`). Směnový rytmus na rok (rotace) je v okně jména.
+  Nevracej horní formuláře.
 - kolekce `users` — id dokumentu = uid uživatele; pole `name`, `level`, `role`,
   `positions`, `perms`, `modules` (přístup k modulům: none / read / write)
 - dokument `meta/config` — účty, úseky, stroje, povinná pole, kurzy, čítače

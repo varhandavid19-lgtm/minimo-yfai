@@ -153,7 +153,31 @@
   .cal td.name{position:sticky;left:0;z-index:3;background:#fff;text-align:left;padding:0 12px;font-weight:600;
     font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 0 #e6ebf2}
   .cal tbody tr:hover td.name{background:#f7f9fc}
-  .cal td.d{cursor:pointer}
+  .cal td.d{cursor:pointer;user-select:none}
+  /* označené dny (tažením) — oranžový rámeček a lehký přeliv přes barvu záznamu */
+  .cal td.d.sel{box-shadow:inset 0 0 0 2px #e8590c !important;
+    background-image:linear-gradient(rgba(246,130,31,.32),rgba(246,130,31,.32)) !important}
+  /* lišta dole s volbami pro označené dny */
+  .selbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:70;width:min(1100px,calc(100vw - 24px));
+    background:#fff;border:1px solid #c3d0e2;border-radius:14px;box-shadow:0 14px 40px rgba(12,26,48,.28);padding:10px 14px;
+    display:flex;flex-direction:column;gap:7px;max-height:60vh;overflow:auto}
+  .sb-head{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--navy-1)}
+  .sb-head .muted{color:var(--muted);font-size:12px}
+  .sb-x{margin-left:auto;background:transparent;border:0;font-size:18px;color:#6b7a90;padding:0 4px}
+  .sb-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .sb-lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#6b7a90;width:96px;flex:none}
+  .sb-btn{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);color:#16233a;
+    border-radius:8px;padding:6px 10px;font-size:12.5px;font-weight:600}
+  .sb-btn:hover{border-color:var(--navy-2);background:#eef3fb}
+  .sb-btn .sw{width:14px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.1)}
+  .sb-clear{color:var(--red);border-color:#f0c8c3}
+  .sb-clear:hover{background:#fdecea;border-color:var(--red)}
+  #sb-note{width:200px;padding:6px 9px;font-size:12.5px}
+  main.hassel{padding-bottom:230px}
+  .rotbox{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:7px}
+  .rotbox label{font-size:12px;font-weight:700;color:#41506b}
+  .rotrow{display:flex;gap:8px;flex-wrap:wrap}
+  .rotrow select{flex:1 1 220px}
   .cal td.d:hover{outline:2px solid #2a5ea3;outline-offset:-2px;position:relative;z-index:2}
   .cal th.we,.cal td.we{background:#e9edf3}
   .cal th.hol,.cal td.hol{background:#e6d9fb}
@@ -460,15 +484,12 @@ const _now0=new Date();
 let calYear=_now0.getFullYear();   // rok zobrazený v kalendáři (posouvá se do stran)
 let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
 let loginBusy=false, loginErr='';
-let form={personId:'',from:today(),to:today(),type:'Dovolená',note:'',days:1};
-let formMsg='', formMsgKind='';
-let dlg=null;              // {personName, dateStr, items:[...]}
-let edit=null, editMsg=''; // úprava existující nepřítomnosti (kliknutím v kalendáři)
-let sform={personId:'',from:today(),to:today(),shift:''};   // formulář „naplánovat směnu"
-let sformMsg='', sformMsgKind='';
-let frPerson='', frPlan='';   // formulář rotace (automatické rozplánování)
-let editShift=null, editShiftMsg='';   // úprava naplánované směny (kliknutím v kalendáři)
-let collision=null;        // {list:[...], from, to} – upozornění na kolizi ve stejném úseku
+let dlg=null;              // {personName, dateStr, items:[...]} – náhled dne pro toho, kdo jen čte
+let sel=null;              // označené dny v kalendáři {personId, a, b} (a = kde výběr začal)
+let selNote='';            // poznámka k nepřítomnosti z lišty výběru
+let busySel=false;         // ukládá se výběr
+let dragging=false, pendingRender=false;   // během tažení se nepřekresluje (zrušilo by tah)
+let collision=null;        // {list:[...], from, to, onOk} – upozornění na kolizi ve stejném úseku
 let toastMsg=null, toastKind='';
 let calScrollL=0, calScrollT=0;
 
@@ -622,45 +643,83 @@ function loginErrMsg(code){
 
 /* ==========================================================
    ZÁPIS DAT
+   Plánuje se přímo v kalendáři: tažením (na mobilu dvěma ťuknutími) se v řádku
+   člověka označí dny a v liště dole se vybere, co v nich má být. Formuláře
+   s datumy nahoře nejsou (David, 10/2026) — nevracej je.
    ========================================================== */
-async function addAbsence(bypass){
-  formMsg=''; formMsgKind='';
-  // Vezmi aktuální hodnoty přímo z formuláře (co je vidět, to platí)
-  const selEl=document.getElementById('fa-person'); if(selEl) form.personId=selEl.value;
-  const fEl=document.getElementById('fa-from'); if(fEl) form.from=fEl.value;
-  const tEl=document.getElementById('fa-to'); if(tEl) form.to=tEl.value;
-  const yEl=document.getElementById('fa-type'); if(yEl) form.type=yEl.value;
-  const nEl=document.getElementById('fa-note'); if(nEl) form.note=nEl.value;
-  const dEl=document.getElementById('fa-days'); if(dEl) form.days=parseFloat(String(dEl.value).replace(',','.'))||0;
-  const p=allUsers.find(x=>x.id===form.personId);
-  if(!p){ formMsg='Vyberte zaměstnance.'; formMsgKind='err'; render(); return; }
-  if(!canEditPerson(p.id)){ formMsg='Můžete zadávat jen svoji nepřítomnost.'; formMsgKind='err'; render(); return; }
-  if(!form.from||!form.to){ formMsg='Vyplňte datum od i do.'; formMsgKind='err'; render(); return; }
-  if(form.to<form.from){ formMsg='Datum „do" nesmí být před „od".'; formMsgKind='err'; render(); return; }
-  if(!TYPE_BY[form.type]){ formMsg='Vyberte druh nepřítomnosti.'; formMsgKind='err'; render(); return; }
-  if(!(form.days>0) || Math.round(form.days*2)!==form.days*2){
-    formMsg='Počet dnů musí být násobek 0,5 (např. 0,5, 1, 2,5).'; formMsgKind='err'; render(); return; }
-  // Půlden = jeden den (diagonální políčko); celé dny = počet plánovatelných dnů v rozsahu
-  // (u Maintenance 24/7 se počítají i víkendy a svátky).
-  let fromD=form.from, toD=form.to, days=form.days;
-  if(days===0.5){ toD=fromD; }
-  else{ days=plannableDays(p,fromD,toD);
-    if(days<=0){ formMsg='V zadaném rozsahu nejsou žádné plánovatelné dny.'; formMsgKind='err'; render(); return; } }
-  // Kontrola kolize: dovolená s kolegou ze stejného úseku
-  if(!bypass && form.type==='Dovolená'){
-    const list=findCollisions(p, fromD, toD);
-    if(list.length){ collision={list, from:fromD, to:toD}; render(); return; }
+const addDays = (ds,n) => { const d=new Date(ds+'T00:00:00'); d.setDate(d.getDate()+n);
+  return iso(d.getFullYear(),d.getMonth(),d.getDate()); };
+const selRange = () => sel ? (sel.a<=sel.b ? [sel.a,sel.b] : [sel.b,sel.a]) : null;
+
+/* Uvolní dny od–do v kolekci (absences / shifts): záznamy, které do rozsahu
+   zasahují, se smažou a jejich části mimo rozsah se znovu uloží. */
+async function clearRange(col, person, from, to){
+  const list=(col==='absences'?absences:shifts).filter(r=>r.personId===person.id && r.from<=to && r.to>=from);
+  for(const r of list){
+    await deleteDoc(doc(db,col,r.id));
+    if(r.days===0.5) continue;                       // půlden leží celý v rozsahu
+    const {id,...rest}=r;
+    const pieces=[];
+    if(r.from<from) pieces.push({from:r.from, to:addDays(from,-1)});
+    if(r.to>to)     pieces.push({from:addDays(to,1), to:r.to});
+    for(const pc of pieces){
+      const rec=Object.assign({}, rest, pc, {createdAt:serverTimestamp()});
+      if(col==='absences'){ rec.days=plannableDays(person,pc.from,pc.to); if(rec.days<=0) continue; }
+      else if(plannableDays(person,pc.from,pc.to)<=0) continue;
+      await addDoc(collection(db,col), rec);
+    }
   }
+}
+/* Nepřítomnost do vybraných dnů. half = půl dne (jen u jednoho dne). */
+async function applyAbsence(type, half, bypass){
+  const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
+  if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
+  const [from,to]=r;
+  const days = half ? 0.5 : plannableDays(p,from,to);
+  if(!(days>0)){ toast('Ve vybraných dnech nejsou žádné plánovatelné dny (víkend / svátek).','err'); return; }
+  if(!bypass && type==='Dovolená'){
+    const list=findCollisions(p, from, to);
+    if(list.length){ collision={list, from, to, onOk:()=>applyAbsence(type, half, true)}; render(); return; }
+  }
+  busySel=true; render();
   try{
-    await addDoc(collection(db,'absences'),{
-      personId:p.id, personName:p.name, type:form.type,
-      from:fromD, to:toD, note:form.note.trim(), days,
-      createdBy:me.email, createdAt:serverTimestamp()
-    });
-    form={personId:p.id,from:fromD,to:toD,type:form.type,note:'',days};
-    formMsg='Nepřítomnost přidána.'; formMsgKind='ok'; collision=null;
-    render();
-  }catch(e){ formMsg='Nepodařilo se uložit: '+e.message; formMsgKind='err'; render(); }
+    await clearRange('absences', p, from, to);
+    await addDoc(collection(db,'absences'),{ personId:p.id, personName:p.name, type,
+      from, to:half?from:to, note:selNote.trim(), days, createdBy:me.email, createdAt:serverTimestamp() });
+    toast(`${type}: ${p.name}, ${from===to?dCz(from):dCz(from)+' – '+dCz(to)}.`,'ok');
+    sel=null; selNote='';
+  }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
+  busySel=false; render();
+}
+/* Směna do vybraných dnů. Přebije i nepřítomnost — co označím, to tam má být. */
+async function applyShift(code){
+  const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
+  if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
+  const [from,to]=r;
+  if(plannableDays(p,from,to)<=0){ toast('Ve vybraných dnech nejsou žádné plánovatelné dny (víkend / svátek).','err'); return; }
+  busySel=true; render();
+  try{
+    await clearRange('absences', p, from, to);
+    await clearRange('shifts', p, from, to);
+    await addDoc(collection(db,'shifts'),{ personId:p.id, personName:p.name, shift:code,
+      from, to, createdBy:me.email, createdAt:serverTimestamp() });
+    toast(`Směna ${SHIFT_BY[code]?SHIFT_BY[code].name:code}: ${p.name}.`,'ok');
+    sel=null; selNote='';
+  }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
+  busySel=false; render();
+}
+/* Vymaže z vybraných dnů nepřítomnosti i ručně naplánované směny.
+   Směny z rotace se počítají z rytmu — ty zůstanou, dokud se rytmus neukončí. */
+async function clearSelection(){
+  const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
+  if(!canEditPerson(p.id)) return;
+  busySel=true; render();
+  try{
+    await clearRange('absences', p, r[0], r[1]);
+    await clearRange('shifts', p, r[0], r[1]);
+    toast('Vybrané dny vymazány.','ok'); sel=null; selNote='';
+  }catch(e){ toast('Nepodařilo se vymazat: '+e.message,'err'); }
+  busySel=false; render();
 }
 /* Najde kolegy, kteří umí ALESPOŇ JEDNU stejnou pozici a mají v termínu dovolenou
    (kontrola zastupitelnosti napříč sekcemi). */
@@ -679,84 +738,12 @@ function findCollisions(person, from, to){
   });
   return list;
 }
-async function removeAbsence(id){
-  try{ await deleteDoc(doc(db,'absences',id)); toast('Záznam smazán.','ok'); dlg=null; edit=null; render(); }
-  catch(e){ toast('Nepodařilo se smazat: '+e.message,'err'); }
-}
-/* Uloží úpravy existující nepřítomnosti (z editačního okna). */
-async function saveEdit(){
-  editMsg=''; const e=edit; const g=id=>document.getElementById(id);
-  e.personId=g('ed-person').value; e.from=g('ed-from').value; e.to=g('ed-to').value;
-  e.type=g('ed-type').value; e.note=g('ed-note').value;
-  e.days=parseFloat(String(g('ed-days').value).replace(',','.'))||0;
-  const p=allUsers.find(x=>x.id===e.personId);
-  if(!p){ editMsg='Vyberte zaměstnance.'; render(); return; }
-  if(!canEditPerson(p.id)){ editMsg='Můžete upravovat jen svoji nepřítomnost.'; render(); return; }
-  if(!e.from||!e.to){ editMsg='Vyplňte datum od i do.'; render(); return; }
-  if(e.to<e.from){ editMsg='Datum „do" nesmí být před „od".'; render(); return; }
-  if(!TYPE_BY[e.type]){ editMsg='Vyberte druh nepřítomnosti.'; render(); return; }
-  if(!(e.days>0) || Math.round(e.days*2)!==e.days*2){ editMsg='Počet dnů musí být násobek 0,5.'; render(); return; }
-  let fromD=e.from, toD=e.to, days=e.days;
-  if(days===0.5){ toD=fromD; }
-  else{ days=plannableDays(p,fromD,toD); if(days<=0){ editMsg='V zadaném rozsahu nejsou žádné plánovatelné dny.'; render(); return; } }
-  try{
-    await updateDoc(doc(db,'absences',e.id),{
-      personId:p.id, personName:p.name, type:e.type, from:fromD, to:toD, note:e.note.trim(), days });
-    edit=null; toast('Změny uloženy.','ok'); render();
-  }catch(err){ editMsg='Nepodařilo se uložit: '+err.message; render(); }
-}
 
-/* ---- Směny (přítomnost) ---- */
-async function addShift(){
-  sformMsg=''; sformMsgKind='';
-  const g=id=>document.getElementById(id);
-  if(g('fs-person')) sform.personId=g('fs-person').value;
-  if(g('fs-from')) sform.from=g('fs-from').value;
-  if(g('fs-to')) sform.to=g('fs-to').value;
-  if(g('fs-shift')) sform.shift=g('fs-shift').value;
-  const p=allUsers.find(x=>x.id===sform.personId);
-  if(!p){ sformMsg='Vyberte zaměstnance.'; sformMsgKind='err'; render(); return; }
-  if(!canEditPerson(p.id)){ sformMsg='Můžete plánovat jen svoje směny.'; sformMsgKind='err'; render(); return; }
-  if(!sform.from||!sform.to){ sformMsg='Vyplňte datum od i do.'; sformMsgKind='err'; render(); return; }
-  if(sform.to<sform.from){ sformMsg='Datum „do" nesmí být před „od".'; sformMsgKind='err'; render(); return; }
-  const allowed=SECTION_SHIFTS[section]||[];
-  if(!allowed.includes(sform.shift)){ sformMsg='Vyberte druh směny.'; sformMsgKind='err'; render(); return; }
-  const cnt=plannableDays(p,sform.from,sform.to);
-  if(cnt<=0){ sformMsg='V zadaném rozsahu nejsou žádné plánovatelné dny.'; sformMsgKind='err'; render(); return; }
-  try{
-    await addDoc(collection(db,'shifts'),{
-      personId:p.id, personName:p.name, shift:sform.shift,
-      from:sform.from, to:sform.to, createdBy:me.email, createdAt:serverTimestamp()
-    });
-    sform={personId:p.id, from:sform.from, to:sform.to, shift:sform.shift};
-    sformMsg='Směna naplánována.'; sformMsgKind='ok'; render();
-  }catch(e){ sformMsg='Nepodařilo se uložit: '+e.message; sformMsgKind='err'; render(); }
-}
-async function saveShift(){
-  editShiftMsg=''; const e=editShift; const g=id=>document.getElementById(id);
-  e.personId=g('es-person').value; e.from=g('es-from').value; e.to=g('es-to').value; e.shift=g('es-shift').value;
-  const p=allUsers.find(x=>x.id===e.personId);
-  if(!p){ editShiftMsg='Vyberte zaměstnance.'; render(); return; }
-  if(!canEditPerson(p.id)){ editShiftMsg='Můžete upravovat jen svoje směny.'; render(); return; }
-  if(!e.from||!e.to||e.to<e.from){ editShiftMsg='Zkontrolujte data od–do.'; render(); return; }
-  if(!SHIFT_BY[e.shift]){ editShiftMsg='Vyberte druh směny.'; render(); return; }
-  try{
-    await updateDoc(doc(db,'shifts',e.id),{ personId:p.id, personName:p.name, shift:e.shift, from:e.from, to:e.to });
-    editShift=null; toast('Směna uložena.','ok'); render();
-  }catch(err){ editShiftMsg='Nepodařilo se uložit: '+err.message; render(); }
-}
-async function removeShift(id){
-  try{ await deleteDoc(doc(db,'shifts',id)); toast('Směna smazána.','ok'); editShift=null; dlg=null; render(); }
-  catch(e){ toast('Nepodařilo se smazat: '+e.message,'err'); }
-}
-
-/* ---- Rotace (automatické rozplánování celého roku) ---- */
-async function assignRotation(){
-  const g=id=>document.getElementById(id);
-  const personId=g('fr-person')?g('fr-person').value:'', plan=g('fr-plan')?g('fr-plan').value:'';
+/* ---- Rotace (automatické rozplánování celého roku) — v okně jména ---- */
+async function assignRotation(personId, plan){
   const p=allUsers.find(x=>x.id===personId);
   if(!p){ toast('Vyberte zaměstnance.','err'); return; }
-  if(!canEditPerson(p.id)){ toast('Můžete plánovat jen sebe.','err'); return; }
+  if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
   if(!ROT_PLANS[plan]){ toast('Vyberte směnový rytmus.','err'); return; }
   try{
     const from=today();
@@ -764,12 +751,12 @@ async function assignRotation(){
     const past=rotSegments(p.id).filter(s=>s.from<from);
     const segments=past.concat([{plan, from}]);
     await setDoc(doc(db,'rotations',p.id),{segments, personName:p.name, by:me.email, at:serverTimestamp()});
-    toast('Rozplánováno od '+dCz(from)+' dál. Minulost zůstala beze změny.','ok'); render();
+    toast('Rozplánováno od '+dCz(from)+' dál. Minulost zůstala beze změny.','ok'); pdlg=null; render();
   }catch(e){ toast('Nepodařilo se uložit rotaci: '+e.message,'err'); }
 }
 async function clearRotation(personId){
   const p=allUsers.find(x=>x.id===personId);
-  if(p && !canEditPerson(p.id)){ toast('Můžete měnit jen sebe.','err'); return; }
+  if(p && !canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
   try{
     const from=today();
     const past=rotSegments(personId).filter(s=>s.from<from);
@@ -778,7 +765,7 @@ async function clearRotation(personId){
     }else{
       await deleteDoc(doc(db,'rotations',personId));
     }
-    toast('Rytmus ukončen od dneška. Minulost zůstala beze změny.','ok'); render();
+    toast('Rytmus ukončen od dneška. Minulost zůstala beze změny.','ok'); pdlg=null; render();
   }catch(e){ toast('Nepodařilo se zrušit: '+e.message,'err'); }
 }
 
@@ -837,6 +824,7 @@ function personDlgView(){
         <div class="f span3"><label>Úsek (pozice)</label><select id="pd-pos">${pOpts}</select></div>
       </div>
       <p style="margin:12px 0 0;color:var(--muted);font-size:12px">Jde jen o řádek v plánu — s účty v minimu to nijak nesouvisí.</p>
+      ${pdlg.id?rotationBox():''}
       ${pdlg.msg?`<div class="formfoot"><span class="msg err">${esc(pdlg.msg)}</span></div>`:''}
     </div>
     <div class="b">
@@ -845,6 +833,21 @@ function personDlgView(){
       <button class="btn-primary" id="pd-save">Uložit</button>
     </div>
   </div></div>`;
+}
+/* Směnový rytmus na celý rok (rotace) — nastavuje se v okně jména. */
+function rotationBox(){
+  const allPlanKeys=ROT_GROUPS.flatMap(g=>g.plans);
+  const cur=activeSeg(pdlg.id, today());
+  const plan = pdlg.plan || (cur&&cur.plan) || allPlanKeys[0];
+  const pOpts=ROT_GROUPS.map(g=>`<optgroup label="${esc(g.label)}">${g.plans.map(k=>
+    `<option value="${k}" ${plan===k?'selected':''}>${esc(ROT_PLANS[k].label)}</option>`).join('')}</optgroup>`).join('');
+  return `<div class="rotbox">
+    <label>🔁 Směnový rytmus na celý rok</label>
+    <div class="rotrow"><select id="pd-plan">${pOpts}</select>
+      <button class="btn-primary" id="pd-rot">Rozplánovat od dneška</button>
+      ${rotSegments(pdlg.id).length?'<button class="btn-ghost" id="pd-rotclear">Ukončit rytmus</button>':''}</div>
+    <div class="hintmini">${cur&&cur.plan?('Nyní: <b>'+esc(ROT_PLANS[cur.plan]?ROT_PLANS[cur.plan].label:cur.plan)+'</b> od '+dCz(cur.from)+'. '):''}Minulost se nemění. Dovolené a ručně označené směny rytmus v kalendáři přebijí.</div>
+  </div>`;
 }
 function openPersonDlg(id, pos){
   if(!canEditAll()) return;
@@ -862,13 +865,14 @@ function openPersonDlg(id, pos){
 const appEl=document.getElementById('app');
 
 function render(){
+  if(dragging){ pendingRender=true; return; }
   const c=document.querySelector('.cal-wrap');
   if(c){ calScrollL=c.scrollLeft; calScrollT=c.scrollTop; }
   if(!me){ appEl.innerHTML=loginView(); wireLogin(); return; }
   // sekce, které přihlášený vidí (bez těch se stavem „Skryté")
   const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   if(visible.length && !visible.some(s=>s.key===section)) section=visible[0].key;
-  // lidé aktuální sekce (podle přiřazených pozic v Nastavení)
+  // lidé aktuální sekce (ručně zadaná jména podle úseku)
   people = allUsers.filter(u=>inSection(u,section)).sort(bySurname);
   appEl.innerHTML = appView();
   wireApp();
@@ -926,16 +930,13 @@ function appView(){
   }
   return `${headerView()}
   ${tabBar()}
-  <main>
-    ${rotationPanel()}
-    <div class="twoforms">${formPanel()}${shiftPanel()}</div>
+  <main class="${sel?'hassel':''}">
     ${legendView()}
     ${calBar()}
     ${calendarView()}
   </main>
+  ${sel?selBarView():''}
   ${dlg?dialogView():''}
-  ${edit?editView():''}
-  ${editShift?editShiftView():''}
   ${collision?collisionView():''}
   ${pdlg?personDlgView():''}`;
 }
@@ -943,9 +944,7 @@ function appView(){
 function tabBar(){
   const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   const t=(s)=>`<button class="tab ${section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
-  const pm=curPerm();
-  const permNote = pm==='all' ? 'V této sekci můžete upravovat všechny.'
-    : pm==='self' ? 'Zde můžete upravovat jen svoji nepřítomnost (ostatní jen prohlížet).'
+  const permNote = curPerm()==='all' ? 'Tažením v řádku člověka označ dny, dole pak vyber, co v nich má být.'
     : 'Tuto sekci můžete jen prohlížet.';
   return `<div class="tabbar">${visible.map(t).join('')}<span class="tb-note">${permNote}</span></div>`;
 }
@@ -954,92 +953,28 @@ function headerView(){
   return window.uheaderHTML ? window.uheaderHTML({module:'Plánování směn a přítomnosti',cur:'dovolenky',user:esc(me.email),level:'',logoutAttr:'id="btn-logout"',modules:allowedMods(myDoc&&myDoc.modules, levelOf(myDoc)),mods:(myDoc&&myDoc.modules)||{},email:esc(me.email),positions:(myDoc&&myDoc.positions)||[]}) : '';
 }
 
-function formPanel(){
-  const pm=curPerm();
-  if(pm==='read'){
-    return `<div class="panel"><h2>➕ Nová nepřítomnost</h2><div class="body">
-      <p style="margin:0;color:var(--muted)">V této sekci máte právo <b>jen prohlížet</b> – zadávat nepřítomnosti tu nemůžete.</p>
-    </div></div>`;
-  }
-  // koho smím zadávat: „Zapisovat všechny" → celá sekce, „jen sebe" → jen sebe
-  const editable = pm==='all' ? people : people.filter(p=>p.id===(me&&me.uid));
-  if((!form.personId || !editable.some(p=>p.id===form.personId)) && editable.length) form.personId=editable[0].id;
-  const opts=editable.map(p=>`<option value="${p.id}" ${form.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
-  const tOpts=TYPES.map(t=>`<option value="${esc(t.k)}" ${form.type===t.k?'selected':''}>${esc(t.k)}</option>`).join('');
-  const noPeople = !editable.length;
-  const emptyMsg = !people.length ? '— v této sekci nejsou lidé (přidejte je tlačítkem „Přidat jméno" nad kalendářem) —'
-                                  : '— nemáte koho upravovat —';
-  return `<div class="panel"><h2>➕ Nová nepřítomnost</h2><div class="body">
-    <div class="formrow">
-      <div class="f grow"><label>Zaměstnanec <span class="req">*</span></label>
-        <select id="fa-person" ${!canEditAll()?'disabled':''}>${noPeople?`<option value="">${emptyMsg}</option>`:''}${opts}</select></div>
-      <div class="f"><label>Od <span class="req">*</span></label><input type="date" id="fa-from" value="${form.from}"></div>
-      <div class="f"><label>Do <span class="req">*</span></label><input type="date" id="fa-to" value="${form.to}"></div>
-      <div class="f dcount"><label>Počet dnů <span class="req">*</span></label>
-        <input type="number" id="fa-days" step="0.5" min="0.5" value="${form.days}" title="Např. 0,5 pro půlden"></div>
-      <div class="f grow"><label>Druh <span class="req">*</span></label><select id="fa-type">${tOpts}</select></div>
-      <div class="f grow"><label>Poznámka</label><input type="text" id="fa-note" value="${esc(form.note)}" placeholder="nepovinné"></div>
-      <div class="f addbtn"><button class="btn-primary" id="fa-add" ${noPeople?'disabled':''}>Přidat</button></div>
-    </div>
-    ${formMsg?`<div class="formfoot"><span class="msg ${formMsgKind}">${esc(formMsg)}</span></div>`:''}
-  </div></div>`;
-}
-
-function rotationPanel(){
-  const pm=curPerm();
-  if(pm==='read'){
-    return `<div class="panel"><h2>🔁 Automatické rozplánování směn</h2><div class="body">
-      <p style="margin:0;color:var(--muted)">V této sekci máte právo <b>jen prohlížet</b>.</p></div></div>`;
-  }
-  const editable = pm==='all' ? people : people.filter(p=>p.id===(me&&me.uid));
-  if((!frPerson || !editable.some(p=>p.id===frPerson)) && editable.length) frPerson=editable[0].id;
-  const allPlanKeys=ROT_GROUPS.flatMap(g=>g.plans);
-  if(!allPlanKeys.includes(frPlan)) frPlan=allPlanKeys[0];
-  // u osoby ukaž rytmus platný dnes
-  const opts=editable.map(p=>{const s=activeSeg(p.id,today()); const lbl=s&&s.plan&&ROT_PLANS[s.plan]?ROT_PLANS[s.plan].label:''; return `<option value="${p.id}" ${frPerson===p.id?'selected':''}>${esc(p.name)}${lbl?(' — '+esc(lbl)):''}</option>`;}).join('');
-  const pOpts=ROT_GROUPS.map(g=>`<optgroup label="${esc(g.label)}">${g.plans.map(k=>`<option value="${k}" ${frPlan===k?'selected':''}>${esc(ROT_PLANS[k].label)}</option>`).join('')}</optgroup>`).join('');
-  const curSeg=activeSeg(frPerson, today());
-  const hasRot=rotSegments(frPerson).length>0;
-  const noPeople=!editable.length;
-  return `<div class="panel rot"><h2>🔁 Automatické rozplánování směn <span class="right">celý rok na jedno kliknutí</span></h2><div class="body">
-    <div class="formrow">
-      <div class="f grow"><label>Zaměstnanec</label>
-        <select id="fr-person" ${!canEditAll()?'disabled':''}>${noPeople?'<option value="">— nemáte koho —</option>':''}${opts}</select></div>
-      <div class="f grow"><label>Směnový rytmus / tým</label><select id="fr-plan">${pOpts}</select></div>
-      <div class="f addbtn"><button class="btn-primary" id="fr-add" ${noPeople?'disabled':''}>Rozplánovat rok</button></div>
-      ${hasRot?'<div class="f addbtn"><button class="btn-ghost" id="fr-clear">Ukončit rytmus</button></div>':''}
-    </div>
-    <div class="formfoot"><span class="hintmini">Rytmus se nastaví <b>ode dneška dál</b> – <b>minulost se nemění</b> (dřívější plán zůstane). Platí ve všech záložkách. Ruční směny a dovolené rotaci v kalendáři přebijí.${curSeg&&curSeg.plan?(' Nyní: <b>'+esc(ROT_PLANS[curSeg.plan]?ROT_PLANS[curSeg.plan].label:curSeg.plan)+'</b> od '+dCz(curSeg.from)+'.'):''}</span></div>
-  </div></div>`;
-}
-
-function shiftPanel(){
-  const pm=curPerm();
-  const shiftsOfSec=sectionShifts(section);
-  if(!shiftsOfSec.length){ return ''; }   // sekce bez směn (nemělo by nastat)
-  if(pm==='read'){
-    return `<div class="panel"><h2>🕒 Naplánovat směnu</h2><div class="body">
-      <p style="margin:0;color:var(--muted)">V této sekci máte právo <b>jen prohlížet</b>.</p></div></div>`;
-  }
-  const editable = pm==='all' ? people : people.filter(p=>p.id===(me&&me.uid));
-  if((!sform.personId || !editable.some(p=>p.id===sform.personId)) && editable.length) sform.personId=editable[0].id;
-  if(!SECTION_SHIFTS[section].includes(sform.shift)) sform.shift=SECTION_SHIFTS[section][0];
-  const opts=editable.map(p=>`<option value="${p.id}" ${sform.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
-  const sOpts=shiftsOfSec.map(s=>`<option value="${s.k}" ${sform.shift===s.k?'selected':''}>${esc(s.name)}${s.hours?(' ('+s.hours+')'):''}</option>`).join('');
-  const noPeople=!editable.length;
-  const wkNote = section==='maintenance' ? ' Maintenance jde plánovat i o víkendu.' : '';
-  return `<div class="panel"><h2>🕒 Naplánovat směnu <span class="right">přítomnost</span></h2><div class="body">
-    <div class="formrow">
-      <div class="f grow"><label>Zaměstnanec <span class="req">*</span></label>
-        <select id="fs-person" ${!canEditAll()?'disabled':''}>${noPeople?'<option value="">— nemáte koho plánovat —</option>':''}${opts}</select></div>
-      <div class="f"><label>Od <span class="req">*</span></label><input type="date" id="fs-from" value="${sform.from}"></div>
-      <div class="f"><label>Do <span class="req">*</span></label><input type="date" id="fs-to" value="${sform.to}"></div>
-      <div class="f grow"><label>Směna <span class="req">*</span></label><select id="fs-shift">${sOpts}</select></div>
-      <div class="f addbtn"><button class="btn-primary" id="fs-add" ${noPeople?'disabled':''}>Naplánovat</button></div>
-    </div>
-    <div class="formfoot"><span class="hintmini">Vyplní směnu na všechny pracovní dny v rozsahu.${wkNote} Dovolená/nemoc pak směnu v kalendáři překryje.</span>
-      ${sformMsg?`<span class="msg ${sformMsgKind}">${esc(sformMsg)}</span>`:''}</div>
-  </div></div>`;
+/* Lišta dole: co se má stát s označenými dny. */
+function selBarView(){
+  const p=personById(sel.personId); const r=selRange(); if(!p||!r) return '';
+  const [from,to]=r, single=from===to;
+  const n=plannableDays(p,from,to);
+  const sh=sectionShifts(section);
+  const btn=(attr,fill,label,title)=>`<button class="sb-btn" ${attr} title="${esc(title||label)}" ${busySel?'disabled':''}>
+    <span class="sw" style="background:${fill}"></span>${esc(label)}</button>`;
+  return `<div class="selbar" id="selbar">
+    <div class="sb-head"><b>${esc(p.name)}</b> · ${single?dCz(from):dCz(from)+' – '+dCz(to)}
+      <span class="muted">(${dayLabel(n)}${n===0?' — samý víkend/svátek':''})</span>
+      <button class="sb-x" id="sb-cancel" title="Zrušit výběr (Esc)">✕</button></div>
+    <div class="sb-row"><span class="sb-lbl">Nepřítomnost</span>
+      ${TYPES.map(t=>btn(`data-abs="${esc(t.k)}"`, t.fill, t.k)).join('')}
+      ${single?btn('data-abs="Dovolená" data-half="1"', TYPE_BY['Dovolená'].fill, '½ dne dovolené'):''}
+      <input type="text" id="sb-note" value="${esc(selNote)}" placeholder="poznámka (nepovinné)"></div>
+    ${sh.length?`<div class="sb-row"><span class="sb-lbl">Směna</span>
+      ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?s.name:(s.k+' · '+s.name), s.name+(s.hours?' ('+s.hours+')':''))).join('')}</div>`:''}
+    <div class="sb-row"><span class="sb-lbl"></span>
+      <button class="sb-btn sb-clear" id="sb-clear" ${busySel?'disabled':''}>🗑 Vymazat vybrané dny</button>
+      <span class="hintmini">${busySel?'Ukládám…':'Shift+klik rozšíří výběr · Esc výběr zruší · směny z rotace zůstávají, dokud rytmus neukončíš (klik na jméno)'}</span></div>
+  </div>`;
 }
 
 function legendView(){
@@ -1058,7 +993,9 @@ function calBar(){
     <button class="nav" id="yr-next" title="Další rok">›</button>
     <button class="btn-ghost" id="go-today">Dnes</button>
     ${canEditAll()?'<button class="btn-ghost" id="add-name" title="Přidat člověka, který nemá účet v minimu">👤 + Přidat jméno</button>':''}
-    <span class="hint">Posouvejte kalendář do stran ↔ (např. na prosinec) · kliknutím na políčko upravíte záznam</span>
+    <span class="hint">Posouvejte kalendář do stran ↔ · ${canEditAll()
+      ? 'dny označíš tažením myší v řádku (na mobilu ťukni na první a pak na poslední den)'
+      : 'kliknutím na políčko zobrazíte detail'}</span>
   </div>`;
 }
 
@@ -1142,6 +1079,7 @@ function calendarView(){
   const NC=mob?110:180, DC=mob?30:34;
   const months=buildYear(calYear), by=absenceMap(iso(calYear,0,1),iso(calYear,11,31)), sm=shiftMap(iso(calYear,0,1),iso(calYear,11,31));
   const allDays=months.flatMap(mo=>mo.days);
+  const sr=selRange();                       // označené dny (tažením)
   const colgroup=`<colgroup><col style="width:${NC}px">${allDays.map(()=>`<col style="width:${DC}px">`).join('')}</colgroup>`;
   const monthsRow=`<tr class="months"><th class="corner">${calYear}</th>${
     months.map(mo=>`<th class="mstart ${mo.alt?'malt':''}" colspan="${mo.days.length}">${mo.name}</th>`).join('')}</tr>`;
@@ -1192,6 +1130,7 @@ function calendarView(){
         inner = S.noLabel ? '' : `<span class="lab lab-sh">${esc(s.code)}</span>`;   // Salaried = jen barva, bez písmene
         tt+=` • směna ${S.name}${S.hours?(' ('+S.hours+')'):''}${s.rot?' (rotace)':''}`;
       }
+      if(sr && sel.personId===p.id && dd.ds>=sr[0] && dd.ds<=sr[1]) cls+=' sel';
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
     const nameCell = (p.ext && canEditAll())
@@ -1226,7 +1165,6 @@ function dialogView(){
       <div class="info"><b>${esc(a.type)}</b>
         <div>${dCz(a.from)} – ${dCz(a.to)}${a.days?(' · '+dayLabel(a.days)):''}${a.note?(' · '+esc(a.note)):''}</div>
         <div>zadal(a): ${esc(a.createdBy||'—')}</div></div>
-      ${dlg.readonly?'':`<button class="btn-danger" data-del-abs="${a.id}">Smazat</button>`}
     </div>`;
   }).join('') : `<p style="color:var(--muted);margin:0 0 4px">Na tento den zde není žádná nepřítomnost.</p>`;
   const roNote = dlg.readonly ? `<p style="margin:10px 0 0;color:var(--muted);font-size:12px">Tuto osobu můžete jen prohlížet. Upravovat můžete jen svoji nepřítomnost.</p>` : '';
@@ -1235,64 +1173,6 @@ function dialogView(){
     <div class="t">${esc(dlg.personName)} · ${dCz(dlg.dateStr)}<button class="x" id="dlg-x">✕</button></div>
     <div class="c">${items}${holNote}${roNote}</div>
     <div class="b"><button class="btn-ghost" id="dlg-close">Zavřít</button></div>
-  </div></div>`;
-}
-
-function editView(){
-  const e=edit;
-  // koho smím vybrat: Approver+ kohokoliv, ostatní jen sebe (vč. původní osoby záznamu)
-  const selectable = canEditAll() ? allUsers : allUsers.filter(p=>p.id===(me&&me.uid)||p.id===e.personId);
-  const opts=selectable.map(p=>`<option value="${p.id}" ${e.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
-  const tOpts=TYPES.map(t=>`<option value="${esc(t.k)}" ${e.type===t.k?'selected':''}>${esc(t.k)}</option>`).join('');
-  return `<div class="dlg-wrap" id="ed-wrap"><div class="dlg dlg-lg">
-    <div class="t">✏️ Úprava nepřítomnosti<button class="x" id="ed-x">✕</button></div>
-    <div class="c">
-      <div class="egrid">
-        <div class="f span3"><label>Zaměstnanec</label><select id="ed-person">${opts}</select></div>
-        <div class="f"><label>Od</label><input type="date" id="ed-from" value="${e.from}"></div>
-        <div class="f"><label>Do</label><input type="date" id="ed-to" value="${e.to}"></div>
-        <div class="f"><label>Počet dnů</label><input type="number" id="ed-days" step="0.5" min="0.5" value="${e.days}"></div>
-        <div class="f span3"><label>Druh</label><select id="ed-type">${tOpts}</select></div>
-        <div class="f span3"><label>Poznámka</label><input type="text" id="ed-note" value="${esc(e.note||'')}" placeholder="nepovinné"></div>
-      </div>
-      ${editMsg?`<div class="formfoot"><span class="msg err">${esc(editMsg)}</span></div>`:''}
-    </div>
-    <div class="b">
-      <button class="btn-danger" id="ed-del">Smazat</button>
-      <span class="grow1"></span>
-      <button class="btn-ghost" id="ed-cancel">Zrušit</button>
-      <button class="btn-primary" id="ed-save">Uložit změny</button>
-    </div>
-  </div></div>`;
-}
-
-function editShiftView(){
-  const e=editShift;
-  const selectable = canEditAll() ? allUsers : allUsers.filter(p=>p.id===(me&&me.uid)||p.id===e.personId);
-  const opts=selectable.map(p=>`<option value="${p.id}" ${e.personId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
-  // nabídni směny sekcí osoby (podle jejích pozic); fallback = všechny směny
-  const psec=(personById(e.personId)||{}).positions||[];
-  const secKeys=[...new Set(psec.map(p=>POS2SECTION[p]).filter(Boolean))];
-  let allowed=[]; secKeys.forEach(k=>(SECTION_SHIFTS[k]||[]).forEach(s=>{if(!allowed.includes(s))allowed.push(s);}));
-  if(!allowed.length) allowed=SHIFTS.map(s=>s.k);
-  const sOpts=allowed.map(k=>{const s=SHIFT_BY[k];return `<option value="${k}" ${e.shift===k?'selected':''}>${esc(s.name)}${s.hours?(' ('+s.hours+')'):''}</option>`;}).join('');
-  return `<div class="dlg-wrap" id="es-wrap"><div class="dlg dlg-lg">
-    <div class="t">🕒 Úprava směny<button class="x" id="es-x">✕</button></div>
-    <div class="c">
-      <div class="egrid">
-        <div class="f span3"><label>Zaměstnanec</label><select id="es-person">${opts}</select></div>
-        <div class="f"><label>Od</label><input type="date" id="es-from" value="${e.from}"></div>
-        <div class="f"><label>Do</label><input type="date" id="es-to" value="${e.to}"></div>
-        <div class="f"><label>Směna</label><select id="es-shift">${sOpts}</select></div>
-      </div>
-      ${editShiftMsg?`<div class="formfoot"><span class="msg err">${esc(editShiftMsg)}</span></div>`:''}
-    </div>
-    <div class="b">
-      <button class="btn-danger" id="es-del">Smazat</button>
-      <span class="grow1"></span>
-      <button class="btn-ghost" id="es-cancel">Zrušit</button>
-      <button class="btn-primary" id="es-save">Uložit změny</button>
-    </div>
   </div></div>`;
 }
 
@@ -1340,54 +1220,31 @@ function wireApp(){
   // přepínání sekcí (Engineering / Maintenance / Toolsetters)
   document.querySelectorAll('[data-section]').forEach(b=>
     b.addEventListener('click',()=>{
-      section=b.getAttribute('data-section'); form.personId=''; alignedYear=null; render();
+      section=b.getAttribute('data-section'); sel=null; alignedYear=null; render();
     }));
 
-  // formulář nepřítomnosti – průběžně držíme stav, ať se při živé aktualizaci nic neztratí
-  const bind=(id,key,ev='input')=>{const el=document.getElementById(id);
-    if(el) el.addEventListener(ev,()=>{form[key]=el.value;});};
-  bind('fa-person','personId','change'); bind('fa-type','type','change'); bind('fa-note','note');
-  // Od/Do: po změně přepočítej „počet dnů" (pracovní dny v rozsahu), pokud v poli zrovna nepíšu
-  const daysEl=document.getElementById('fa-days');
-  const recompDays=()=>{ if(!daysEl || document.activeElement===daysEl) return;
-    const d=workingDays(form.from,form.to); if(d>0){ form.days=d; daysEl.value=d; } };
-  ['fa-from','fa-to'].forEach(id=>{const el=document.getElementById(id);
-    if(el) el.addEventListener('change',()=>{ form[id==='fa-from'?'from':'to']=el.value; recompDays(); });});
-  daysEl?.addEventListener('input',()=>{ form.days=parseFloat(String(daysEl.value).replace(',','.'))||0; });
-  document.getElementById('fa-add')?.addEventListener('click',()=>addAbsence());
-
-  // formulář směny
-  const sbind=(id,key,ev='input')=>{const el=document.getElementById(id);
-    if(el) el.addEventListener(ev,()=>{sform[key]=el.value;});};
-  sbind('fs-person','personId','change'); sbind('fs-shift','shift','change');
-  sbind('fs-from','from','change'); sbind('fs-to','to','change');
-  document.getElementById('fs-add')?.addEventListener('click',()=>addShift());
-
-  // rotace (automatické rozplánování)
-  document.getElementById('fr-person')?.addEventListener('change',e=>{frPerson=e.target.value;render();});
-  document.getElementById('fr-plan')?.addEventListener('change',e=>{frPlan=e.target.value;});
-  document.getElementById('fr-add')?.addEventListener('click',()=>assignRotation());
-  document.getElementById('fr-clear')?.addEventListener('click',()=>clearRotation(document.getElementById('fr-person').value));
-
   // rok kalendáře + skok na dnešek
-  document.getElementById('yr-prev')?.addEventListener('click',()=>{calYear--;alignedYear=null;calScrollL=0;render();});
-  document.getElementById('yr-next')?.addEventListener('click',()=>{calYear++;alignedYear=null;calScrollL=0;render();});
+  document.getElementById('yr-prev')?.addEventListener('click',()=>{calYear--;alignedYear=null;calScrollL=0;sel=null;render();});
+  document.getElementById('yr-next')?.addEventListener('click',()=>{calYear++;alignedYear=null;calScrollL=0;sel=null;render();});
   document.getElementById('go-today')?.addEventListener('click',()=>{
     calYear=new Date().getFullYear(); alignedYear=null; render(); });
 
   // dialog kolize dovolené
-  document.getElementById('col-ok')?.addEventListener('click',()=>{collision=null;addAbsence(true);});
+  document.getElementById('col-ok')?.addEventListener('click',()=>{const ok=collision&&collision.onOk; collision=null; if(ok) ok();});
   document.getElementById('col-cancel')?.addEventListener('click',()=>{collision=null;render();});
   document.getElementById('col-x')?.addEventListener('click',()=>{collision=null;render();});
   document.getElementById('col-wrap')?.addEventListener('click',e=>{if(e.target.id==='col-wrap'){collision=null;render();}});
 
-  // jména bez účtu: přidání (nad kalendářem i u úseku) a úprava kliknutím na jméno
+  // jména: přidání (nad kalendářem i u úseku) a úprava kliknutím na jméno (vč. rotace)
   document.getElementById('add-name')?.addEventListener('click',()=>openPersonDlg(null));
   if(pdlg){
     const pn=document.getElementById('pd-name');
     pn?.addEventListener('input',()=>{pdlg.name=pn.value; pdlg.dupOk=false;});
     pn?.addEventListener('keydown',e=>{ if(e.key==='Enter') savePerson(); });
     document.getElementById('pd-pos')?.addEventListener('change',e=>{pdlg.pos=e.target.value;});
+    document.getElementById('pd-plan')?.addEventListener('change',e=>{pdlg.plan=e.target.value;});
+    document.getElementById('pd-rot')?.addEventListener('click',()=>assignRotation(pdlg.id, document.getElementById('pd-plan').value));
+    document.getElementById('pd-rotclear')?.addEventListener('click',()=>clearRotation(pdlg.id));
     document.getElementById('pd-save')?.addEventListener('click',savePerson);
     document.getElementById('pd-del')?.addEventListener('click',removePerson);
     document.getElementById('pd-cancel')?.addEventListener('click',()=>{pdlg=null;render();});
@@ -1395,88 +1252,71 @@ function wireApp(){
     document.getElementById('pd-wrap')?.addEventListener('click',e=>{if(e.target.id==='pd-wrap'){pdlg=null;render();}});
   }
 
-  // klik do kalendáře
+  // lišta výběru dnů
+  document.querySelectorAll('[data-abs]').forEach(b=>b.addEventListener('click',()=>
+    applyAbsence(b.getAttribute('data-abs'), b.hasAttribute('data-half'))));
+  document.querySelectorAll('[data-shift]').forEach(b=>b.addEventListener('click',()=>applyShift(b.getAttribute('data-shift'))));
+  document.getElementById('sb-clear')?.addEventListener('click',()=>{
+    const r=selRange(); if(r && confirm(`Vymazat nepřítomnosti a ručně naplánované směny ve vybraných dnech (${r[0]===r[1]?dCz(r[0]):dCz(r[0])+' – '+dCz(r[1])})?`)) clearSelection(); });
+  document.getElementById('sb-cancel')?.addEventListener('click',()=>{sel=null;render();});
+  const sn=document.getElementById('sb-note'); sn?.addEventListener('input',()=>{selNote=sn.value;});
+
+  // kalendář: myší se dny označují tažením, na dotykové obrazovce dvěma ťuknutími
   const wrap=document.querySelector('.cal-wrap');
-  if(wrap) wrap.addEventListener('click',e=>{
+  if(!wrap) return;
+  wrap.addEventListener('pointerdown',e=>{
+    if(e.pointerType!=='mouse' || e.button!==0) return;
+    const td=e.target.closest('td.d'); if(!td) return;
+    const pid=td.getAttribute('data-person'), ds=td.getAttribute('data-date');
+    if(!canEditPerson(pid)) return;                     // jen čtení → řeší klik (náhled)
+    e.preventDefault();                                 // ať se při tažení neoznačuje text
+    if(e.shiftKey && sel && sel.personId===pid) sel.b=ds;
+    else sel={personId:pid, a:ds, b:ds};
+    dragging=true; paintSel();
+    const move=ev=>{
+      const el=document.elementFromPoint(ev.clientX, ev.clientY);
+      const c=el && el.closest && el.closest('td.d');
+      if(c && c.getAttribute('data-person')===sel.personId && c.getAttribute('data-date')!==sel.b){
+        sel.b=c.getAttribute('data-date'); paintSel(); }
+    };
+    const up=()=>{ document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up);
+      dragging=false; pendingRender=false; render(); };
+    document.addEventListener('pointermove',move); document.addEventListener('pointerup',up);
+  });
+  wrap.addEventListener('click',e=>{
     const ap=e.target.closest('[data-add-pos]'); if(ap){ openPersonDlg(null, ap.getAttribute('data-add-pos')); return; }
     const ex=e.target.closest('td[data-ext]'); if(ex){ openPersonDlg(ex.getAttribute('data-ext')); return; }
     const td=e.target.closest('td.d'); if(!td) return;
-    openDay(td.getAttribute('data-person'), td.getAttribute('data-date'));
+    const pid=td.getAttribute('data-person'), ds=td.getAttribute('data-date');
+    if(!canEditPerson(pid)){ openDay(pid, ds); return; }
+    if(e.pointerType==='mouse' || (e.detail>0 && !lastTouch)) return;   // myš už vyřešilo tažení
+    // dotyk: 1. ťuknutí = začátek, 2. ťuknutí ve stejném řádku = konec
+    if(sel && sel.personId===pid && sel.a===sel.b && ds!==sel.a) sel.b=ds;
+    else sel={personId:pid, a:ds, b:ds};
+    render();
   });
+}
+/* Rozlišení dotyku a myši pro klik (pointerType u click události všude není). */
+let lastTouch=false;
+document.addEventListener('pointerdown',e=>{ lastTouch=(e.pointerType!=='mouse'); }, true);
+/* Esc zruší výběr dnů. */
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && sel && !pdlg && !collision){ sel=null; render(); } });
 
-  // dialog
-  document.getElementById('dlg-x')?.addEventListener('click',()=>{dlg=null;render();});
-  document.getElementById('dlg-close')?.addEventListener('click',()=>{dlg=null;render();});
-  document.getElementById('dlg-wrap')?.addEventListener('click',e=>{if(e.target.id==='dlg-wrap'){dlg=null;render();}});
-  document.querySelectorAll('[data-del-abs]').forEach(b=>
-    b.addEventListener('click',()=>removeAbsence(b.getAttribute('data-del-abs'))));
-
-  // editační okno nepřítomnosti
-  if(edit){
-    const eb=(id,key)=>{const el=document.getElementById(id);
-      if(el) el.addEventListener('input',()=>{edit[key]=el.value;});};
-    eb('ed-person','personId'); eb('ed-type','type'); eb('ed-note','note');
-    const edDays=document.getElementById('ed-days');
-    const edRecomp=()=>{ if(!edDays||document.activeElement===edDays) return;
-      const d=workingDays(edit.from,edit.to); if(d>0){ edit.days=d; edDays.value=d; } };
-    ['ed-from','ed-to'].forEach(id=>{const el=document.getElementById(id);
-      if(el) el.addEventListener('change',()=>{ edit[id==='ed-from'?'from':'to']=el.value; edRecomp(); });});
-    edDays?.addEventListener('input',()=>{ edit.days=parseFloat(String(edDays.value).replace(',','.'))||0; });
-    document.getElementById('ed-save')?.addEventListener('click',saveEdit);
-    document.getElementById('ed-del')?.addEventListener('click',()=>{
-      if(confirm('Opravdu smazat tento záznam?')) removeAbsence(edit.id); });
-    document.getElementById('ed-cancel')?.addEventListener('click',()=>{edit=null;render();});
-    document.getElementById('ed-x')?.addEventListener('click',()=>{edit=null;render();});
-    document.getElementById('ed-wrap')?.addEventListener('click',e=>{if(e.target.id==='ed-wrap'){edit=null;render();}});
-  }
-
-  // editační okno směny
-  if(editShift){
-    const sb=(id,key)=>{const el=document.getElementById(id); if(el) el.addEventListener('input',()=>{editShift[key]=el.value;});};
-    sb('es-person','personId'); sb('es-shift','shift'); sb('es-from','from'); sb('es-to','to');
-    document.getElementById('es-save')?.addEventListener('click',saveShift);
-    document.getElementById('es-del')?.addEventListener('click',()=>{ if(confirm('Opravdu smazat tuto naplánovanou směnu?')) removeShift(editShift.id); });
-    document.getElementById('es-cancel')?.addEventListener('click',()=>{editShift=null;render();});
-    document.getElementById('es-x')?.addEventListener('click',()=>{editShift=null;render();});
-    document.getElementById('es-wrap')?.addEventListener('click',e=>{if(e.target.id==='es-wrap'){editShift=null;render();}});
-  }
+/* Překreslí jen označení vybraných dnů (při tažení bez celého renderu). */
+function paintSel(){
+  document.querySelectorAll('.cal td.d.sel').forEach(td=>td.classList.remove('sel'));
+  const r=selRange(); if(!r) return;
+  document.querySelectorAll(`.cal td.d[data-person="${sel.personId}"]`).forEach(td=>{
+    const ds=td.getAttribute('data-date'); if(ds>=r[0] && ds<=r[1]) td.classList.add('sel'); });
 }
 
-/* Klik na políčko dne:
-   - mám-li právo na tuto osobu a je tam nepřítomnost → editační okno (úprava / smazání),
-   - mám-li právo a je prázdno → předvyplní hlavní formulář na tento den,
-   - nemám-li právo (jen prohlížení) → otevře náhledové okno bez možnosti úprav. */
+/* Klik na políčko u toho, kdo plán jen prohlíží → náhled dne bez úprav. */
 function openDay(personId,dateStr){
   const p=people.find(x=>x.id===personId); if(!p) return;
   const items=absences.filter(a=>a.personId===personId && a.from<=dateStr && a.to>=dateStr);
-  const mayEdit=canEditPerson(personId);
-  if(!mayEdit){
-    // jen prohlížení – náhledové okno (bez mazání a úprav)
-    const hol=holsOf(+dateStr.slice(0,4)).get(dateStr)||'';
-    dlg={personName:p.name, dateStr, items, holiday:hol, readonly:true};
-    render();
-    return;
-  }
-  if(items.length){
-    const a=items[items.length-1];   // zobrazená nepřítomnost (poslední zapsaná vyhrává)
-    edit={id:a.id, personId:a.personId, from:a.from, to:a.to, type:a.type,
-      note:a.note||'', days:(a.days!=null?a.days:workingDays(a.from,a.to))};
-    editMsg=''; render();
-    return;
-  }
-  // není nepřítomnost → je tam naplánovaná směna? (úprava směny)
-  const sh=shifts.filter(s=>s.personId===personId && s.from<=dateStr && s.to>=dateStr);
-  if(sh.length){
-    const s=sh[sh.length-1];
-    editShift={id:s.id, personId:s.personId, from:s.from, to:s.to, shift:s.shift};
-    editShiftMsg=''; render();
-    return;
-  }
-  // prázdno → předvyplní formulář nepřítomnosti na tento den
-  form={personId,from:dateStr,to:dateStr,type:form.type,note:'',days:1};
-  formMsg=''; formMsgKind=''; render();
-  document.getElementById('fa-person')?.scrollIntoView({behavior:'smooth',block:'center'});
-  toast('Formulář předvyplněn – doplňte druh a uložte.','');
+  const hol=holsOf(+dateStr.slice(0,4)).get(dateStr)||'';
+  dlg={personName:p.name, dateStr, items, holiday:hol, readonly:true};
+  render();
 }
 
 /* Při změně velikosti okna překresli kalendář, ať se přizpůsobí (mobil ↔ monitor). */
