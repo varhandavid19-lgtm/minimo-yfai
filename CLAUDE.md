@@ -47,7 +47,13 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
 ## Datový model (Firestore)
 - kolekce `requests` — jeden dokument = jeden nákupní požadavek
 - kolekce `opravy` — externí opravy
-- kolekce `people`, `absences`, `shifts`, `rotations` — plánování směn
+- kolekce `people`, `absences`, `shifts`, `rotations` — plánování směn.
+  Lidé v plánu = uživatelé z `users` (podle pozic) + **jména bez účtu** z `people`
+  (`{name, pos, ext:true}`). Jména bez účtu přidává v plánování kdo má v sekci
+  „Zapisovat všechny" (tlačítko „👤 + Přidat jméno" nad kalendářem a „+ jméno"
+  u úseku), kliknutím na jméno (kurzíva) se upraví nebo odebere — odebrání smaže
+  i jeho nepřítomnosti, směny a rotaci. Staré záznamy v `people` bez `ext:true`
+  (z původní aplikace Dovolenky) se ignorují. Nenuť lidi zakládat účet jen kvůli plánu.
 - kolekce `users` — id dokumentu = uid uživatele; pole `name`, `level`, `role`,
   `positions`, `perms`, `modules` (přístup k modulům: none / read / write)
 - dokument `meta/config` — účty, úseky, stroje, povinná pole, kurzy, čítače

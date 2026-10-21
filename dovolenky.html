@@ -177,6 +177,13 @@
     font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy-2);white-space:nowrap;box-shadow:2px 0 0 #c3d0e2}
   .cal tr.grp td.grp-name .grp-n{opacity:.6;font-weight:600}
   .cal tr.grp:hover td.grp-name{background:#e7eefb}
+  .cal tr.grp .grp-add{margin-left:6px;padding:1px 7px;font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;
+    background:#fff;border:1px solid #c3d0e2;color:var(--navy-2);border-radius:10px;cursor:pointer;vertical-align:1px}
+  .cal tr.grp .grp-add:hover{background:var(--navy-2);color:#fff}
+  /* jméno bez účtu v minimu: kurzívou, kdo smí upravovat, klikne a otevře úpravu */
+  .cal td.name.ext{font-style:italic;color:#41506b}
+  .cal td.name.ext.edit{cursor:pointer}
+  .cal td.name.ext.edit:hover{color:var(--navy-2);text-decoration:underline}
 
   .empty-cal{padding:34px;text-align:center;color:var(--muted)}
 
@@ -437,7 +444,10 @@ const canEditPerson = id => { const pm=curPerm(); return pm==='all' || (pm==='se
 
 /* ---------- stav aplikace ---------- */
 let me=null;               // přihlášený uživatel {email, uid}
-let allUsers=[];           // všichni lidé z centrálního Nastavení (users)
+let allUsers=[];           // všichni lidé v plánování = uživatelé minima + volně vepsaná jména
+let userPeople=[];         // lidé z centrálního Nastavení (users)
+let extPeople=[];          // volně vepsaná jména bez účtu (kolekce people, ext:true)
+let pdlg=null;             // okno „jméno bez účtu" {id|null, name, pos, msg}
 let people=[];             // lidé zobrazení v aktuální sekci (počítá se v render)
 let myDoc=null;            // záznam přihlášeného (level + práva)
 let section='engineering'; // aktivní sekce
@@ -533,7 +543,8 @@ function dayLabel(n){ n=Number(n);
 /* ==========================================================
    FIREBASE — přihlášení a načítání dat
    ========================================================== */
-let unsubPeople=null, unsubAbs=null, unsubShifts=null, unsubRot=null;
+let unsubPeople=null, unsubExt=null, unsubAbs=null, unsubShifts=null, unsubRot=null;
+const mergePeople = () => { allUsers=userPeople.concat(extPeople); };
 
 onAuthStateChanged(auth, (user)=>{
   loginBusy=false;
@@ -545,10 +556,11 @@ onAuthStateChanged(auth, (user)=>{
 
 function teardown(){
   if(unsubPeople){unsubPeople();unsubPeople=null;}
+  if(unsubExt){unsubExt();unsubExt=null;}
   if(unsubAbs){unsubAbs();unsubAbs=null;}
   if(unsubShifts){unsubShifts();unsubShifts=null;}
   if(unsubRot){unsubRot();unsubRot=null;}
-  allUsers=[]; people=[]; absences=[]; shifts=[]; rotById={}; myDoc=null;
+  allUsers=[]; userPeople=[]; extPeople=[]; pdlg=null; people=[]; absences=[]; shifts=[]; rotById={}; myDoc=null;
 }
 /* Když se některé živé načítání „zasekne" (např. čerstvě publikovaná pravidla
    Firestore, výpadek sítě), po chvíli znovu nahodíme všechny posluchače –
@@ -564,11 +576,19 @@ function subErr(label,e){
 function subscribe(){
   // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
   unsubPeople = onSnapshot(collection(db,'users'),
-    s=>{ subRetry=0; allUsers=s.docs.map(d=>{const x=d.data();
+    s=>{ subRetry=0; userPeople=s.docs.map(d=>{const x=d.data();
            return {id:d.id, name:x.name||d.id, email:x.email||'', positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}, modules:x.modules||{}};});
-         myDoc = allUsers.find(u=>u.id===me.uid) || null;
+         mergePeople();
+         myDoc = userPeople.find(u=>u.id===me.uid) || null;
          render(); },
     e=>subErr('lidé',e));
+  // Jména bez účtu v minimu (vepsaná přímo v plánování). Ve stejné kolekci můžou
+  // ležet staré záznamy z původní aplikace Dovolenky — ty nemají ext:true a ignorují se.
+  unsubExt = onSnapshot(collection(db,'people'),
+    s=>{ extPeople=s.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.ext===true)
+           .map(x=>({id:x.id, name:x.name||'', email:'', positions:x.pos?[x.pos]:[], ext:true}));
+         mergePeople(); render(); },
+    e=>subErr('jména',e));
   unsubAbs = onSnapshot(collection(db,'absences'),
     s=>{ absences=s.docs.map(d=>({id:d.id,...d.data()})); render(); },
     e=>subErr('nepřítomnosti',e));
@@ -757,6 +777,81 @@ async function clearRotation(personId){
   }catch(e){ toast('Nepodařilo se zrušit: '+e.message,'err'); }
 }
 
+/* ---- Jména bez účtu ----
+   Ne každý, koho plánujeme, má v minimu účet. Takové jméno se vepíše přímo tady
+   a uloží do kolekce people {name, pos, ext:true}. V kalendáři se chová stejně
+   jako uživatel; upravovat ho smí kdo má v sekci „Zapisovat všechny". */
+async function savePerson(){
+  const g=id=>document.getElementById(id);
+  if(g('pd-name')) pdlg.name=g('pd-name').value;
+  if(g('pd-pos')) pdlg.pos=g('pd-pos').value;
+  const name=String(pdlg.name||'').trim().replace(/\s+/g,' ');
+  if(!canEditAll()){ pdlg.msg='Jména může přidávat jen ten, kdo smí v sekci zapisovat všechny.'; render(); return; }
+  if(!name){ pdlg.msg='Napiš jméno.'; render(); return; }
+  if(!POS2SECTION[pdlg.pos]){ pdlg.msg='Vyber úsek (pozici).'; render(); return; }
+  const dup=allUsers.find(u=>u.id!==pdlg.id && String(u.name||'').trim().toLowerCase()===name.toLowerCase());
+  if(dup && !pdlg.dupOk){ pdlg.dupOk=true; pdlg.msg='Člověk se stejným jménem už v plánování je. Klikni na Uložit znovu, pokud jde opravdu o jiného.'; render(); return; }
+  try{
+    if(pdlg.id){
+      await updateDoc(doc(db,'people',pdlg.id),{name, pos:pdlg.pos});
+      // jméno se u záznamů ukládá i do personName — přepiš ho, ať historie sedí
+      const ren=absences.filter(a=>a.personId===pdlg.id).map(a=>updateDoc(doc(db,'absences',a.id),{personName:name}))
+        .concat(shifts.filter(s=>s.personId===pdlg.id).map(s=>updateDoc(doc(db,'shifts',s.id),{personName:name})));
+      await Promise.all(ren);
+      toast('Uloženo.','ok');
+    }else{
+      await addDoc(collection(db,'people'),{name, pos:pdlg.pos, ext:true, createdBy:me.email, createdAt:serverTimestamp()});
+      toast(name+' přidán do plánování.','ok');
+    }
+    pdlg=null; render();
+  }catch(e){ pdlg.msg='Nepodařilo se uložit: '+e.message; render(); }
+}
+async function removePerson(){
+  const p=extPeople.find(x=>x.id===pdlg.id); if(!p) return;
+  const abs=absences.filter(a=>a.personId===p.id), shs=shifts.filter(s=>s.personId===p.id);
+  if(!confirm(`Opravdu odebrat ${p.name} z plánování?`
+    +((abs.length||shs.length)?`\n\nSmaže se i ${abs.length} nepřítomností a ${shs.length} naplánovaných směn.`:'')
+    +'\n\nTohle se nedá vrátit.')) return;
+  try{
+    await Promise.all(abs.map(a=>deleteDoc(doc(db,'absences',a.id)))
+      .concat(shs.map(s=>deleteDoc(doc(db,'shifts',s.id)))));
+    if(rotById[p.id]) await deleteDoc(doc(db,'rotations',p.id));
+    await deleteDoc(doc(db,'people',p.id));
+    toast(p.name+' odebrán z plánování.','ok'); pdlg=null; render();
+  }catch(e){ pdlg.msg='Nepodařilo se odebrat: '+e.message; render(); }
+}
+function personDlgView(){
+  const secPositions=(SECTIONS.find(s=>s.key===section)||{}).positions||[];
+  const pOpts=secPositions.map(p=>`<option ${pdlg.pos===p?'selected':''}>${esc(p)}</option>`).join('');
+  return `<div class="dlg-wrap" id="pd-wrap"><div class="dlg">
+    <div class="t">👤 ${pdlg.id?'Jméno bez účtu':'Přidat jméno do plánování'}<button class="x" id="pd-x">✕</button></div>
+    <div class="c">
+      <div class="egrid">
+        <div class="f span3"><label>Jméno a příjmení</label>
+          <input type="text" id="pd-name" value="${esc(pdlg.name||'')}" placeholder="např. Jan Novák" autocomplete="off"></div>
+        <div class="f span3"><label>Úsek (pozice)</label><select id="pd-pos">${pOpts}</select></div>
+      </div>
+      <p style="margin:12px 0 0;color:var(--muted);font-size:12px">Člověk nemusí mít účet v minimu — jde jen o řádek v plánu.
+        Účet a přístupy se zakládají zvlášť v Nastavení.</p>
+      ${pdlg.msg?`<div class="formfoot"><span class="msg err">${esc(pdlg.msg)}</span></div>`:''}
+    </div>
+    <div class="b">
+      ${pdlg.id?'<button class="btn-danger" id="pd-del">Odebrat z plánování</button><span class="grow1"></span>':''}
+      <button class="btn-ghost" id="pd-cancel">Zrušit</button>
+      <button class="btn-primary" id="pd-save">Uložit</button>
+    </div>
+  </div></div>`;
+}
+function openPersonDlg(id, pos){
+  if(!canEditAll()) return;
+  if(id){ const p=extPeople.find(x=>x.id===id); if(!p) return;
+    pdlg={id, name:p.name, pos:p.positions[0]||'', msg:''}; }
+  else{ const secPositions=(SECTIONS.find(s=>s.key===section)||{}).positions||[];
+    pdlg={id:null, name:'', pos:pos||secPositions[0]||'', msg:''}; }
+  render();
+  setTimeout(()=>document.getElementById('pd-name')?.focus(),0);
+}
+
 /* ==========================================================
    RENDER
    ========================================================== */
@@ -837,7 +932,8 @@ function appView(){
   ${dlg?dialogView():''}
   ${edit?editView():''}
   ${editShift?editShiftView():''}
-  ${collision?collisionView():''}`;
+  ${collision?collisionView():''}
+  ${pdlg?personDlgView():''}`;
 }
 
 function tabBar(){
@@ -957,6 +1053,7 @@ function calBar(){
     <div class="yr">${calYear}</div>
     <button class="nav" id="yr-next" title="Další rok">›</button>
     <button class="btn-ghost" id="go-today">Dnes</button>
+    ${canEditAll()?'<button class="btn-ghost" id="add-name" title="Přidat člověka, který nemá účet v minimu">👤 + Přidat jméno</button>':''}
     <span class="hint">Posouvejte kalendář do stran ↔ (např. na prosinec) · kliknutím na políčko upravíte záznam</span>
   </div>`;
 }
@@ -1034,7 +1131,8 @@ function shiftMap(startDs,endDs){
 function calendarView(){
   if(!people.length){
     const sl=SECTIONS.find(s=>s.key===section);
-    return `<div class="cal-wrap"><div class="empty-cal">V sekci <b>${esc(sl?sl.label:'')}</b> zatím nejsou žádní lidé.<br>Přiřaď lidem pozice této sekce v modulu <b>⚙️ Nastavení</b>.</div></div>`;
+    return `<div class="cal-wrap"><div class="empty-cal">V sekci <b>${esc(sl?sl.label:'')}</b> zatím nejsou žádní lidé.<br>Přiřaď lidem pozice této sekce v modulu <b>⚙️ Nastavení</b>${
+      canEditAll()?', nebo jméno vepiš rovnou tlačítkem <b>👤 + Přidat jméno</b> nad kalendářem':''}.</div></div>`;
   }
   const mob=window.innerWidth<=680;
   const NC=mob?110:180, DC=mob?30:34;
@@ -1092,7 +1190,11 @@ function calendarView(){
       }
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
-    return `<tr><td class="name" title="${esc(p.name)}">${esc(p.name)}</td>${cells}</tr>`;
+    const nameCell = (p.ext && canEditAll())
+      ? `<td class="name ext edit" data-ext="${p.id}" title="${esc(p.name)} — bez účtu v minimu, kliknutím upravíš">${esc(p.name)}</td>`
+      : p.ext ? `<td class="name ext" title="${esc(p.name)} — bez účtu v minimu">${esc(p.name)}</td>`
+      : `<td class="name" title="${esc(p.name)}">${esc(p.name)}</td>`;
+    return `<tr>${nameCell}${cells}</tr>`;
   };
   // rozdělení tabulky po úsecích (pozicích) sekce: nadpis úseku + lidé abecedně pod ním.
   // Kdo má v sekci víc úseků, zařadí se jen do PRVNÍHO ze svých úseků (objeví se jednou).
@@ -1104,7 +1206,8 @@ function calendarView(){
   secPositions.forEach(pos=>{
     const grp=(groupsByPos[pos]||[]).sort(bySurname);
     if(!grp.length) return;
-    rowsHtml.push(`<tr class="grp"><td class="name grp-name" title="${esc(pos)}">${esc(pos)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
+    rowsHtml.push(`<tr class="grp"><td class="name grp-name" title="${esc(pos)}">${esc(pos)} <span class="grp-n">(${grp.length})</span>${
+      canEditAll()?` <button class="grp-add" data-add-pos="${esc(pos)}" title="Přidat jméno do úseku ${esc(pos)}">+ jméno</button>`:''}</td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
     grp.forEach(p=>rowsHtml.push(personRow(p)));
   });
   const body=rowsHtml.join('');
@@ -1274,9 +1377,25 @@ function wireApp(){
   document.getElementById('col-x')?.addEventListener('click',()=>{collision=null;render();});
   document.getElementById('col-wrap')?.addEventListener('click',e=>{if(e.target.id==='col-wrap'){collision=null;render();}});
 
+  // jména bez účtu: přidání (nad kalendářem i u úseku) a úprava kliknutím na jméno
+  document.getElementById('add-name')?.addEventListener('click',()=>openPersonDlg(null));
+  if(pdlg){
+    const pn=document.getElementById('pd-name');
+    pn?.addEventListener('input',()=>{pdlg.name=pn.value; pdlg.dupOk=false;});
+    pn?.addEventListener('keydown',e=>{ if(e.key==='Enter') savePerson(); });
+    document.getElementById('pd-pos')?.addEventListener('change',e=>{pdlg.pos=e.target.value;});
+    document.getElementById('pd-save')?.addEventListener('click',savePerson);
+    document.getElementById('pd-del')?.addEventListener('click',removePerson);
+    document.getElementById('pd-cancel')?.addEventListener('click',()=>{pdlg=null;render();});
+    document.getElementById('pd-x')?.addEventListener('click',()=>{pdlg=null;render();});
+    document.getElementById('pd-wrap')?.addEventListener('click',e=>{if(e.target.id==='pd-wrap'){pdlg=null;render();}});
+  }
+
   // klik do kalendáře
   const wrap=document.querySelector('.cal-wrap');
   if(wrap) wrap.addEventListener('click',e=>{
+    const ap=e.target.closest('[data-add-pos]'); if(ap){ openPersonDlg(null, ap.getAttribute('data-add-pos')); return; }
+    const ex=e.target.closest('td[data-ext]'); if(ex){ openPersonDlg(ex.getAttribute('data-ext')); return; }
     const td=e.target.closest('td.d'); if(!td) return;
     openDay(td.getAttribute('data-person'), td.getAttribute('data-date'));
   });
