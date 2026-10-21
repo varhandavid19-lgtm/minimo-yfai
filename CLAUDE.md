@@ -64,6 +64,9 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   přebije i nepřítomnost, nepřítomnost směnu jen překryje. Během tažení se
   nepřekresluje (`dragging`). Směnový rytmus na rok (rotace) je v okně jména.
   Nevracej horní formuláře.
+  Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
+  v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky
+  a šipky posouvají po měsících (`calMonth`), v roce po letech.
 - kolekce `users` — id dokumentu = uid uživatele; pole `name`, `level`, `role`,
   `positions`, `perms`, `modules` (přístup k modulům: none / read / write)
 - dokument `meta/config` — účty, úseky, stroje, povinná pole, kurzy, čítače

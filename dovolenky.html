@@ -132,6 +132,12 @@
     font-weight:800;width:38px;height:38px;border-radius:10px;padding:0}
   .calbar button.nav:hover{background:#eef3fb}
   .calbar .hint{margin-left:auto;font-size:11.5px;color:var(--muted)}
+  .calbar{flex-wrap:wrap}
+  .calbar>*{flex:none}
+  .viewsw{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  .viewsw button{border:0;border-radius:0;background:#fff;color:#41506b;font-weight:700;padding:9px 14px}
+  .viewsw button+button{border-left:1px solid var(--line)}
+  .viewsw button.on{background:var(--navy-2);color:#fff}
 
   .cal-wrap{overflow:auto;max-height:76vh;border:1px solid var(--line);border-radius:12px;background:#fff}
   table.cal{border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:11px}
@@ -483,6 +489,11 @@ let shifts=[];             // ručně naplánované směny (přítomnost)
 let rotById={};            // rotace (automatické směnové plány) podle personId
 const _now0=new Date();
 let calYear=_now0.getFullYear();   // rok zobrazený v kalendáři (posouvá se do stran)
+let calMonth=_now0.getMonth();     // měsíc v zobrazení „Měsíc" (0 = leden)
+/* Zobrazení: 'year' = celý rok s posuvníkem, 'month' = jeden měsíc roztažený na šířku.
+   Volba si pamatuje prohlížeč (jen pohodlí jednoho uživatele). */
+let calView='year';
+try{ if(localStorage.getItem('plan-view')==='month') calView='month'; }catch(e){}
 let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
 let loginBusy=false, loginErr='';
 let dlg=null;              // {personName, dateStr, items:[...]} – náhled dne pro toho, kdo jen čte
@@ -897,6 +908,7 @@ function render(){
    byl vlevo (ostatní roky na leden). Jinak zachová dosavadní odscrollování. */
 function alignCalendar(){
   const wrap=document.querySelector('.cal-wrap'); if(!wrap) return;
+  if(calView==='month'){ wrap.scrollTop=calScrollT; return; }   // měsíc se vejde na šířku
   if(calYear!==alignedYear){
     if(!wrap.querySelector('table.cal')){ wrap.scrollLeft=calScrollL; return; } // ještě bez dat – příště
     alignedYear=calYear;
@@ -1000,12 +1012,13 @@ function legendView(){
 
 function calBar(){
   return `<div class="calbar">
-    <button class="nav" id="yr-prev" title="Předchozí rok">‹</button>
-    <div class="yr">${calYear}</div>
-    <button class="nav" id="yr-next" title="Další rok">›</button>
+    <span class="viewsw"><button class="${calView==='year'?'on':''}" data-view="year">Rok</button><button class="${calView==='month'?'on':''}" data-view="month">Měsíc</button></span>
+    <button class="nav" id="yr-prev" title="${calView==='month'?'Předchozí měsíc':'Předchozí rok'}">‹</button>
+    <div class="yr">${calView==='month'?MONTHS[calMonth]+' '+calYear:calYear}</div>
+    <button class="nav" id="yr-next" title="${calView==='month'?'Další měsíc':'Další rok'}">›</button>
     <button class="btn-ghost" id="go-today">Dnes</button>
     ${canEditAll()?'<button class="btn-ghost" id="add-name" title="Přidat člověka, který nemá účet v minimu">👤 + Přidat jméno</button>':''}
-    <span class="hint">Posouvejte kalendář do stran ↔ · ${canEditAll()
+    <span class="hint">${calView==='month'?'':'Posouvejte kalendář do stran ↔ · '}${canEditAll()
       ? 'dny označíš tažením myší v řádku (na mobilu ťukni na první a pak na poslední den)'
       : 'kliknutím na políčko zobrazíte detail'}</span>
   </div>`;
@@ -1089,10 +1102,14 @@ function calendarView(){
   }
   const mob=window.innerWidth<=680;
   const NC=mob?110:180, DC=mob?30:34;
-  const months=buildYear(calYear), by=absenceMap(iso(calYear,0,1),iso(calYear,11,31)), sm=shiftMap(iso(calYear,0,1),iso(calYear,11,31));
+  const monthView=calView==='month';
+  const yearMonths=buildYear(calYear), months=monthView?[yearMonths[calMonth]]:yearMonths;
+  const by=absenceMap(iso(calYear,0,1),iso(calYear,11,31)), sm=shiftMap(iso(calYear,0,1),iso(calYear,11,31));
   const allDays=months.flatMap(mo=>mo.days);
   const sr=selRange();                       // označené dny (tažením)
-  const colgroup=`<colgroup><col style="width:${NC}px">${allDays.map(()=>`<col style="width:${DC}px">`).join('')}</colgroup>`;
+  // měsíc: sloupce dnů se rozdělí o šířku obrazovky (bez pevné šířky), na úzkém displeji aspoň DC
+  const colgroup=`<colgroup><col style="width:${NC}px">${allDays.map(()=>monthView?'<col>':`<col style="width:${DC}px">`).join('')}</colgroup>`;
+  const tblStyle=monthView?` style="width:100%;min-width:${NC+allDays.length*DC}px"`:'';
   const monthsRow=`<tr class="months"><th class="corner">${calYear}</th>${
     months.map(mo=>`<th class="mstart ${mo.alt?'malt':''}" colspan="${mo.days.length}">${mo.name}</th>`).join('')}</tr>`;
   const daysRow=`<tr class="days"><th class="corner">Zaměstnanec</th>${
@@ -1166,7 +1183,7 @@ function calendarView(){
     grp.forEach(p=>rowsHtml.push(personRow(p)));
   });
   const body=rowsHtml.join('');
-  return `<div class="cal-wrap"><div class="cal-inner"><table class="cal">${colgroup}<thead>${monthsRow}${daysRow}</thead><tbody>${body}</tbody></table><div class="today-band" style="display:none"></div></div></div>`;
+  return `<div class="cal-wrap"><div class="cal-inner"${monthView?' style="width:100%"':''}><table class="cal"${tblStyle}>${colgroup}<thead>${monthsRow}${daysRow}</thead><tbody>${body}</tbody></table><div class="today-band" style="display:none"></div></div></div>`;
 }
 
 function dialogView(){
@@ -1236,10 +1253,20 @@ function wireApp(){
     }));
 
   // rok kalendáře + skok na dnešek
-  document.getElementById('yr-prev')?.addEventListener('click',()=>{calYear--;alignedYear=null;calScrollL=0;sel=null;render();});
-  document.getElementById('yr-next')?.addEventListener('click',()=>{calYear++;alignedYear=null;calScrollL=0;sel=null;render();});
+  // šipky posouvají o rok, v zobrazení „Měsíc" o měsíc
+  const shift=dir=>{ if(calView==='month'){ calMonth+=dir;
+      if(calMonth<0){calMonth=11;calYear--;} else if(calMonth>11){calMonth=0;calYear++;} }
+    else calYear+=dir;
+    alignedYear=null; calScrollL=0; sel=null; render(); };
+  document.getElementById('yr-prev')?.addEventListener('click',()=>shift(-1));
+  document.getElementById('yr-next')?.addEventListener('click',()=>shift(1));
   document.getElementById('go-today')?.addEventListener('click',()=>{
-    calYear=new Date().getFullYear(); alignedYear=null; render(); });
+    const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); alignedYear=null; render(); });
+  document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{
+    const v=b.getAttribute('data-view'); if(v===calView) return;
+    if(v==='month' && calYear===new Date().getFullYear()) calMonth=new Date().getMonth();
+    calView=v; try{ localStorage.setItem('plan-view',v); }catch(e){}
+    alignedYear=null; calScrollL=0; sel=null; render(); }));
 
   // dialog kolize dovolené
   document.getElementById('col-ok')?.addEventListener('click',()=>{const ok=collision&&collision.onOk; collision=null; if(ok) ok();});
