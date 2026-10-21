@@ -63,6 +63,24 @@
 
   .tblwrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:13px}
+  /* ===== Široká editovatelná tabulka uživatelů ===== */
+  .utblwrap{overflow:auto;max-height:74vh;border:1px solid var(--line);border-radius:10px}
+  table.utbl{border-collapse:separate;border-spacing:0;font-size:12px;min-width:1200px}
+  table.utbl thead th{position:sticky;top:0;background:#16355f;color:#fff;z-index:3;padding:7px 8px;font-size:10px;white-space:nowrap}
+  table.utbl thead tr:nth-child(2) th{top:30px}
+  table.utbl th.grp{text-align:center;background:#1f4a86}
+  table.utbl td{padding:4px 7px;border-bottom:1px solid #eef1f5;white-space:nowrap;vertical-align:middle;background:#fff}
+  table.utbl tbody tr:hover td{background:#f7f9fc}
+  table.utbl th.stick,table.utbl td.stick{position:sticky;left:0;z-index:2;min-width:150px;box-shadow:1px 0 0 var(--line)}
+  table.utbl td.stick{background:#fff;font-weight:600}
+  table.utbl tbody tr:hover td.stick{background:#f7f9fc}
+  table.utbl thead th.stick{z-index:4}
+  table.utbl select{font-size:11.5px;padding:3px 5px;max-width:160px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  table.utbl td.poscell{white-space:normal;min-width:230px;max-width:300px}
+  .posbox{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+  .posbox .pchip{font-size:10px;padding:1px 6px;margin:0}
+  .posbox select.addpos{font-size:11px;padding:2px 4px;max-width:120px}
+  table.utbl .udel{padding:3px 8px;font-size:12px}
   thead th{background:#16355f;color:#fff;text-align:left;padding:9px 11px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;font-weight:700}
   tbody td{padding:8px 11px;border-bottom:1px solid #eef1f5;vertical-align:middle}
   tbody tr:hover td{background:#f7f9fc}
@@ -422,6 +440,55 @@ function render(){
   appEl.innerHTML = view(); wire(); renderToast();
 }
 
+/* ===== Buňky editovatelné tabulky uživatelů ===== */
+function cellLevel(u, rw){
+  const lvl=levelOf(u);
+  return `<select class="t-level" data-uid="${esc(u.uid)}" ${rw?'':'disabled'}>${
+    LEVELS.map(l=>`<option value="${l.key}" ${lvl===l.key?'selected':''}>${esc(l.label)}</option>`).join('')}</select>`;
+}
+function cellMod(u, m, rw){
+  const dm=resolveModule(null, levelOf(u), m.key, u);
+  const cur=(u.modules&&u.modules[m.key])||'';
+  const opts=`<option value="" ${cur===''?'selected':''}>Výchozí (${esc((MODSTATE_BY[dm]||MODSTATES[0]).label)})</option>`
+    + MODSTATES.map(s=>`<option value="${s.key}" ${cur===s.key?'selected':''}>${esc(s.label)}</option>`).join('');
+  return `<select class="t-mod" data-uid="${esc(u.uid)}" data-mod="${m.key}" ${rw?'':'disabled'}>${opts}</select>`;
+}
+function cellPerm(u, s, rw){
+  const dp=defaultPerm(levelOf(u));
+  const cur=(u.perms&&u.perms[s.key])||'';
+  const opts=`<option value="" ${cur===''?'selected':''}>Výchozí (${esc(PERM_BY[dp].label)})</option>`
+    + PERM_STATES.map(p=>`<option value="${p.key}" ${cur===p.key?'selected':''}>${esc(p.label)}</option>`).join('');
+  return `<select class="t-perm" data-uid="${esc(u.uid)}" data-sec="${s.key}" ${rw?'':'disabled'}>${opts}</select>`;
+}
+function cellPos(u, rw){
+  const chips=(u.positions||[]).length
+    ? (u.positions||[]).map(p=>`<span class="pchip ${rw?'rm':''}">${esc(p)}${rw?`<button data-rmpos="${esc(p)}" data-uid="${esc(u.uid)}" title="Odebrat">✕</button>`:''}</span>`).join('')
+    : '<span style="color:var(--muted)">—</span>';
+  const add = rw ? `<select class="addpos t-pos" data-uid="${esc(u.uid)}"><option value="">＋</option>${
+    SECTIONS.map(s=>`<optgroup label="${esc(s.label)}">${s.positions.map(p=>`<option value="${esc(p)}" ${(u.positions||[]).includes(p)?'disabled':''}>${esc(p)}</option>`).join('')}</optgroup>`).join('')}</select>` : '';
+  return `<div class="posbox">${chips}${add}</div>`;
+}
+/* Zápis do Firestore (celý profil najednou) + okamžité uložení po změně buňky. */
+function findU(uid){ return users.find(x=>x.uid===uid); }
+async function writeUser(u){
+  await updateDoc(doc(db,'users',u.uid),
+    {level:u.level||levelOf(u), role:LEVEL2ROLE[u.level||levelOf(u)], positions:u.positions||[], perms:u.perms||{}, modules:u.modules||{}});
+}
+async function patchLevel(uid,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
+  u.level=val; render(); try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+async function patchMod(uid,key,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
+  u.modules=Object.assign({},u.modules); if(val) u.modules[key]=val; else delete u.modules[key];
+  try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+async function patchPerm(uid,key,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
+  u.perms=Object.assign({},u.perms); if(val) u.perms[key]=val; else delete u.perms[key];
+  try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+async function addPos(uid,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
+  u.positions=(u.positions||[]).slice(); if(!u.positions.includes(val)) u.positions.push(val);
+  render(); try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+async function rmPos(uid,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
+  u.positions=(u.positions||[]).filter(p=>p!==val);
+  render(); try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+
 function denyView(){
   return `<div class="center"><div class="card">
     <div class="brand">${logoSvg()}</div>
@@ -433,23 +500,21 @@ function denyView(){
 
 function view(){
   const rw = canWriteSettings();
+  const nCols = 3 + MODULES_LIST.length + SECTIONS.length + (rw?1:0);
   const rows = users.length ? users.map(u=>{
-    const lvl=levelOf(u);
     const meMark = u.uid===me.uid ? '<span class="me-tag">(vy)</span>' : '';
     const delBtn = u.uid===me.uid
       ? `<span class="uid" title="Sebe nelze smazat">—</span>`
       : `<button class="udel" data-del="${u.uid}" data-name="${esc(u.name||u.uid)}" title="Smazat uživatele">✕</button>`;
-    const chips = (u.positions||[]).length
-      ? (u.positions||[]).map(p=>`<span class="pchip">${esc(p)}</span>`).join(' ')
-      : '<span style="color:var(--muted)">—</span>';
     return `<tr>
-      <td class="nm">${esc(u.name||'—')}${meMark}</td>
-      <td>${badge(lvl)}</td>
-      <td class="pos">${chips}</td>
-      ${rw?`<td class="ta-c"><button class="btn-edit" data-edit="${u.uid}">Upravit</button></td>
-      <td class="ta-c">${delBtn}</td>`:''}
+      <td class="stick">${esc(u.name||'—')}${meMark}</td>
+      <td>${cellLevel(u,rw)}</td>
+      <td class="poscell">${cellPos(u,rw)}</td>
+      ${MODULES_LIST.map(m=>`<td>${cellMod(u,m,rw)}</td>`).join('')}
+      ${SECTIONS.map(s=>`<td>${cellPerm(u,s,rw)}</td>`).join('')}
+      ${rw?`<td class="ta-c">${delBtn}</td>`:''}
     </tr>`;
-  }).join('') : `<tr><td colspan="${rw?5:3}" style="text-align:center;color:var(--muted);padding:22px">Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.</td></tr>`;
+  }).join('') : `<tr><td colspan="${nCols}" style="text-align:center;color:var(--muted);padding:22px">Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.</td></tr>`;
 
   const legend = LEVELS.map(l=>`<div class="lvl">
     <span class="b">${badge(l.key)}</span>
@@ -468,12 +533,25 @@ function view(){
         ℹ️ Účet se tu objeví, až se jím člověk <b>poprvé přihlásí</b> do portálu (profil se vytvoří automaticky).
         Účet vytvořený jen ve Firebase&nbsp;Authentication se zde nezobrazí, dokud se přes něj někdo nepřihlásí.
       </p>
-      <div class="tblwrap"><table>
-        <thead><tr><th>Jméno</th><th>Level</th><th>Pozice / odpovědnosti</th>${rw?'<th>Upravit</th><th>Smazat</th>':''}</tr></thead>
+      <div class="utblwrap"><table class="utbl">
+        <thead>
+          <tr>
+            <th class="stick" rowspan="2">Jméno</th>
+            <th rowspan="2">Level</th>
+            <th rowspan="2">Pozice / odpovědnosti</th>
+            <th class="grp" colspan="${MODULES_LIST.length}">Přístup k modulům</th>
+            <th class="grp" colspan="${SECTIONS.length}">Práva v Plánování (po sekcích)</th>
+            ${rw?'<th rowspan="2">Smazat</th>':''}
+          </tr>
+          <tr>
+            ${MODULES_LIST.map(m=>`<th>${esc(m.label)}</th>`).join('')}
+            ${SECTIONS.map(s=>`<th>${esc(s.label)}</th>`).join('')}
+          </tr>
+        </thead>
         <tbody>${rows}</tbody>
       </table></div>
+      <p style="margin:10px 0 0;font-size:11.5px;color:var(--muted)">Edituje se přímo v tabulce — každá změna se <b>uloží hned</b> a projeví se po dalším přihlášení daného člověka. „Výchozí (…)" = chování podle levelu. Když je u modulu „Skryté"/„Jen číst", má to přednost před právy po sekcích.</p>
     </div></div>
-    ${uedit?editUserView():''}
 
     ${engView()}
 
@@ -490,10 +568,20 @@ function view(){
 function wire(){
   document.getElementById('btn-logout')?.addEventListener('click',()=>signOut(auth));
   document.getElementById('eg-save')?.addEventListener('click',saveEngcfg);
-  document.querySelectorAll('button[data-edit]').forEach(b=>
-    b.addEventListener('click',()=>openEdit(b.getAttribute('data-edit'))));
   document.querySelectorAll('button[data-del]').forEach(btn=>
     btn.addEventListener('click',()=>removeUser(btn.getAttribute('data-del'), btn.getAttribute('data-name'))));
+
+  // inline editace přímo v tabulce uživatelů
+  document.querySelectorAll('select.t-level').forEach(sel=>
+    sel.addEventListener('change',()=>patchLevel(sel.dataset.uid, sel.value)));
+  document.querySelectorAll('select.t-mod').forEach(sel=>
+    sel.addEventListener('change',()=>patchMod(sel.dataset.uid, sel.dataset.mod, sel.value)));
+  document.querySelectorAll('select.t-perm').forEach(sel=>
+    sel.addEventListener('change',()=>patchPerm(sel.dataset.uid, sel.dataset.sec, sel.value)));
+  document.querySelectorAll('select.t-pos').forEach(sel=>
+    sel.addEventListener('change',()=>{ if(sel.value) addPos(sel.dataset.uid, sel.value); }));
+  document.querySelectorAll('[data-rmpos]').forEach(b=>
+    b.addEventListener('click',()=>rmPos(b.dataset.uid, b.getAttribute('data-rmpos'))));
 
   if(uedit){
     // změna levelu překreslí okno, aby se přepsal text „Výchozí (…)" u práv
