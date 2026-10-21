@@ -72,7 +72,7 @@
       var ok = (set==='read' || set==='write')
         || OPRAVY_OWNERS.indexOf(String(o.email||o.user||'').trim().toLowerCase())>=0;
       if(!ok) return '';
-      return '<a class="'+(o.cur==='lama'?'cur':'')+'" href="lama.html">🤝 Úkoly pro LAMA AGENCY</a>';
+      return '<a class="'+(o.cur==='lama'?'cur':'')+'" href="lama.html">🦙 Úkoly pro LAMA AGENCY</a>';
     }
     return '<header class="uhdr">'
       + '<div class="uh-menuwrap">'
