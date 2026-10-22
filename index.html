@@ -38,6 +38,7 @@
 
   main{padding:26px 20px 48px;max-width:1100px;margin:0 auto}
   .intro{margin:0 0 20px}
+  .noacc{background:#fdf3e2;border:1px solid #f2dfb8;color:#7a5410;border-radius:10px;padding:11px 14px;margin:0 0 16px;font-size:13px}
   .intro h2{margin:0 0 4px;font-size:19px;color:var(--navy-1)}
   .intro p{margin:0;color:var(--muted);font-size:13.5px}
 
@@ -207,6 +208,13 @@ const sfwAccess = () => { const set=(myModules||{}).shopfloor;
 const lamaAccess = () => { const set=(myModules||{}).lama;
   if(set==='none'||set==='read'||set==='write') return set;
   return isOpravyOwner() ? 'write' : 'none'; };
+/* Modul, ze kterého sem někoho přesměrovalo, protože do něj nesmí (?noaccess=klíč).
+   Parametr se hned smaže z adresy, ať hláška nevisí po obnovení stránky. */
+const NOACCESS_NAME = (()=>{ try{
+  const k=new URLSearchParams(location.search).get('noaccess'); if(!k) return '';
+  history.replaceState(null,'',location.pathname);
+  const m=MODULES.find(x=>x.key===k); return m ? m.nm : '';
+}catch(e){ return ''; } })();
 function appView(){
   const tiles = MODULES.filter(m=> m.engOnly ? isEngPerson()
     : m.sfwOnly ? sfwAccess()!=='none'
@@ -229,6 +237,8 @@ function appView(){
   const uh = window.uheaderHTML ? window.uheaderHTML({module:'Hlavní stránka',cur:'portal',user:esc(me.email),level:LEVEL_LABEL[myLevel]||'',logoutAttr:'id="btn-logout"',modules:allowedMods(myModules,myLevel),positions:myPositions,mods:myModules,email:esc(me.email)}) : '';
   return `${uh}
   <main>
+    ${NOACCESS_NAME?`<div class="noacc">Do modulu <b>${esc(NOACCESS_NAME)}</b> nemáš přístup — vyber si z modulů níže.
+      Přístup ti může přidat správce v Nastavení.</div>`:''}
     <div class="intro"><h2>Vyberte aplikaci</h2><p>Přihlášení platí pro všechny moduly současně.</p></div>
     <div class="tiles">${tiles}</div>
   </main>`;

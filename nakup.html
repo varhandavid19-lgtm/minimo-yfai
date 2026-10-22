@@ -784,13 +784,11 @@ function splash(msg,err){
     ${err?'<button class="btn-primary" data-a="reload" style="width:100%;padding:9px;margin-top:6px">Zkusit znovu</button>':''}
   </div></div>`;
 }
+/* Kdo do modulu nesmí, skončí na hlavní stránce s dlaždicemi modulů, kam smí —
+   hláška „Nemáte přístup" tu nikomu nepomohla. Hlavní stránka podle ?noaccess řekne proč. */
 function noAccessView(){
-  return `<div class="login-wrap"><div class="login" style="text-align:center">
-    <div class="brand">${logoSvg()}</div>
-    <h2>Nemáte přístup</h2>
-    <p class="s">K modulu Nákupní požadavky nemáte oprávnění.<br>Obraťte se na správce (modul Nastavení).</p>
-    <a href="index.html" class="btn-primary" style="display:inline-block;text-decoration:none;padding:9px 16px;margin-top:6px">← Hlavní stránka</a>
-  </div></div>`;
+  location.replace('index.html?noaccess=nakup');
+  return splash('Do Nákupních požadavků nemáš přístup — přecházím na hlavní stránku…');
 }
 
 /* ---------- login ---------- */

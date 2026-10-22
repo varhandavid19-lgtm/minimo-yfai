@@ -964,8 +964,10 @@ function loginView(){
 function appView(){
   const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   if(!visible.length){
+    // kdo do plánování nesmí, skončí na hlavní stránce s moduly, kam smí (až po načtení jeho profilu)
+    if(myDoc) location.replace('index.html?noaccess=plan');
     return `${headerView()}<main><div class="empty-cal" style="margin-top:20px">
-      Nemáte přístup k žádné sekci plánování.<br>Obraťte se prosím na správce (modul ⚙️ Nastavení).</div></main>`;
+      Do Plánování směn nemáš přístup — přecházím na hlavní stránku…</div></main>`;
   }
   if(mainTab==='bonus' && bonusSections().length){
     return `${headerView()}

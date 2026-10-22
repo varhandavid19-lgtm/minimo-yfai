@@ -604,14 +604,10 @@ function render(){
     + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
   bind();
 }
+/* Kdo do modulu nesmí, skončí na hlavní stránce s moduly, kam smí. */
 function noAccessView(){
-  return `<div class="panel"><div class="body empty">
-    <div style="font-size:34px">🔒</div>
-    <div style="font-size:17px;font-weight:800;margin:8px 0 6px">K úkolům pro LAMA AGENCY zatím nemáš přístup</div>
-    <p class="muted" style="max-width:520px;margin:0 auto">
-      Přístup nastavuje David v <b>Nastavení → uživatel → Přístup k modulům → Úkoly pro LAMA AGENCY</b>.
-      Napiš mu, jestli potřebuješ jen číst, nebo i zapisovat.</p>
-  </div></div>`;
+  location.replace('index.html?noaccess=lama');
+  return `<div class="notice">K úkolům pro LAMA AGENCY nemáš přístup — přecházím na hlavní stránku…</div>`;
 }
 function shell(inner){
   const uh = window.uheaderHTML ? window.uheaderHTML({module:'Úkoly pro LAMA AGENCY', cur:'lama',
