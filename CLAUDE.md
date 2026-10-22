@@ -386,6 +386,12 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
   ní hned za „po termínu"), poznámka / vyjádření agentury (`note`), hotovo dne
   (`closedOn`, nastaví se samo při přepnutí na hotovo), přílohy (`files`, úložiště
   `lama/{idÚkolu}/…`, limit 5 MB, fotky se před nahráním zmenší jako jinde).
+- **Záložky** (`LISTS`, pole `list`): Úkoly pro LAMA AGENCY (`agency`, i starší
+  úkoly bez pole), Facility meeting (`facility`), Interní LAMA (`internal`),
+  Požadavky na správce (`admin`). Všechny mají stejnou tabulku a pole, přístup
+  je společný pro celý modul. Čísla jdou z jednoho čítače `meta/lamacfg.seq`
+  přes všechny záložky — pravidla Firestore dovolí měnit jen `seq`, nezakládej
+  čítač po záložkách bez úpravy pravidel.
 - „Po termínu" se neukládá, počítá se z `due`. Úkoly po termínu svítí červeně
   a řadí se nahoru, hotové jsou zelené a dospod.
 

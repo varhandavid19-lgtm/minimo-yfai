@@ -36,6 +36,16 @@
   .panel .body{padding:13px}
   .empty{padding:26px;text-align:center;color:var(--muted)}
 
+  /* záložky seznamů — velká tlačítka jako v ostatních modulech, aktivní tyrkysová */
+  .tabs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .tab{background:#fff;color:var(--navy-1);border:1.5px solid #c8d6e8;border-radius:9px;
+    font-size:14px;font-weight:700;padding:11px 20px;box-shadow:0 1px 2px rgba(15,47,95,.06)}
+  .tab:hover{background:var(--teal-bg);border-color:var(--teal);color:var(--teal-dark)}
+  .tab.on{background:var(--teal);color:#fff;border-color:var(--teal-dark);box-shadow:0 2px 6px rgba(13,115,119,.35)}
+  .tab .tcount{display:inline-block;min-width:20px;padding:1px 6px;margin-left:4px;border-radius:10px;
+    background:#eef3fb;color:var(--navy-2);font-size:11px;font-weight:800}
+  .tab.on .tcount{background:rgba(255,255,255,.25);color:#fff}
+  @media(max-width:680px){.tab{flex:1 1 calc(50% - 4px);padding:11px 8px;font-size:13px}}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px;margin-bottom:14px}
   .kcard{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy-2);border-radius:var(--radius);padding:11px 13px}
   .kcard .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
@@ -218,6 +228,17 @@ const PRIORITIES = [
   {k:'běžná',    cls:'b-blue'},
   {k:'nízká',    cls:'b-grey'}
 ];
+/* Záložky modulu — každá je samostatný seznam se stejnou tabulkou a stejnými poli.
+   Úkol patří do seznamu podle pole `list`; starší úkoly bez něj jsou v „agency".
+   Čísla úkolů jdou z jednoho společného čítače (meta/lamacfg.seq) přes všechny záložky. */
+const LISTS = [
+  {k:'agency',   label:'Úkoly pro LAMA AGENCY'},
+  {k:'facility', label:'Facility meeting'},
+  {k:'internal', label:'Interní LAMA'},
+  {k:'admin',    label:'Požadavky na správce'}
+];
+const listOf = t => (LISTS.some(l=>l.k===(t&&t.list)) ? t.list : 'agency');
+const listLabel = k => (LISTS.find(l=>l.k===k)||LISTS[0]).label;
 const prioOf = t => (PRIORITIES.find(p=>p.k===(t&&t.priority)) || PRIORITIES[2]);
 const prioRank = t => PRIORITIES.indexOf(prioOf(t));
 const MAX_FILE = 5*1024*1024;      // 5 MB na soubor, stejně jako jinde v minimu
@@ -254,6 +275,9 @@ let me=null, loginBusy=false, loginErr='';
 let items=[], loaded=false, busy='', errMsg='';
 let open=null, oMsg='', pending=[];
 let f={area:'',status:'',priority:'',q:''};
+let curList='agency';               // otevřená záložka (pamatuje si ji prohlížeč)
+try{ const s=localStorage.getItem('lama-list'); if(LISTS.some(l=>l.k===s)) curList=s; }catch(e){}
+const listItems = () => items.filter(t=>listOf(t)===curList);
 let hideDone=true, toastMsg=null, toastKind='';
 const appEl=document.getElementById('app');
 function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t);
@@ -309,7 +333,7 @@ function sync(t){
 }
 function emptyItem(){
   return {_id:null, no:'', createdOn:today(), createdBy:me.name, task:'', area:'', due:'',
-    status:'nový', priority:'běžná', closedOn:'', note:'', files:[], hist:[]};
+    status:'nový', priority:'běžná', list:curList, closedOn:'', note:'', files:[], hist:[]};
 }
 
 /* ===== zápis ===== */
@@ -337,8 +361,8 @@ async function save(){
     if(!t._id){
       const no=await nextNo();
       const rec={no, createdOn:t.createdOn||today(), createdBy:me.name, task:t.task, area:t.area||'',
-        due:t.due, status:t.status, priority:prioOf(t).k, closedOn:t.closedOn, note:t.note||'', files:[],
-        hist:[`${today()} · ${me.name} · úkol zadán`]};
+        due:t.due, status:t.status, priority:prioOf(t).k, list:listOf(t), closedOn:t.closedOn, note:t.note||'', files:[],
+        hist:[`${today()} · ${me.name} · úkol zadán (${listLabel(listOf(t))})`]};
       const ref=await addDoc(collection(db,'lama'), rec);
       /* přílohy vybrané ještě před uložením nahrajeme teď, když máme id */
       if(pending.length){
@@ -448,7 +472,7 @@ async function removeFile(i){
 
 /* ===== výběr řádků ===== */
 function visible(){
-  let r=items.slice();
+  let r=listItems();
   if(f.area)   r=r.filter(t=>t.area===f.area);
   if(f.status) r=r.filter(t=>t.status===f.status);
   if(f.priority) r=r.filter(t=>prioOf(t).k===f.priority);
@@ -469,25 +493,33 @@ function visible(){
 /* ==========================================================
    Obrazovky
    ========================================================== */
+function tabsView(){
+  return `<div class="tabs">${LISTS.map(l=>{
+    const n=items.filter(t=>listOf(t)===l.k && !isDone(t)).length;
+    return `<button class="tab ${curList===l.k?'on':''}" data-a="list" data-v="${l.k}">${esc(l.label)}${n?` <span class="tcount">${n}</span>`:''}</button>`;
+  }).join('')}</div>`;
+}
 function listView(){
   const rows=visible();
-  const open2=items.filter(t=>!isDone(t));
+  const L=listItems();
+  const open2=L.filter(t=>!isDone(t));
   const late=open2.filter(isLate);
   const areas=[...new Set(AREAS.concat(items.map(t=>t.area)))].filter(Boolean);
   return `
+  ${tabsView()}
   <div class="cards">
     <div class="kcard" style="border-left-color:#2563a8"><div class="lbl">Nové</div>
-      <div class="val">${items.filter(t=>t.status==='nový').length}</div><div class="note">čeká na převzetí</div></div>
+      <div class="val">${L.filter(t=>t.status==='nový').length}</div><div class="note">čeká na převzetí</div></div>
     <div class="kcard" style="border-left-color:#b7791f"><div class="lbl">V řešení</div>
-      <div class="val">${items.filter(t=>t.status==='v řešení').length}</div><div class="note">agentura na tom pracuje</div></div>
+      <div class="val">${L.filter(t=>t.status==='v řešení').length}</div><div class="note">rozpracováno</div></div>
     <div class="kcard" style="border-left-color:${late.length?'#c0392b':'#1f9254'}"><div class="lbl">Po termínu</div>
       <div class="val">${late.length}</div><div class="note">${late.length?'řeš hned':'všechno v termínu'}</div></div>
     <div class="kcard" style="border-left-color:#1f9254"><div class="lbl">Hotovo</div>
-      <div class="val">${items.filter(isDone).length}</div><div class="note">celkem ${items.length} úkolů</div></div>
+      <div class="val">${L.filter(isDone).length}</div><div class="note">celkem ${L.length} úkolů</div></div>
   </div>
 
   <div class="panel">
-    <h2>Úkoly pro LAMA AGENCY<span class="right">${rows.length} z ${items.length} · klikni na řádek pro detail</span></h2>
+    <h2>${esc(listLabel(curList))}<span class="right">${rows.length} z ${L.length} · klikni na řádek pro detail</span></h2>
     <div class="filters">
       ${canWrite()?`<button class="btn-teal" data-a="new">+ Nový úkol</button>`:''}
       <input class="grow" id="lm-q" placeholder="Hledat v úkolu, poznámce, oblasti…" value="${esc(f.q)}">
@@ -532,7 +564,7 @@ function itemModal(){
                     : (t.files||[]);
   return `
   <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Úkol pro LAMA AGENCY">
-    <h3>${isNew?'Nový úkol pro LAMA AGENCY':'Úkol '+esc(t.no)}
+    <h3>${isNew?'Nový úkol — '+esc(listLabel(listOf(t))):'Úkol '+esc(t.no)+' — '+esc(listLabel(listOf(t)))}
       <button class="x" data-a="close" aria-label="Zavřít">✕</button></h3>
     <div class="robar">
       ${ro?'<span class="badge b-blue">jen čtení</span>':'Pole s <span style="color:var(--red)">*</span> jsou povinná.'}
@@ -599,7 +631,7 @@ function exportCsv(){
   const csv=[line(head)].concat(rows.map(t=>line([t.no,t.createdOn,t.createdBy||'',t.task,prioOf(t).k,t.area||'',t.due,
     t.status,isLate(t)?lateDays(t):'',t.note||'',t.closedOn||'',(t.files||[]).length]))).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
-  const a=document.createElement('a'); a.href=url; a.download='ukoly_lama_agency_'+today()+'.csv';
+  const a=document.createElement('a'); a.href=url; a.download='lama_'+curList+'_'+today()+'.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
@@ -673,6 +705,10 @@ function bind(){
 async function act(a,v){
   switch(a){
     case 'reload': loaded=false; await load(true); return;
+    case 'list':
+      if(!LISTS.some(l=>l.k===v)) return;
+      curList=v; try{ localStorage.setItem('lama-list',v); }catch(e){}
+      break;
     case 'new':
       if(!canWrite()) return;
       open=emptyItem(); pending=[]; oMsg='';
