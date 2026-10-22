@@ -197,8 +197,10 @@
   .cal .mstart{border-left:2px solid #c3d0e2}
   .cal tr.days th.today{background:#f6821f;color:#fff;font-weight:800;border-radius:5px}
   .cal-inner{position:relative;width:max-content;min-width:100%}
-  .cal td.d .lab{font-size:9px;font-weight:800;color:rgba(25,30,42,.34);pointer-events:none;letter-spacing:0}
-  .cal td.shift .lab.lab-sh{font-size:8px;color:rgba(20,32,50,.4);font-weight:600;letter-spacing:0}
+  /* písmeno v barevném políčku — musí jít přečíst i z dálky */
+  .cal td.d .lab{font-size:13px;font-weight:800;color:rgba(16,24,40,.82);pointer-events:none;letter-spacing:-.2px}
+  .cal td.shift .lab.lab-sh{font-size:12.5px;color:rgba(14,26,46,.85);font-weight:800;letter-spacing:-.3px}
+  @media(max-width:680px){.cal td.d .lab{font-size:11.5px}.cal td.shift .lab.lab-sh{font-size:11px}}
   /* směna naplánovaná pod nepřítomností: jemná modrá linka dole */
   .cal td.hasshift{box-shadow:inset 0 -3px 0 rgba(37,99,168,.4)}
   /* Dnešek: prázdná políčka lehce oranžová, políčka s nepřítomností nechají svou barvu vyniknout */
