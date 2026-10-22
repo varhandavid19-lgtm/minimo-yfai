@@ -170,7 +170,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
          query, orderBy, limit, runTransaction }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { getStorage, ref as sref, uploadBytes, getDownloadURL, deleteObject }
@@ -274,6 +274,7 @@ function writeHint(e){
 let me=null, loginBusy=false, loginErr='';
 let items=[], loaded=false, busy='', errMsg='';
 let open=null, oMsg='', pending=[];
+let ntf=null, nMsg='';              // okno ✉️ Notifikace (jen správce): kopie meta/lamacfg.notify
 let f={area:'',status:'',priority:'',q:''};
 let curList='agency';               // otevřená záložka (pamatuje si ji prohlížeč)
 try{ const s=localStorage.getItem('lama-list'); if(LISTS.some(l=>l.k===s)) curList=s; }catch(e){}
@@ -529,6 +530,7 @@ function listView(){
       <label class="check"><input type="checkbox" id="lm-hide" ${hideDone?'checked':''}> skrýt hotové</label>
       <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
       <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
+      ${canDelete()?`<button class="btn-ghost" data-a="ntf" title="Komu chodí e-maily o úkolech">✉️ Notifikace</button>`:''}
     </div>
     <div class="tblwrap"><table>
       <thead><tr>
@@ -555,6 +557,62 @@ function listView(){
           :(canWrite()?'Zatím tu nejsou žádné úkoly. Klikni na <b>+ Nový úkol</b>.':'Zatím tu nejsou žádné úkoly.')}</td></tr>`}
       </tbody></table></div>
   </div>`;
+}
+
+/* ===== ✉️ Notifikace — komu chodí e-maily (jen správce) =====
+   Ukládá se do meta/lamacfg.notify, čte ho serverová funkce (functions/index.js):
+   nový úkol hned, připomínky (1/3 a 2/3 doby do termínu) a úkoly po termínu
+   v ranním přehledu v 7:00. Pravidla Firestore dovolí dokument měnit jen správci. */
+async function openNtf(){
+  if(!canDelete()) return;
+  nMsg=''; ntf={};
+  try{ const s=await getDoc(doc(db,'meta','lamacfg')); ntf=JSON.parse(JSON.stringify((s.exists() && s.data().notify) || {})); }
+  catch(e){ nMsg='Nastavení se nepodařilo načíst. '+writeHint(e); }
+  LISTS.forEach(l=>{ ntf[l.k]=Object.assign({to:'', newTask:true, remind:true, overdue:true}, ntf[l.k]||{}); });
+  render();
+}
+function collectNtf(){
+  if(!ntf) return;
+  LISTS.forEach(l=>{
+    const g=id=>document.getElementById(id);
+    if(!g('nt-to-'+l.k)) return;
+    ntf[l.k]={ to:g('nt-to-'+l.k).value.trim(), newTask:g('nt-new-'+l.k).checked,
+      remind:g('nt-rem-'+l.k).checked, overdue:g('nt-late-'+l.k).checked };
+  });
+}
+async function saveNtf(){
+  collectNtf();
+  const bad=[];
+  LISTS.forEach(l=>String(ntf[l.k].to||'').split(/[\s,;]+/).filter(Boolean)
+    .forEach(a=>{ if(!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(a)) bad.push(a); }));
+  if(bad.length){ nMsg='Tohle nevypadá jako e-mail: '+bad.join(', '); render(); return; }
+  nMsg='Ukládám…'; render();
+  try{ await setDoc(doc(db,'meta','lamacfg'),{notify:ntf},{merge:true}); ntf=null; nMsg=''; toast('Notifikace uloženy.','ok'); }
+  catch(e){ nMsg='Uložení selhalo. '+writeHint(e); render(); }
+}
+function ntfModal(){
+  return `<div class="overlay" id="ntf-ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Notifikace">
+    <h3>✉️ E-mailové notifikace<button class="x" data-a="ntf-close" aria-label="Zavřít">✕</button></h3>
+    <div class="robar">Adresy odděl čárkou. Prázdné = záložka nic neposílá. E-maily odcházejí z firemní schránky minima.</div>
+    <div class="form">${LISTS.map(l=>{ const c=ntf[l.k];
+      return `<div class="sect">${esc(l.label)}</div>
+      <div class="f span4"><label>Komu</label>
+        <input id="nt-to-${l.k}" value="${esc(c.to||'')}" placeholder="např. novak@firma.cz, svoboda@firma.cz"></div>
+      <div class="f span4" style="flex-direction:row;gap:18px;flex-wrap:wrap">
+        <label class="check"><input type="checkbox" id="nt-new-${l.k}" ${c.newTask?'checked':''}> nový úkol (hned)</label>
+        <label class="check"><input type="checkbox" id="nt-rem-${l.k}" ${c.remind?'checked':''}> blíží se termín (po 1/3 a 2/3 doby)</label>
+        <label class="check"><input type="checkbox" id="nt-late-${l.k}" ${c.overdue?'checked':''}> po termínu (každé ráno v 7:00)</label>
+      </div>`; }).join('')}
+    </div>
+    <div class="foot">
+      ${nMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(nMsg)}</span>`
+            :`<span class="muted" style="font-size:11.5px">Připomínky a úkoly po termínu chodí v jednom ranním e-mailu na záložku.</span>`}
+      <span style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn-ok" data-a="ntf-save">Uložit</button>
+        <button class="btn-ghost" data-a="ntf-close">Zavřít</button>
+      </span>
+    </div>
+  </div></div>`;
 }
 
 function itemModal(){
@@ -648,6 +706,7 @@ function render(){
     ${canWrite()?'':`<div class="notice">K úkolům máš přístup jen na čtení — vidíš je, ale neměníš.</div>`}
     ${listView()}`)
     + (open?itemModal():'')
+    + (ntf?ntfModal():'')
     + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
   bind();
 }
@@ -723,6 +782,9 @@ async function act(a,v){
     case 'del':  await removeItem(v); return;
     case 'delfile': await removeFile(Number(v)); return;
     case 'export': exportCsv(); return;
+    case 'ntf': await openNtf(); return;
+    case 'ntf-save': await saveNtf(); return;
+    case 'ntf-close': ntf=null; nMsg=''; break;
   }
   render();
 }

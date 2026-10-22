@@ -39,6 +39,19 @@ v `header.js`. Nerozděluj jeden modul do více souborů.
 - **Přihlašování:** Firebase Authentication, e-mail + heslo.
 - Firebase SDK se importuje z CDN v `<script type="module">` na začátku souboru.
 
+### Výjimka: serverové funkce (`functions/`)
+Web zůstává bez buildu. JEDINÁ výjimka je složka `functions/` (Node.js, npm) —
+Cloud Functions pro e-mailové notifikace, GitHub Pages ji ignoruje.
+- Nasazuje se z Robertova počítače: Node.js 24 (přenosný, `%USERPROFILE%\tools\
+  node-v24.22.1-win-x64`, Node 26 s Firebase CLI přes proxy NEFUNGUJE) a
+  `firebase deploy --only functions`. Firemní síť jde přes Zscaler — v terminálu
+  nastavit `HTTPS_PROXY`/`HTTP_PROXY=http://185.46.212.88:10792`.
+- Region `europe-west1` (databáze je `eur3`).
+- E-maily odcházejí přes schránku na Seznamu (`smtp.seznam.cz:465`). Adresa a heslo
+  jsou v Secret Manageru jako `SMTP_USER` a `SMTP_PASS` — NIKDY je nedávej do kódu.
+- Firebase Extensions (Trigger Email) NEPOUŽÍVAT — Google je 31. 3. 2027 ruší.
+- Každý odeslaný e-mail se zapíše do kolekce `mail_log` (jen server, klient ji nečte).
+
 ## Firebase config — NECHAT V KÓDU
 `firebaseConfig` je přímo v každé stránce. To je správně a bezpečné — jde o
 veřejné frontendové klíče. NEODSTRAŇUJ je, NEPŘESOUVEJ do .env, NEZAVÁDĚJ kvůli
@@ -392,6 +405,13 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
   je společný pro celý modul. Čísla jdou z jednoho čítače `meta/lamacfg.seq`
   přes všechny záložky — pravidla Firestore dovolí měnit jen `seq`, nezakládej
   čítač po záložkách bez úpravy pravidel.
+- **E-mailové notifikace** (David, 10/2026): správce v okně **✉️ Notifikace**
+  nastaví pro každou záložku adresy a co se posílá → `meta/lamacfg.notify =
+  {agency:{to, newTask, remind, overdue}, …}`. Posílá `functions/index.js`:
+  `lamaNewTask` (nový úkol hned) a `lamaDaily` (v 7:00 Praha jeden e-mail na
+  záložku: „Blíží se termín" po uplynutí 1/3 a 2/3 doby od `createdOn` do `due`
+  — každá připomínka jednou, server ji značí do pole `remind:{t1,t2}` — a „Po
+  termínu"). `LISTS` ve funkcích musí odpovídat `LISTS` v lama.html.
 - „Po termínu" se neukládá, počítá se z `due`. Úkoly po termínu svítí červeně
   a řadí se nahoru, hotové jsou zelené a dospod.
 
