@@ -47,6 +47,7 @@
   .b-green{background:#e8f6ee;color:var(--green);border-color:#c4e6d3}
   .b-red{background:#fdecea;color:var(--red);border-color:#f5cfca}
   .b-amber{background:#fdf6e6;color:var(--amber);border-color:#f0e0b8}
+  .b-grey{background:#eef1f5;color:#4a5a70;border-color:#dfe4ea}
 
   .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line);background:#fafbfd}
   .filters input,.filters select{width:auto;min-width:150px}
@@ -210,6 +211,15 @@ const STATUS = [
   {k:'v řešení', cls:'b-amber', done:false},
   {k:'hotovo',   cls:'b-green', done:true}
 ];
+/* Priorita — stejné stupně jako v Nákupu. Výchozí je běžná; starší úkoly bez ní taky. */
+const PRIORITIES = [
+  {k:'kritická', cls:'b-red'},
+  {k:'vysoká',   cls:'b-amber'},
+  {k:'běžná',    cls:'b-blue'},
+  {k:'nízká',    cls:'b-grey'}
+];
+const prioOf = t => (PRIORITIES.find(p=>p.k===(t&&t.priority)) || PRIORITIES[2]);
+const prioRank = t => PRIORITIES.indexOf(prioOf(t));
 const MAX_FILE = 5*1024*1024;      // 5 MB na soubor, stejně jako jinde v minimu
 const PHOTO_EDGE = 1600;           // delší hrana fotky po zmenšení
 const PHOTO_Q = 0.72;              // kvalita JPEG — typicky pětinová velikost
@@ -243,7 +253,7 @@ function writeHint(e){
 let me=null, loginBusy=false, loginErr='';
 let items=[], loaded=false, busy='', errMsg='';
 let open=null, oMsg='', pending=[];
-let f={area:'',status:'',q:''};
+let f={area:'',status:'',priority:'',q:''};
 let hideDone=true, toastMsg=null, toastKind='';
 const appEl=document.getElementById('app');
 function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t);
@@ -299,7 +309,7 @@ function sync(t){
 }
 function emptyItem(){
   return {_id:null, no:'', createdOn:today(), createdBy:me.name, task:'', area:'', due:'',
-    status:'nový', closedOn:'', note:'', files:[], hist:[]};
+    status:'nový', priority:'běžná', closedOn:'', note:'', files:[], hist:[]};
 }
 
 /* ===== zápis ===== */
@@ -310,7 +320,7 @@ function collect(){
   if(!document.getElementById('lm-task')) return open;     // okno není vykreslené
   Object.assign(open,{
     createdOn:g('lm-created')||open.createdOn, task:g('lm-task'), area:g('lm-area'),
-    due:g('lm-due'), status:g('lm-status')||open.status, note:g('lm-note')
+    due:g('lm-due'), status:g('lm-status')||open.status, priority:g('lm-prio')||prioOf(open).k, note:g('lm-note')
   });
   return open;
 }
@@ -327,7 +337,7 @@ async function save(){
     if(!t._id){
       const no=await nextNo();
       const rec={no, createdOn:t.createdOn||today(), createdBy:me.name, task:t.task, area:t.area||'',
-        due:t.due, status:t.status, closedOn:t.closedOn, note:t.note||'', files:[],
+        due:t.due, status:t.status, priority:prioOf(t).k, closedOn:t.closedOn, note:t.note||'', files:[],
         hist:[`${today()} · ${me.name} · úkol zadán`]};
       const ref=await addDoc(collection(db,'lama'), rec);
       /* přílohy vybrané ještě před uložením nahrajeme teď, když máme id */
@@ -441,15 +451,17 @@ function visible(){
   let r=items.slice();
   if(f.area)   r=r.filter(t=>t.area===f.area);
   if(f.status) r=r.filter(t=>t.status===f.status);
+  if(f.priority) r=r.filter(t=>prioOf(t).k===f.priority);
   if(hideDone) r=r.filter(t=>!isDone(t));
   const q=f.q.trim().toLowerCase();
   if(q) r=r.filter(t=>[t.no,t.task,t.area,t.note,t.createdBy]
     .some(v=>String(v||'').toLowerCase().includes(q)));
-  /* po termínu nahoru, pak podle termínu, hotové dospod */
+  /* po termínu nahoru, pak podle priority a termínu, hotové dospod */
   return r.sort((a,b)=>{
     if(isDone(a)!==isDone(b)) return isDone(a)?1:-1;
     if(isLate(a)!==isLate(b)) return isLate(a)?-1:1;
-    return String(a.due||'9999').localeCompare(String(b.due||'9999'))
+    return prioRank(a)-prioRank(b)
+      || String(a.due||'9999').localeCompare(String(b.due||'9999'))
       || Number(a.no||0)-Number(b.no||0);
   });
 }
@@ -481,13 +493,14 @@ function listView(){
       <input class="grow" id="lm-q" placeholder="Hledat v úkolu, poznámce, oblasti…" value="${esc(f.q)}">
       <select id="lm-farea"><option value="">Všechny oblasti</option>${areas.map(a=>`<option ${f.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
       <select id="lm-fstatus"><option value="">Všechny stavy</option>${STATUS.map(s=>`<option ${f.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
+      <select id="lm-fprio"><option value="">Všechny priority</option>${PRIORITIES.map(p=>`<option ${f.priority===p.k?'selected':''}>${p.k}</option>`).join('')}</select>
       <label class="check"><input type="checkbox" id="lm-hide" ${hideDone?'checked':''}> skrýt hotové</label>
       <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
       <button class="btn-ghost" data-a="reload">↻ Načíst znovu</button>
     </div>
     <div class="tblwrap"><table>
       <thead><tr>
-        <th>Č.</th><th>Zadáno</th><th>Zadal</th><th>Úkol</th><th>Oblast / linka</th>
+        <th>Č.</th><th>Zadáno</th><th>Zadal</th><th>Úkol</th><th>Priorita</th><th>Oblast / linka</th>
         <th>Termín</th><th>Stav</th><th>Po termínu</th><th>Poznámka / vyjádření agentury</th><th>Hotovo</th><th></th>
       </tr></thead>
       <tbody>${rows.map(t=>{
@@ -497,6 +510,7 @@ function listView(){
           <td data-label="Zadáno" class="nowrap">${dateCz(t.createdOn)}</td>
           <td data-label="Zadal">${esc(t.createdBy||'')}</td>
           <td data-label="Úkol" class="desc">${esc(t.task)}</td>
+          <td data-label="Priorita"><span class="badge ${prioOf(t).cls}">${esc(prioOf(t).k)}</span></td>
           <td data-label="Oblast / linka" class="nowrap">${esc(t.area||'')||'<span class="muted">—</span>'}</td>
           <td data-label="Termín" class="nowrap"><b${lt?' style="color:var(--red)"':''}>${dateCz(t.due)}</b></td>
           <td data-label="Stav"><span class="badge ${stDef(t.status).cls}">${esc(t.status)}</span></td>
@@ -505,7 +519,7 @@ function listView(){
           <td data-label="Hotovo" class="nowrap">${t.closedOn?dateCz(t.closedOn):'<span class="muted">—</span>'}</td>
           <td data-label="" class="nowrap"><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button>${
             canDelete()?` <button class="btn-del" style="padding:3px 9px;font-size:11px" data-a="del" data-v="${t._id}" title="Smazat úkol">Smazat</button>`:''}</td>
-        </tr>`;}).join('') || `<tr><td colspan="11" class="empty">${items.length?'Nic neodpovídá filtru.'
+        </tr>`;}).join('') || `<tr><td colspan="12" class="empty">${items.length?'Nic neodpovídá filtru.'
           :(canWrite()?'Zatím tu nejsou žádné úkoly. Klikni na <b>+ Nový úkol</b>.':'Zatím tu nejsou žádné úkoly.')}</td></tr>`}
       </tbody></table></div>
   </div>`;
@@ -539,8 +553,9 @@ function itemModal(){
         <input id="lm-due" type="date" value="${esc(t.due||'')}" ${ro?'disabled':''}${lt?' style="color:var(--red);font-weight:700"':''}></div>
       <div class="f"><label>Stav</label>
         <select id="lm-status" ${ro?'disabled':''}>${STATUS.map(s=>`<option ${t.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select></div>
+      <div class="f"><label>Priorita</label>
+        <select id="lm-prio" ${ro?'disabled':''}>${PRIORITIES.map(p=>`<option ${prioOf(t).k===p.k?'selected':''}>${p.k}</option>`).join('')}</select></div>
       <div class="f"><label>Hotovo dne</label><div class="ro">${t.closedOn?dateCz(t.closedOn):'—'}</div></div>
-      <div class="f"></div>
 
       <div class="f span4"><label>Poznámka / vyjádření agentury</label>
         <textarea id="lm-note" rows="3" placeholder="Co agentura udělala, co chybí, na co čeká…" ${ro?'disabled':''}>${esc(t.note||'')}</textarea></div>
@@ -579,9 +594,9 @@ function itemModal(){
 function exportCsv(){
   const rows=visible();
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
-  const head=['Č.','Zadáno','Zadal','Úkol','Oblast / linka','Termín','Stav','Po termínu (dní)',
+  const head=['Č.','Zadáno','Zadal','Úkol','Priorita','Oblast / linka','Termín','Stav','Po termínu (dní)',
     'Poznámka / vyjádření agentury','Hotovo','Příloh'];
-  const csv=[line(head)].concat(rows.map(t=>line([t.no,t.createdOn,t.createdBy||'',t.task,t.area||'',t.due,
+  const csv=[line(head)].concat(rows.map(t=>line([t.no,t.createdOn,t.createdBy||'',t.task,prioOf(t).k,t.area||'',t.due,
     t.status,isLate(t)?lateDays(t):'',t.note||'',t.closedOn||'',(t.files||[]).length]))).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download='ukoly_lama_agency_'+today()+'.csv';
@@ -644,7 +659,7 @@ function bind(){
   const q=document.getElementById('lm-q');
   if(q) q.oninput=()=>{ f.q=q.value; const p=q.selectionStart; render();
     const n=document.getElementById('lm-q'); if(n){ n.focus(); try{n.setSelectionRange(p,p);}catch(e){} } };
-  for(const [id,key] of [['lm-farea','area'],['lm-fstatus','status']]){
+  for(const [id,key] of [['lm-farea','area'],['lm-fstatus','status'],['lm-fprio','priority']]){
     const el=document.getElementById(id); if(el) el.onchange=()=>{ f[key]=el.value; render(); };
   }
   const hc=document.getElementById('lm-hide'); if(hc) hc.onchange=()=>{ hideDone=hc.checked; render(); };

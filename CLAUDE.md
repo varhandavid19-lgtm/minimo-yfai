@@ -381,7 +381,9 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
 - Pole úkolu: číslo (`no`, prosté pořadové z `meta/lamacfg.seq`, TRANSAKCÍ),
   zadáno (`createdOn`), zadal (`createdBy`), úkol (`task`), oblast / linka
   (`area`, výběr z `AREAS` nebo volný text), termín (`due`), stav (`status`:
-  nový / v řešení / hotovo), poznámka / vyjádření agentury (`note`), hotovo dne
+  nový / v řešení / hotovo), priorita (`priority`: kritická / vysoká / běžná /
+  nízká jako v Nákupu, výchozí běžná, starší úkoly bez ní = běžná; řadí se podle
+  ní hned za „po termínu"), poznámka / vyjádření agentury (`note`), hotovo dne
   (`closedOn`, nastaví se samo při přepnutí na hotovo), přílohy (`files`, úložiště
   `lama/{idÚkolu}/…`, limit 5 MB, fotky se před nahráním zmenší jako jinde).
 - „Po termínu" se neukládá, počítá se z `due`. Úkoly po termínu svítí červeně
