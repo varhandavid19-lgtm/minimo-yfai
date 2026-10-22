@@ -1312,12 +1312,16 @@ function dialogView(){
         <div>${dCz(a.from)} – ${dCz(a.to)}${a.days?(' · '+dayLabel(a.days)):''}${a.note?(' · '+esc(a.note)):''}</div>
         <div>zadal(a): ${esc(a.createdBy||'—')}</div></div>
     </div>`;
-  }).join('') : `<p style="color:var(--muted);margin:0 0 4px">Na tento den zde není žádná nepřítomnost.</p>`;
-  const roNote = dlg.readonly ? `<p style="margin:10px 0 0;color:var(--muted);font-size:12px">Tuto osobu můžete jen prohlížet. Upravovat můžete jen svoji nepřítomnost.</p>` : '';
+  }).join('') : '';
+  const S=dlg.shift?SHIFT_BY[dlg.shift]:null;
+  const shiftItem = S ? `<div class="absitem"><span class="dot" style="background:${S.fill}"></span>
+      <div class="info"><b>Směna ${esc(S.name)}</b><div>${esc(S.hours||'')}${dlg.shiftRot?' · ze směnového rytmu':''}${dlg.items.length?' · v kalendáři ji překrývá nepřítomnost':''}</div></div></div>` : '';
+  const empty = (!dlg.items.length && !S) ? `<p style="color:var(--muted);margin:0 0 4px">Na tento den tu není naplánovaná směna ani nepřítomnost.</p>` : '';
+  const roNote = dlg.readonly ? `<p style="margin:10px 0 0;color:var(--muted);font-size:12px">Plán můžeš jen prohlížet — měnit ho smí ten, kdo má v sekci právo „Zapisovat všechny".</p>` : '';
   const holNote = dlg.holiday ? `<p style="margin:10px 0 0;color:#6d3fc4"><b>Státní svátek:</b> ${esc(dlg.holiday)}</p>` : '';
   return `<div class="dlg-wrap" id="dlg-wrap"><div class="dlg">
     <div class="t">${esc(dlg.personName)} · ${dCz(dlg.dateStr)}<button class="x" id="dlg-x">✕</button></div>
-    <div class="c">${items}${holNote}${roNote}</div>
+    <div class="c">${items}${shiftItem}${empty}${holNote}${roNote}</div>
     <div class="b"><button class="btn-ghost" id="dlg-close">Zavřít</button></div>
   </div></div>`;
 }
@@ -1428,6 +1432,11 @@ function wireApp(){
     if(r && confirm(`Ukončit směnový rytmus od ${dCz(r[0])}? Co bylo předtím, zůstane.`)) clearRotation(sel.personId, r[0]); });
   const sn=document.getElementById('sb-note'); sn?.addEventListener('input',()=>{selNote=sn.value;});
 
+  // náhled dne (pro toho, kdo plán jen prohlíží) — zavírání
+  document.getElementById('dlg-x')?.addEventListener('click',()=>{dlg=null;render();});
+  document.getElementById('dlg-close')?.addEventListener('click',()=>{dlg=null;render();});
+  document.getElementById('dlg-wrap')?.addEventListener('click',e=>{if(e.target.id==='dlg-wrap'){dlg=null;render();}});
+
   // kalendář: myší se dny označují tažením, na dotykové obrazovce dvěma ťuknutími
   const wrap=document.querySelector('.cal-wrap');
   if(!wrap) return;
@@ -1466,8 +1475,11 @@ function wireApp(){
 /* Rozlišení dotyku a myši pro klik (pointerType u click události všude není). */
 let lastTouch=false;
 document.addEventListener('pointerdown',e=>{ lastTouch=(e.pointerType!=='mouse'); }, true);
-/* Esc zruší výběr dnů. */
-document.addEventListener('keydown',e=>{ if(e.key==='Escape' && sel && !pdlg && !collision){ sel=null; render(); } });
+/* Esc zavře náhled dne, jinak zruší výběr dnů. */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if(dlg){ dlg=null; render(); return; }
+  if(sel && !pdlg && !collision){ sel=null; render(); } });
 
 /* Překreslí jen označení vybraných dnů (při tažení bez celého renderu). */
 function paintSel(){
@@ -1482,7 +1494,10 @@ function openDay(personId,dateStr){
   const p=people.find(x=>x.id===personId); if(!p) return;
   const items=absences.filter(a=>a.personId===personId && a.from<=dateStr && a.to>=dateStr);
   const hol=holsOf(+dateStr.slice(0,4)).get(dateStr)||'';
-  dlg={personName:p.name, dateStr, items, holiday:hol, readonly:true};
+  // směna toho dne: ručně naplánovaná má přednost před rytmem
+  const man=shifts.find(s=>s.personId===personId && s.from<=dateStr && s.to>=dateStr);
+  const code=man ? man.shift : rotationCodeFor(personId, dateStr);
+  dlg={personName:p.name, dateStr, items, holiday:hol, shift:code||'', shiftRot:!man&&!!code, readonly:true};
   render();
 }
 
