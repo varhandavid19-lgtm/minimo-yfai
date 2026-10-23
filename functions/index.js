@@ -6,11 +6,12 @@
 
    Komu se posílá, si správce nastaví v aplikaci (lama.html → ✉️ Notifikace),
    ukládá se do dokumentu meta/lamacfg, pole `notify`:
-     notify: { agency:   {to:'a@x.cz, b@y.cz', newTask:true, remind:true, overdue:true},
+     notify: { agency:   {to:'a@x.cz, b@y.cz', newTask:true, done:true, remind:true, overdue:true},
                facility: {...}, internal: {...}, admin: {...} }
 
    Funkce:
    - lamaNewTask  — nový úkol → e-mail adresátům jeho záložky
+   - lamaDone     — úkol přepnut na „hotovo" → e-mail i s tím, kdo ho dokončil
    - lamaDaily    — každé ráno v 7:00 (Praha) jeden e-mail na záložku:
                     „Blíží se termín" (úkol přešel 1/3 nebo 2/3 doby od zadání
                     do termínu — každá připomínka jen jednou, značí se do
@@ -18,7 +19,7 @@
                     úkoly po termínu).
    ========================================================== */
 const { setGlobalOptions } = require('firebase-functions/v2');
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
@@ -113,6 +114,25 @@ exports.lamaNewTask = onDocumentCreated({ document: 'lama/{id}', secrets: [SMTP_
     <p style="margin:10px 0 0;color:#41506b">Zadal: ${esc(t.createdBy || '')} · ${esc(dateCz(t.createdOn))}</p>`;
   await send(to, subject, wrap('nový úkol', body),
     `Nový úkol v záložce ${LISTS[list]}:\n${taskLine(t)}\nZadal: ${t.createdBy || ''}\n\n${APP_URL}`);
+});
+
+/* ===== 1b) úkol hotový — i s tím, kdo dokončení zaklikl (pole closedBy) =====
+   Posílá se jen při přechodu do stavu „hotovo", ne při každé další úpravě. */
+exports.lamaDone = onDocumentUpdated({ document: 'lama/{id}', secrets: [SMTP_USER, SMTP_PASS] }, async (event) => {
+  const before = event.data && event.data.before.data(), t = event.data && event.data.after.data();
+  if (!before || !t || before.status === 'hotovo' || t.status !== 'hotovo') return;
+  const list = listOf(t);
+  const c = (await notifyCfg())[list] || {};
+  const to = parseTo(c.to);
+  if (!to.length || c.done === false) return;
+  const who = t.closedBy || 'neuvedeno';
+  const when = dateCz(t.closedOn || todayPrague());
+  const subject = `Úkol ${t.no} hotov — ${LISTS[list]}: ${String(t.task || '').slice(0, 60)}`;
+  const body = `<p>V záložce <b>${esc(LISTS[list])}</b> byl úkol označen jako <b style="color:#1f9254">hotový</b>:</p>${taskTable([t])}
+    <p style="margin:10px 0 0;color:#41506b">Dokončení zaklikl(a): <b>${esc(who)}</b> · ${esc(when)}</p>
+    ${t.note ? `<p style="margin:6px 0 0;color:#41506b">Poznámka: ${esc(t.note)}</p>` : ''}`;
+  await send(to, subject, wrap('úkol hotov', body),
+    `Úkol hotov v záložce ${LISTS[list]}:\n${taskLine(t)}\nDokončení zaklikl(a): ${who} · ${when}${t.note ? '\nPoznámka: ' + t.note : ''}\n\n${APP_URL}`);
 });
 
 /* ===== 2+3) ranní připomínky a souhrn po termínu ===== */

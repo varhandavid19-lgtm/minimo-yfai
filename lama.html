@@ -404,14 +404,14 @@ async function save(){
   if(!t.task){ oMsg='Popiš úkol.'; render(); return; }
   if(!t.due){ oMsg='Vyplň termín.'; render(); return; }
   const closing = isDone(t) && !t.closedOn;
-  if(closing) t.closedOn=today();
-  if(!isDone(t)) t.closedOn='';
+  if(closing){ t.closedOn=today(); t.closedBy=me.name; }   // kdo dokončení zaklikl — jde i do e-mailu
+  if(!isDone(t)){ t.closedOn=''; t.closedBy=''; }
   oMsg='Ukládám…'; render();
   try{
     if(!t._id){
       const no=await nextNo();
       const rec={no, createdOn:t.createdOn||today(), createdBy:me.name, task:t.task, area:t.area||'',
-        due:t.due, status:t.status, priority:prioOf(t).k, list:listOf(t), closedOn:t.closedOn, note:t.note||'', files:[],
+        due:t.due, status:t.status, priority:prioOf(t).k, list:listOf(t), closedOn:t.closedOn, closedBy:t.closedBy||'', note:t.note||'', files:[],
         hist:[`${today()} · ${me.name} · úkol zadán (${listLabel(listOf(t))})`]};
       const ref=await addDoc(collection(db,'lama'), rec);
       /* přílohy vybrané ještě před uložením nahrajeme teď, když máme id */
@@ -631,7 +631,7 @@ async function openNtf(){
   nMsg=''; ntf={};
   try{ const s=await getDoc(doc(db,'meta','lamacfg')); ntf=JSON.parse(JSON.stringify((s.exists() && s.data().notify) || {})); }
   catch(e){ nMsg='Nastavení se nepodařilo načíst. '+writeHint(e); }
-  LISTS.forEach(l=>{ ntf[l.k]=Object.assign({to:'', newTask:true, remind:true, overdue:true}, ntf[l.k]||{}); });
+  LISTS.forEach(l=>{ ntf[l.k]=Object.assign({to:'', newTask:true, done:true, remind:true, overdue:true}, ntf[l.k]||{}); });
   render();
 }
 function collectNtf(){
@@ -640,7 +640,7 @@ function collectNtf(){
     const g=id=>document.getElementById(id);
     if(!g('nt-to-'+l.k)) return;
     ntf[l.k]={ to:g('nt-to-'+l.k).value.trim(), newTask:g('nt-new-'+l.k).checked,
-      remind:g('nt-rem-'+l.k).checked, overdue:g('nt-late-'+l.k).checked };
+      done:g('nt-done-'+l.k).checked, remind:g('nt-rem-'+l.k).checked, overdue:g('nt-late-'+l.k).checked };
   });
 }
 async function saveNtf(){
@@ -663,6 +663,7 @@ function ntfModal(){
         <input id="nt-to-${l.k}" value="${esc(c.to||'')}" placeholder="např. novak@firma.cz, svoboda@firma.cz"></div>
       <div class="f span4" style="flex-direction:row;gap:18px;flex-wrap:wrap">
         <label class="check"><input type="checkbox" id="nt-new-${l.k}" ${c.newTask?'checked':''}> nový úkol (hned)</label>
+        <label class="check"><input type="checkbox" id="nt-done-${l.k}" ${c.done?'checked':''}> úkol hotový (hned, i kdo ho dokončil)</label>
         <label class="check"><input type="checkbox" id="nt-rem-${l.k}" ${c.remind?'checked':''}> blíží se termín (po 1/3 a 2/3 doby)</label>
         <label class="check"><input type="checkbox" id="nt-late-${l.k}" ${c.overdue?'checked':''}> po termínu (každé ráno v 7:00)</label>
       </div>`; }).join('')}
@@ -708,7 +709,7 @@ function itemModal(){
         <select id="lm-status" ${ro?'disabled':''}>${STATUS.map(s=>`<option ${t.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select></div>
       <div class="f"><label>Priorita</label>
         <select id="lm-prio" ${ro?'disabled':''}>${PRIORITIES.map(p=>`<option ${prioOf(t).k===p.k?'selected':''}>${p.k}</option>`).join('')}</select></div>
-      <div class="f"><label>Hotovo dne</label><div class="ro">${t.closedOn?dateCz(t.closedOn):'—'}</div></div>
+      <div class="f"><label>Hotovo dne</label><div class="ro">${t.closedOn?dateCz(t.closedOn)+(t.closedBy?' · '+esc(t.closedBy):''):'—'}</div></div>
 
       <div class="f span4"><label>Poznámka / vyjádření agentury</label>
         <textarea id="lm-note" rows="3" placeholder="Co agentura udělala, co chybí, na co čeká…" ${ro?'disabled':''}>${esc(t.note||'')}</textarea></div>

@@ -408,7 +408,9 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
 - **E-mailové notifikace** (David, 10/2026): správce v okně **✉️ Notifikace**
   nastaví pro každou záložku adresy a co se posílá → `meta/lamacfg.notify =
   {agency:{to, newTask, remind, overdue}, …}`. Posílá `functions/index.js`:
-  `lamaNewTask` (nový úkol hned) a `lamaDaily` (v 7:00 Praha jeden e-mail na
+  `lamaNewTask` (nový úkol hned), `lamaDone` (přechod na „hotovo" hned, i s tím,
+  kdo dokončení zaklikl — pole `closedBy`, ukládá ho lama.html při uzavření
+  a maže při znovuotevření) a `lamaDaily` (v 7:00 Praha jeden e-mail na
   záložku: „Blíží se termín" po uplynutí 1/3 a 2/3 doby od `createdOn` do `due`
   — každá připomínka jednou, server ji značí do pole `remind:{t1,t2}` — a „Po
   termínu"). `LISTS` ve funkcích musí odpovídat `LISTS` v lama.html.
