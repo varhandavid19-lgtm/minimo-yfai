@@ -77,9 +77,10 @@
   table.utbl th.stick,table.utbl td.stick{position:sticky;left:0;z-index:2;min-width:120px;box-shadow:1px 0 0 var(--line)}
   table.utbl td.stick{background:#fff;font-weight:600}
   table.utbl tbody tr:hover td.stick{background:#f7f9fc}
-  /* každý druhý řádek jemně zelený (pruhy kvůli přehlednosti), najetý řádek modravý */
+  /* každý druhý řádek jemně zelený (pruhy kvůli přehlednosti), najetý řádek žlutý jako zvýrazněný */
   table.utbl tbody tr:nth-child(even) td{background:#e4f2e7}
-  table.utbl tbody tr:hover td,table.utbl tbody tr:hover td.stick{background:#e6eef9}
+  table.utbl tbody tr:hover td,table.utbl tbody tr:hover td.stick{background:#fff1c7}
+  table.utbl tbody tr:hover td.stick{box-shadow:inset 4px 0 0 #f6821f,1px 0 0 var(--line)}
   /* řádek, na kterém se právě pracuje (klik do něj), zůstane zvýrazněný, dokud se neklikne mimo tabulku */
   table.utbl tbody tr.active td,table.utbl tbody tr.active td.stick{background:#fff1c7}
   table.utbl tbody tr.active td.stick{box-shadow:inset 4px 0 0 #f6821f,1px 0 0 var(--line)}
