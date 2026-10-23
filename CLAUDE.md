@@ -92,6 +92,8 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   (`BONUS_12H`, `BONUS_WEEKEND`). Celodenní nepřítomnost směnu ruší, půl dne
   dovolené ne. Svátky příplatek nemají. Vidí JEN kdo má v sekci **Toolsetters** „Zapisovat všechny"
   (`canBonus`, i výchozí podle levelu); v záložce pak jsou všechny sekce, kde zapisuje všechny.
+  Když admin v `nastaveni.html` u Toolsetters nově nastaví „Zapisovat všechny" (ručně i přes
+  „⟲ výchozí"), musí to potvrdit v okně o přístupu k bonusům (`onPermChange`, `bonusConfirm`).
   Výjimka (`WEEKEND_EXEMPT`): noční **N** (8h) začínající v neděli ve 22:00 víkendový
   příplatek NEMÁ — nahrazuje páteční noční. Nedělní N12 ho má, ALE ruční směna
   zadaná na den, kdy má člověk podle rytmu tuhle výjimečnou nedělní N (např. ruční

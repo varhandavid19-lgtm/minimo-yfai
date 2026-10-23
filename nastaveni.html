@@ -523,6 +523,32 @@ async function patchMod(uid,key,val){ if(!canWriteSettings())return; const u=fin
 async function patchPerm(uid,key,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
   u.perms=Object.assign({},u.perms); if(val) u.perms[key]=val; else delete u.perms[key];
   try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+/* „Zapisovat všechny" v sekci Toolsetters zároveň otevírá záložku Výpočet bonusů v Plánování
+   (dovolenky.html, canBonus). Když volba nově vede na „všechny" (ručně i přes „⟲ výchozí"),
+   admin to musí potvrdit v okně (bonusConfirm). Zrušení nic neuloží a výběr se vrátí. */
+let bonusConfirm=null;   // {uid, name, val}
+const effPerm = (u, key, val) => val || defaultPerm(levelOf(u));
+function onPermChange(uid, key, val){
+  const u=findU(uid); if(!u) return;
+  const was=effPerm(u, key, (u.perms||{})[key]||'');
+  if(key==='toolsetters' && effPerm(u,key,val)==='all' && was!=='all'){
+    bonusConfirm={uid, name:u.name||uid, val}; render(); return;
+  }
+  patchPerm(uid, key, val);
+}
+function bonusConfirmView(){
+  if(!bonusConfirm) return '';
+  return `<div class="dlg-wrap" id="bc-wrap"><div class="dlg">
+    <div class="t">⚠️ Přístup k výpočtu bonusů<button class="x" id="bc-x">✕</button></div>
+    <div class="c" style="font-size:13px;line-height:1.55">
+      Nastavujete <b>${esc(bonusConfirm.name)}</b> u sekce <b>Toolsetters</b> volbu <b>Zapisovat všechny</b>.
+      <p style="margin:10px 0 0;padding:10px 12px;background:#fff4e8;border:2px solid #f6821f;border-radius:8px;color:#7a3b06">
+        Touto volbou mu zároveň <b>otevíráte záložku 💰 Výpočet bonusů</b> v Plánování směn — uvidí příplatky toolsetterů.</p>
+    </div>
+    <div class="b"><button class="btn-ghost" id="bc-no">Zrušit</button>
+      <button class="btn-primary" id="bc-yes">Rozumím, povolit</button></div>
+  </div></div>`;
+}
 async function addPos(uid,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
   u.positions=(u.positions||[]).slice(); if(!u.positions.includes(val)) u.positions.push(val);
   render(); try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
@@ -608,7 +634,7 @@ function view(){
         Změna se ukládá okamžitě a projeví se po dalším přihlášení daného člověka.
       </p>
     </div></div>
-  </main>`;
+  </main>${bonusConfirmView()}`;
 }
 
 /* Zvýraznění řádku: klik do řádku tabulky uživatelů ho označí, klik kamkoli mimo tabulku
@@ -637,7 +663,14 @@ function wire(){
   document.querySelectorAll('select.t-mod').forEach(sel=>
     sel.addEventListener('change',()=>patchMod(sel.dataset.uid, sel.dataset.mod, sel.value)));
   document.querySelectorAll('select.t-perm').forEach(sel=>
-    sel.addEventListener('change',()=>patchPerm(sel.dataset.uid, sel.dataset.sec, sel.value)));
+    sel.addEventListener('change',()=>onPermChange(sel.dataset.uid, sel.dataset.sec, sel.value)));
+  if(bonusConfirm){
+    const close=()=>{ bonusConfirm=null; render(); };   // překreslení vrátí výběr na původní hodnotu
+    document.getElementById('bc-yes')?.addEventListener('click',()=>{ const b=bonusConfirm; bonusConfirm=null;
+      patchPerm(b.uid,'toolsetters',b.val); render(); });
+    document.getElementById('bc-no')?.addEventListener('click',close);
+    document.getElementById('bc-x')?.addEventListener('click',close);
+  }
   document.querySelectorAll('select.t-pos').forEach(sel=>
     sel.addEventListener('change',()=>{ if(sel.value) addPos(sel.dataset.uid, sel.value); }));
   document.querySelectorAll('[data-rmpos]').forEach(b=>
