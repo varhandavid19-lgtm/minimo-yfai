@@ -1048,23 +1048,28 @@ function listView(){
 /* ---------- Správa požadavků (hromadné doplňování) ---------- */
 function mgrPanel(){
   const n=mgrSel.size;
+  // staré a nové rozložení (isRecv2, od 26. 10. 2026) mají jiná pole: co do vybraných nepatří, se zašedí
+  const selR=rows.filter(r=>mgrSel.has(r._id)), anyNew=selR.some(isRecv2), anyOld=selR.some(r=>!isRecv2(r));
+  const oldDis = anyNew&&!anyOld ? 'disabled title="Vybrané požadavky (od 26. 10. 2026) toto pole nemají"' : '';
+  const newDis = anyOld&&!anyNew ? 'disabled title="Jen pro požadavky založené od 26. 10. 2026"' : '';
+  const mixNote = anyNew&&anyOld ? '<div class="mgrhint" style="color:#b7791f">⚠️ Vybrané jsou staré i nové požadavky — RFQ no., DSSI item a Doklad se zapíšou jen starým, Nabídka, Objednávka QAD a Dodací list jen novým (od 26. 10. 2026).</div>' : '';
   return `<div class="panel mgrbox">
     <h2>⚙ Správa požadavků <span class="right">vybráno: ${n}</span></h2>
-    <div class="mgrhint">Vyplň jen políčka, která chceš změnit — <b>prázdná se ignorují</b> a u vybraných řádků zůstanou beze změny. Zaškrtni řádky v tabulce a dej <b>Použít na vybrané</b>.</div>
+    <div class="mgrhint">Vyplň jen políčka, která chceš změnit — <b>prázdná se ignorují</b> a u vybraných řádků zůstanou beze změny. Zaškrtni řádky v tabulce a dej <b>Použít na vybrané</b>.</div>${mixNote}
     <div class="mgrgrid">
       <label>Req no.<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="číslo requestu"></label>
-      <label>RFQ no.<input id="m-rfqno" data-mg="rfqNo" value="${esc(mgr.rfqNo)}" placeholder="číslo poptávky"></label>
+      <label>RFQ no.<input id="m-rfqno" ${oldDis} data-mg="rfqNo" value="${esc(mgr.rfqNo)}" placeholder="číslo poptávky"></label>
       <label>Order no.<input id="m-orderno" data-mg="orderNo" value="${esc(mgr.orderNo)}" placeholder="číslo objednávky"></label>
-      <label>DSSI item<input id="m-dssi" data-mg="dssiItem" value="${esc(mgr.dssiItem)}" placeholder="DSSI item"></label>
+      <label>DSSI item<input id="m-dssi" ${oldDis} data-mg="dssiItem" value="${esc(mgr.dssiItem)}" placeholder="DSSI item"></label>
       <label>Doklad<div class="inline">
-        <select id="m-doctype" data-mg="docType"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${mgr.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
-        <input id="m-docno" data-mg="docNo" value="${esc(mgr.docNo)}" placeholder="číslo dokladu"></div></label>
+        <select id="m-doctype" ${oldDis} data-mg="docType"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${mgr.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
+        <input id="m-docno" ${oldDis} data-mg="docNo" value="${esc(mgr.docNo)}" placeholder="číslo dokladu"></div></label>
       <label>Přijaté množství<input id="m-qty" type="number" min="0" step="1" data-mg="recvQty" value="${esc(mgr.recvQty)}" placeholder="ks"></label>
       <label>Komentář<input id="m-comment" data-mg="comment" value="${esc(mgr.comment)}" placeholder="komentář skladu (nepřepíše Poznámku)"></label>
       <label>Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label>
-      <label>Nabídka<input id="m-offer" data-mg="offerNo" value="${esc(mgr.offerNo)}" placeholder="číslo nabídky"></label>
-      <label>Objednávka QAD<input id="m-qad" data-mg="qadOrder" value="${esc(mgr.qadOrder)}" placeholder="číslo objednávky v QAD"></label>
-      <label>Dodací list/servisní výkaz<input id="m-dl" data-mg="dlNo" value="${esc(mgr.dlNo)}" placeholder="číslo DL / výkazu"></label>
+      <label>Nabídka<input id="m-offer" ${newDis} data-mg="offerNo" value="${esc(mgr.offerNo)}" placeholder="číslo nabídky"></label>
+      <label>Objednávka QAD<input id="m-qad" ${newDis} data-mg="qadOrder" value="${esc(mgr.qadOrder)}" placeholder="číslo objednávky v QAD"></label>
+      <label>Dodací list/servisní výkaz<input id="m-dl" ${newDis} data-mg="dlNo" value="${esc(mgr.dlNo)}" placeholder="číslo DL / výkazu"></label>
       <label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${mgr.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></label>
     </div>
     <div class="mgrbtns">
@@ -1075,7 +1080,7 @@ function mgrPanel(){
     </div>
   </div>`;
 }
-const czCount = n => `${n} požadavk${n===1?'':(n>=2&&n<=4?'y':'ů')}`;
+const czCount = n => `${n} požadav${n===1?'ek':(n>=2&&n<=4?'ky':'ků')}`;
 async function mgrApply(receiveComplete){
   if(!P().edit){ toast('Na hromadné úpravy nemáš právo.','err'); return; }
   const sel=rows.filter(r=>mgrSel.has(r._id));
@@ -1084,25 +1089,27 @@ async function mgrApply(receiveComplete){
     const anyField = mgr.reqNo!==''||mgr.rfqNo!==''||mgr.orderNo!==''||mgr.dssiItem!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!==''||mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!=='';
     if(!anyField){ toast('Vyplň aspoň jedno políčko, které se má změnit.','err'); return; }
   }
-  let ok=0, fail=0;
+  let ok=0, fail=0, skip=0;
   for(const r of sel){
-    const patch={}, ch=[];
+    const patch={}, ch=[], v2=isRecv2(r);   // v2 = nové rozložení (od 26. 10. 2026)
     if(receiveComplete){
       patch.receivedQty=Number(r.mnozstvi)||0; patch.receivedDate=today(); patch.status='doručeno';
       ch.push(`přijato kompletně (${patch.receivedQty} ks) → doručeno`);
     } else {
       if(mgr.reqNo!==''){ patch.reqNo=mgr.reqNo.trim(); ch.push('Req no. '+patch.reqNo); }
-      if(mgr.rfqNo!==''){ patch.rfqNo=mgr.rfqNo.trim(); ch.push('RFQ no. '+patch.rfqNo); }
+      if(v2 && (mgr.rfqNo!==''||mgr.dssiItem!==''||mgr.docType!==''||mgr.docNo!=='')) skip++;
+      if(!v2 && (mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!=='')) skip++;
+      if(!v2 && mgr.rfqNo!==''){ patch.rfqNo=mgr.rfqNo.trim(); ch.push('RFQ no. '+patch.rfqNo); }
       if(mgr.orderNo!==''){ patch.orderNo=mgr.orderNo.trim(); ch.push('Order no. '+patch.orderNo); }
-      if(mgr.dssiItem!==''){ patch.dssiItem=mgr.dssiItem.trim(); ch.push('DSSI item '+patch.dssiItem); }
+      if(!v2 && mgr.dssiItem!==''){ patch.dssiItem=mgr.dssiItem.trim(); ch.push('DSSI item '+patch.dssiItem); }
       if(mgr.recvQty!==''){ patch.receivedQty=Number(mgr.recvQty)||0; ch.push('přijato '+patch.receivedQty+' ks'); }
       if(mgr.recvDate!==''){ patch.receivedDate=mgr.recvDate; ch.push('datum přijetí '+dateCz(mgr.recvDate)); }
-      if(mgr.docType!==''||mgr.docNo!==''){ patch.docType=mgr.docType; patch.docNo=mgr.docNo.trim(); ch.push('doklad '+((mgr.docType||'')+' '+(mgr.docNo||'')).trim()); }
+      if(!v2 && (mgr.docType!==''||mgr.docNo!=='')){ patch.docType=mgr.docType; patch.docNo=mgr.docNo.trim(); ch.push('doklad '+((mgr.docType||'')+' '+(mgr.docNo||'')).trim()); }
       if(mgr.comment!==''){ patch.skladComment=mgr.comment.trim(); ch.push('komentář skladu'); }
       // nová pole (požadavky od 26. 10. 2026) — hromadně jdou zapsat k jakémukoli vybranému požadavku
-      if(mgr.offerNo!==''){ patch.offerNo=mgr.offerNo.trim(); ch.push('nabídka '+patch.offerNo); }
-      if(mgr.qadOrder!==''){ patch.qadOrder=mgr.qadOrder.trim(); ch.push('objednávka QAD '+patch.qadOrder); }
-      if(mgr.dlNo!==''){ patch.dlNo=mgr.dlNo.trim(); ch.push('dodací list/servisní výkaz '+patch.dlNo); }
+      if(v2 && mgr.offerNo!==''){ patch.offerNo=mgr.offerNo.trim(); ch.push('nabídka '+patch.offerNo); }
+      if(v2 && mgr.qadOrder!==''){ patch.qadOrder=mgr.qadOrder.trim(); ch.push('objednávka QAD '+patch.qadOrder); }
+      if(v2 && mgr.dlNo!==''){ patch.dlNo=mgr.dlNo.trim(); ch.push('dodací list/servisní výkaz '+patch.dlNo); }
       if(mgr.status!==''){ patch.status=mgr.status; ch.push('stav → '+mgr.status); }
     }
     if(!Object.keys(patch).length) continue;
@@ -1112,7 +1119,7 @@ async function mgrApply(receiveComplete){
   }
   mgrSel.clear();
   mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''};  // po použití vyprázdnit políčka, ať se nepřenesou na další dávku
-  toast(`Upraveno ${czCount(ok)}.`+(fail?` (${fail} se nepovedlo — zkus to znovu)`:''), fail?'err':'ok');
+  toast(`Upraveno ${czCount(ok)}.`+(skip?` Pole, která daný požadavek nemá, se přeskočila (${skip}×).`:'')+(fail?` (${fail} se nepovedlo — zkus to znovu)`:''), fail?'err':'ok');
   render();
 }
 
