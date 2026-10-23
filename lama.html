@@ -98,6 +98,8 @@
   .foot{padding:12px 13px;border-top:1px solid var(--line);background:#fafbfd;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .hist{padding:0 18px 14px;font-size:11px;color:var(--muted)}
   .hist div{padding:3px 0;border-top:1px dotted var(--line)}
+  .hist .hist-h{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#41506b;margin-bottom:3px}
+  .hist div.due{color:var(--red);font-weight:700}
 
   /* přílohy a fotky */
   .photobtns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}
@@ -249,6 +251,14 @@ const PHOTO_Q = 0.72;              // kvalita JPEG — typicky pětinová veliko
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad2 = n => String(n).padStart(2,'0');
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
+/* Text do historie: „změna termínu: 26. 10. 2026 → 2. 11. 2026 (o 7 dní později)".
+   Začátek „změna termínu" je značka, podle které se řádek v historii obarví červeně. */
+const DUE_MARK = 'změna termínu';
+const daysWord = n => n===1?'den':(n>=2&&n<=4?'dny':'dní');
+function dueChangeNote(from, to){
+  const d=Math.round((Date.parse(to)-Date.parse(from))/86400000), a=Math.abs(d);
+  return `${DUE_MARK}: ${dateCz(from)} → ${dateCz(to)} (o ${a} ${daysWord(a)} ${d>0?'později':'dříve'})`;
+}
 const dateCz = s => { if(!s) return ''; const p=String(s).slice(0,10).split('-');
   return p.length===3 ? `${+p[2]}. ${+p[1]}. ${p[0]}` : String(s); };
 const fileSize = b => b>=1048576 ? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' kB';
@@ -378,7 +388,14 @@ async function save(){
       items.unshift(Object.assign({_id:ref.id}, rec));
       toast('Úkol '+no+' uložen.','ok');
     }else{
-      const hist=(t.hist||[]).concat(`${today()} · ${me.name} · ${closing?'úkol hotov':'upraveno'}`);
+      /* Změna termínu se do historie zapíše zvlášť — odkud kam a o kolik dní
+         (v okně svítí červeně). Ostatní změny dál jako „upraveno". */
+      const orig=items.find(x=>x._id===t._id)||{};
+      const add=[];
+      if(orig.due && t.due && orig.due!==t.due) add.push(dueChangeNote(orig.due, t.due));
+      const other=['task','area','status','priority','note','createdOn'].some(k=>String(orig[k]??'')!==String(t[k]??''));
+      if(closing) add.push('úkol hotov'); else if(other || !add.length) add.push('upraveno');
+      const hist=(t.hist||[]).concat(add.map(a=>`${today()} · ${me.name} · ${a}`));
       const {_id,...data}=t; data.hist=hist;
       await updateDoc(doc(db,'lama',t._id), data);
       t.hist=hist; sync(t);
@@ -668,7 +685,8 @@ function itemModal(){
           :`<div class="muted" style="font-size:12.5px">Zatím bez příloh.${ro?'':' Na telefonu otevře „Vyfotit" rovnou fotoaparát — fotka se před nahráním sama zmenší.'}</div>`}
       </div>
     </div>
-    ${(t.hist||[]).length?`<div class="hist">${(t.hist||[]).slice().reverse().slice(0,8).map(h=>`<div>${esc(h)}</div>`).join('')}</div>`:''}
+    ${(t.hist||[]).length?`<div class="hist"><b class="hist-h">Historie</b>${(t.hist||[]).slice().reverse().slice(0,40).map(h=>
+      `<div${String(h).includes(DUE_MARK)?' class="due"':''}>${esc(h)}</div>`).join('')}</div>`:''}
     <div class="foot">
       ${oMsg?`<span style="color:var(--red);font-weight:700;font-size:12px">${esc(oMsg)}</span>`
             :`<span class="muted" style="font-size:11.5px">${isNew?'Číslo se přidělí po uložení.':'Změny se zapíšou do historie.'}</span>`}

@@ -412,6 +412,9 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
   záložku: „Blíží se termín" po uplynutí 1/3 a 2/3 doby od `createdOn` do `due`
   — každá připomínka jednou, server ji značí do pole `remind:{t1,t2}` — a „Po
   termínu"). `LISTS` ve funkcích musí odpovídat `LISTS` v lama.html.
+- **Změna termínu** se zapisuje do historie úkolu zvlášť: „změna termínu: 26. 10. 2026
+  → 2. 11. 2026 (o 7 dní později)" (`dueChangeNote`). Řádky se značkou `DUE_MARK`
+  svítí v historii červeně. Ostatní změny dál jako „upraveno".
 - „Po termínu" se neukládá, počítá se z `due`. Úkoly po termínu svítí červeně
   a řadí se nahoru, hotové jsou zelené a dospod.
 
