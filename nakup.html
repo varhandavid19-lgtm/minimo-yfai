@@ -196,6 +196,13 @@
   .recvgrid > div{display:flex;flex-direction:column;gap:2px}
   .recvgrid span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
   .recvgrid .span2{grid-column:span 2}
+  /* box Nákup/příjem: levá polovina Nákup, pravá Příjem, každá s nadpisem */
+  .recvcols{display:grid;grid-template-columns:1fr 1fr}
+  .recvcol{padding:10px 12px 12px;min-width:0}
+  .recvcol+.recvcol{border-left:1px solid #e3eaf5}
+  .recvcol h4{margin:0 0 8px;padding-bottom:5px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy-2);border-bottom:2px solid #dbe6f7}
+  .recvcol .recvgrid{grid-template-columns:1fr;padding:0}
+  @media(max-width:640px){.recvcols{grid-template-columns:1fr}.recvcol+.recvcol{border-left:0;border-top:1px solid #e3eaf5}}
   .critlist{margin-top:5px;display:flex;flex-direction:column;gap:2px}
   .critline{display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 4px;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden}
   .critline:hover{background:var(--red-bg)}
@@ -1187,28 +1194,31 @@ function modalView(){
   const hasRecv = !isNew && (r.reqNo||r.rfqNo||r.orderNo||r.dssiItem||r.receivedDate||r.docType||r.docNo||r.skladComment||(r.receivedQty!==undefined&&r.receivedQty!==''));
   const recvEditable = !isNew && P().edit;                 // přepsat req. čísla smí jen skladník/admin
   const showRecv = hasRecv || recvEditable;
-  const recvBody = (recvEdit && recvEditable) ? `<div class="recvgrid recvedit">
+  // box Nákup/příjem má dvě poloviny: vlevo NÁKUP (čísla requestu/poptávky/objednávky), vpravo PŘÍJEM
+  const recvCols=(nakup,prijem,cls)=>`<div class="recvcols">
+      <div class="recvcol"><h4>Nákup</h4><div class="recvgrid ${cls}">${nakup}</div></div>
+      <div class="recvcol"><h4>Příjem</h4><div class="recvgrid ${cls}">${prijem}</div></div>
+    </div>`;
+  const recvBody = (recvEdit && recvEditable) ? recvCols(`
       <label>Req no.<input id="e-reqno" value="${esc(r.reqNo||'')}"></label>
       <label>RFQ no.<input id="e-rfqno" value="${esc(r.rfqNo||'')}"></label>
       <label>Order no.<input id="e-orderno" value="${esc(r.orderNo||'')}"></label>
-      <label>DSSI item<input id="e-dssi" value="${esc(r.dssiItem||'')}"></label>
+      <label>DSSI item<input id="e-dssi" value="${esc(r.dssiItem||'')}"></label>`,`
       <label>Přijaté množství<input id="e-recvqty" type="number" min="0" step="1" value="${esc((r.receivedQty===undefined||r.receivedQty==='')?'':r.receivedQty)}"></label>
       <label>Datum přijetí<input id="e-recvdate" type="date" value="${esc(r.receivedDate||'')}"></label>
       <label>Doklad<div class="inline">
         <select id="e-doctype"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${r.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
         <input id="e-docno" value="${esc(r.docNo||'')}" placeholder="číslo dokladu"></div></label>
-      <label class="span2">Komentář skladu<input id="e-skladcomment" value="${esc(r.skladComment||'')}" placeholder="nepřepíše Poznámku"></label>
-    </div>
-    <div class="recvsave"><button class="btn-ok" data-a="recv-save">Uložit nákup/příjem</button></div>` : `<div class="recvgrid">
+      <label>Komentář skladu<input id="e-skladcomment" value="${esc(r.skladComment||'')}" placeholder="nepřepíše Poznámku"></label>`,'recvedit')
+    + `<div class="recvsave"><button class="btn-ok" data-a="recv-save">Uložit nákup/příjem</button></div>` : recvCols(`
       <div><span>Req no.</span><b>${esc(r.reqNo||'—')}</b></div>
       <div><span>RFQ no.</span><b>${esc(r.rfqNo||'—')}</b></div>
       <div><span>Order no.</span><b>${esc(r.orderNo||'—')}</b></div>
-      <div><span>DSSI item</span><b>${esc(r.dssiItem||'—')}</b></div>
+      <div><span>DSSI item</span><b>${esc(r.dssiItem||'—')}</b></div>`,`
       <div><span>Přijaté množství</span><b>${(r.receivedQty!==undefined&&r.receivedQty!=='')?esc(r.receivedQty)+' / '+esc(r.mnozstvi||0)+' ks':'—'}</b></div>
       <div><span>Datum přijetí</span><b>${r.receivedDate?esc(dateCz(r.receivedDate)):'—'}</b></div>
       <div><span>Doklad</span><b>${(r.docType||r.docNo)?esc(((r.docType||'')+' '+(r.docNo||'')).trim()):'—'}</b></div>
-      <div class="span2"><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>
-    </div>`;
+      <div><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>`,'');
   const receiveInfo = !isNew ? `<div class="recvbox"><div class="recvh">📦 Nákup/příjem${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
   // Dodavatel (pod Nákup/příjem): jméno je TOTÉŽ pole `dodavatel` jako v záložce Požadavek,
   // k němu číslo dodavatele, IČO/DIČ a splatnost faktur. Upravuje skladník/admin jako příjem.
