@@ -1006,6 +1006,8 @@ function tabBar(){
    VÝJIMKA: noční N (8h) začínající v neděli ve 22:00 víkendový příplatek nemá —
    nahrazuje páteční noční (WEEKEND_EXEMPT). Platí i pro ruční směnu zadanou na den,
    kdy má člověk podle rytmu tuhle výjimečnou N (např. ruční N12 místo ní → jen 200 Kč).
+   Noční N z PÁTKU na sobotu (22:00–6:00, celá v sobotu) je naopak víkendová
+   (WEEKEND_EXTRA) — právě ji nedělní noční nahrazuje.
    Den s celodenní nepřítomností se nepočítá (půl dne dovolené směnu neruší).
    Svátky příplatek nemají. Vidí jen kdo má v sekci „Zapisovat všechny".
    ========================================================== */
@@ -1014,6 +1016,8 @@ const BONUS_WEEKEND = 1000;
 const SHIFTS_12H = ['D12','O12','N12'];
 /* Směny, které v daný den týdne (0 = neděle) za víkendové nepočítáme. */
 const WEEKEND_EXEMPT = { N: [0] };
+/* Směny, které se za víkendové počítají i v jiný den (5 = pátek): noční z pátku na sobotu. */
+const WEEKEND_EXTRA = { N: [5] };
 const bonusSections = () => SECTIONS.filter(s=>secPerm(s.key)==='all');
 const czk = n => n.toLocaleString('cs-CZ')+' Kč';
 /* Spočítá příplatky za měsíc pro lidi vybraných sekcí. */
@@ -1037,7 +1041,8 @@ function bonusRows(y, m){
         // výjimka platí i pro ruční směnu, která jen nahrazuje/prodlužuje výjimečnou směnu
         // z rytmu (ruční N12 místo nedělní N → jen 200 Kč za 12h, ne víkend)
         const exempt=c=>!!c && (WEEKEND_EXEMPT[c]||[]).includes(dow);
-        const we=(dow===0||dow===6) && !exempt(code) && !(man && exempt(rotationCodeFor(p.id, ds)));
+        const weDay=(dow===0||dow===6) || (WEEKEND_EXTRA[code]||[]).includes(dow);
+        const we=weDay && !exempt(code) && !(man && exempt(rotationCodeFor(p.id, ds)));
         r.shifts++;
         if(h12){ r.n12++; r.b12+=BONUS_12H; }
         if(we){ r.nWe++; r.bWe+=BONUS_WEEKEND; }
@@ -1064,7 +1069,7 @@ function bonusView(){
       <button class="nav" id="bn-next" title="Další měsíc">›</button>
       <button class="btn-ghost" id="bn-today">Tento měsíc</button>
       <button class="btn-ghost" id="bn-export">⭳ Export CSV</button>
-      <span class="hint">ručně zadaná 12h směna +${czk(BONUS_12H)} (12h z rytmu ne) · směna v sobotu/neděli +${czk(BONUS_WEEKEND)} (kromě noční N z neděle na pondělí) · obojí se sčítá · najetím na řádek uvidíš dny</span>
+      <span class="hint">ručně zadaná 12h směna +${czk(BONUS_12H)} (12h z rytmu ne) · směna v sobotu/neděli +${czk(BONUS_WEEKEND)} (noční N z pátku na sobotu ano, z neděle na pondělí ne) · obojí se sčítá · najetím na řádek uvidíš dny</span>
     </div>
     <div class="panel"><div class="tblwrap"><table class="ptable bonus">
       <thead><tr><th>Sekce</th><th>Úsek</th><th>Jméno</th><th class="num">Směn</th><th class="num">ručních 12h</th>

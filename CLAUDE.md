@@ -89,6 +89,8 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   příplatek NEMÁ — nahrazuje páteční noční. Nedělní N12 ho má, ALE ruční směna
   zadaná na den, kdy má člověk podle rytmu tuhle výjimečnou nedělní N (např. ruční
   N12 místo ní), víkendový příplatek také nemá — jen 200 Kč za 12h.
+  Naopak noční **N z pátku na sobotu** (nástup v pátek ve 22:00) víkendová JE
+  (`WEEKEND_EXTRA`) — právě ji nedělní noční nahrazuje.
   Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
   v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky
   a šipky posouvají po měsících (`calMonth`), v roce po letech.
