@@ -90,7 +90,8 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   (12h směny ze směnového rytmu NE — to je standard 12h lidí), směna v sobotu/neděli
   (den začátku, ruční i z rytmu) +1000 Kč, obojí se sčítá
   (`BONUS_12H`, `BONUS_WEEKEND`). Celodenní nepřítomnost směnu ruší, půl dne
-  dovolené ne. Svátky příplatek nemají. Vidí jen kdo má v sekci „Zapisovat všechny".
+  dovolené ne. Svátky příplatek nemají. Vidí JEN kdo má v sekci **Toolsetters** „Zapisovat všechny"
+  (`canBonus`, i výchozí podle levelu); v záložce pak jsou všechny sekce, kde zapisuje všechny.
   Výjimka (`WEEKEND_EXEMPT`): noční **N** (8h) začínající v neděli ve 22:00 víkendový
   příplatek NEMÁ — nahrazuje páteční noční. Nedělní N12 ho má, ALE ruční směna
   zadaná na den, kdy má člověk podle rytmu tuhle výjimečnou nedělní N (např. ruční

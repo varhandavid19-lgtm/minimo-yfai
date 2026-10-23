@@ -1093,7 +1093,10 @@ const WEEKEND_EXEMPT = { N: [0] };
 /* Směny, které se za víkendové počítají i v jiný den (5 = pátek): noční z pátku na sobotu.
    manual:true = jen když je směna zadaná ručně (ne ze směnového rytmu). */
 const WEEKEND_EXTRA = { N: {days:[5]}, N12: {days:[5], manual:true} };
-const bonusSections = () => SECTIONS.filter(s=>secPerm(s.key)==='all');
+/* Výpočet bonusů vidí JEN ten, kdo má v sekci Toolsetters „Zapisovat všechny" (David, 10/2026).
+   Kdo ho vidí, dostane v něm všechny sekce, kde smí zapisovat všechny. */
+const canBonus = () => secPerm('toolsetters')==='all';
+const bonusSections = () => canBonus() ? SECTIONS.filter(s=>secPerm(s.key)==='all') : [];
 const czk = n => n.toLocaleString('cs-CZ')+' Kč';
 /* Spočítá příplatky za měsíc pro lidi vybraných sekcí. */
 function bonusRows(y, m){
