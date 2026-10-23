@@ -69,6 +69,13 @@
   .panel.wide{width:fit-content;min-width:100%;max-width:calc(100vw - 48px);position:relative;left:50%;transform:translateX(-50%)}
   .panel.wide .body>p{width:0;min-width:100%}   /* odstavce nenafukují šířku panelu, ten se řídí tabulkou */
   table.utbl{border-collapse:separate;border-spacing:0;font-size:12px}
+  /* přepínač oblasti nad tabulkou uživatelů */
+  .ufilter{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
+  .ufilter .ufl{font-size:12px;font-weight:700;color:#41506b;margin-right:4px}
+  .ufilter button{background:#fff;border:1px solid var(--line);color:#41506b;font-weight:700;padding:6px 12px;border-radius:20px}
+  .ufilter button:hover{border-color:var(--navy-2);background:#eef3fb}
+  .ufilter button.on{background:var(--navy-2);border-color:var(--navy-2);color:#fff}
+  .ufilter button .n{font-weight:600;opacity:.7;margin-left:2px}
   table.utbl thead th{position:sticky;top:0;background:#16355f;color:#fff;z-index:3;padding:7px 8px;font-size:10px;white-space:nowrap}
   table.utbl thead tr:nth-child(2) th{top:30px;white-space:normal;line-height:1.25;vertical-align:bottom}
   table.utbl th.grp{text-align:center;background:#1f4a86}
@@ -254,6 +261,17 @@ const SECTIONS = [
 
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let activeUid=null;   // zvýrazněný řádek tabulky uživatelů (klik do řádku), klik mimo tabulku ho zruší
+/* Filtr tabulky uživatelů podle oblasti (sekce Plánování). Do oblasti patří, kdo má aspoň
+   jednu její pozici; „Bez pozice" = nemá žádnou z pozic sekcí. Prohlížeč si volbu pamatuje. */
+const USER_FILTERS = [{key:'all',label:'Všichni'}, ...SECTIONS.map(s=>({key:s.key,label:s.label})), {key:'none',label:'Bez pozice'}];
+let userFilter = (()=>{ try{ const v=localStorage.getItem('nast-ufilter'); return USER_FILTERS.some(f=>f.key===v)?v:'all'; }catch(e){ return 'all'; } })();
+function inUserFilter(u, key){
+  if(key==='all') return true;
+  const pos=u.positions||[];
+  if(key==='none') return !SECTIONS.some(s=>s.positions.some(p=>pos.includes(p)));
+  const sec=SECTIONS.find(s=>s.key===key);
+  return !!sec && sec.positions.some(p=>pos.includes(p));
+}
 const badge = key => { const l=LEVEL_BY[key]||LEVEL_BY.basic; return `<span class="badge" style="background:${l.color}">${esc(l.label)}</span>`; };
 
 let me=null, myLevel='basic', myModules={}, myPositions=[], users=[], ready=false, unsub=null, toastMsg=null, toastKind='';
@@ -524,7 +542,10 @@ function denyView(){
 function view(){
   const rw = canWriteSettings();
   const nCols = 3 + MODULES_LIST.length + SECTIONS.length + (rw?1:0);
-  const rows = users.length ? users.map(u=>{
+  const shown = users.filter(u=>inUserFilter(u, userFilter));
+  const filterBar = `<div class="ufilter"><span class="ufl">Zobrazit oblast:</span>${USER_FILTERS.map(f=>
+    `<button class="${userFilter===f.key?'on':''}" data-uf="${f.key}">${esc(f.label)} <span class="n">${users.filter(u=>inUserFilter(u,f.key)).length}</span></button>`).join('')}</div>`;
+  const rows = shown.length ? shown.map(u=>{
     const meMark = u.uid===me.uid ? '<span class="me-tag">(vy)</span>' : '';
     const delBtn = u.uid===me.uid
       ? `<span class="uid" title="Sebe nelze smazat">—</span>`
@@ -537,7 +558,8 @@ function view(){
       ${SECTIONS.map(s=>`<td>${cellPerm(u,s,rw)}</td>`).join('')}
       ${rw?`<td class="ta-c">${delBtn}</td>`:''}
     </tr>`;
-  }).join('') : `<tr><td colspan="${nCols}" style="text-align:center;color:var(--muted);padding:22px">Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.</td></tr>`;
+  }).join('') : `<tr><td colspan="${nCols}" style="text-align:center;color:var(--muted);padding:22px">${users.length
+    ? 'V této oblasti nikdo není.' : 'Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.'}</td></tr>`;
 
   const legend = LEVELS.map(l=>`<div class="lvl">
     <span class="b">${badge(l.key)}</span>
@@ -550,12 +572,13 @@ function view(){
         👁️ Máte modul Nastavení <b>jen pro čtení</b> – uživatele vidíte, ale nemůžete je upravovat ani mazat.</p>`;
   return `${uh}
   <main>
-    <div class="panel wide"><h2>👥 Uživatelé <span class="right">${users.length} účtů</span></h2><div class="body">
+    <div class="panel wide"><h2>👥 Uživatelé <span class="right">${userFilter==='all'?'':shown.length+' z '}${users.length} účtů</span></h2><div class="body">
       ${roNote}
       <p style="margin:0 0 12px;font-size:12px;color:var(--muted);background:#eef3fb;border:1px solid #d6e2f3;border-radius:8px;padding:9px 11px">
         ℹ️ Účet se tu objeví, až se jím člověk <b>poprvé přihlásí</b> do portálu (profil se vytvoří automaticky).
         Účet vytvořený jen ve Firebase&nbsp;Authentication se zde nezobrazí, dokud se přes něj někdo nepřihlásí.
       </p>
+      ${filterBar}
       <div class="utblwrap"><table class="utbl">
         <thead>
           <tr>
@@ -599,6 +622,10 @@ document.addEventListener('pointerdown', e=>{
 });
 
 function wire(){
+  document.querySelectorAll('[data-uf]').forEach(b=>b.addEventListener('click',()=>{
+    userFilter=b.dataset.uf; try{ localStorage.setItem('nast-ufilter', userFilter); }catch(e){}
+    render(); const w=appEl.querySelector('.utblwrap'); if(w) w.scrollTop=0;   // nová oblast od začátku
+  }));
   document.getElementById('btn-logout')?.addEventListener('click',()=>signOut(auth));
   document.getElementById('eg-save')?.addEventListener('click',saveEngcfg);
   document.querySelectorAll('button[data-del]').forEach(btn=>
