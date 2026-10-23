@@ -296,6 +296,8 @@ let items=[], loaded=false, busy='', errMsg='';
 let open=null, oMsg='', pending=[];
 let ntf=null, nMsg='';              // okno ✉️ Notifikace (jen správce): kopie meta/lamacfg.notify
 let f={area:'',card:'',priority:'',q:''};
+/* Okénko „Zobrazit vše" svítí, když není žádný filtr a hotové nejsou skryté. */
+const allShown = () => !f.area && !f.card && !f.priority && !f.q.trim() && !hideDone;
 /* Okénka nahoře jsou zároveň filtr stavu: klik zobrazí jen ty úkoly, druhý klik filtr zruší.
    Samostatné rozbalovátko „Všechny stavy" je pryč (David, 10/2026). */
 const CARDS=[
@@ -575,6 +577,9 @@ function listView(){
     return `<button class="kcard${on?' on':''}" data-a="card" data-v="${c.k}" style="border-left-color:${c.color(n)}"
       title="${on?'Zrušit filtr':'Zobrazit jen: '+esc(c.l)}">
       <div class="lbl">${esc(c.l)}${on?' · filtr ✕':''}</div><div class="val">${n}</div><div class="note">${esc(c.note(n,L))}</div></button>`; }).join('')}
+    <button class="kcard${allShown()?' on':''}" data-a="showall" style="border-left-color:#6b7a90"
+      title="Zrušit všechny filtry a ukázat i hotové úkoly">
+      <div class="lbl">Zobrazit vše</div><div class="val">${L.length}</div><div class="note">bez filtrů, i hotové</div></button>
   </div>
 
   <div class="panel">
@@ -824,6 +829,7 @@ async function act(a,v){
   switch(a){
     case 'reload': loaded=false; await load(true); return;
     case 'card': f.card = (f.card===v ? '' : v); break;   // druhý klik filtr zruší
+    case 'showall': f={area:'',card:'',priority:'',q:''}; hideDone=false; break;
     case 'sort':{
       const c=COLS.find(x=>x.k===v); if(!c) return;
       if(!sortBy || sortBy.k!==v) sortBy={k:v, dir:c.first};

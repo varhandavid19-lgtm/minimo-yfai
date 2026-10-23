@@ -415,7 +415,8 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
 - **Okénka nahoře (Nové / V řešení / Po termínu / Hotovo) jsou filtr stavu**
   (`CARDS`, `f.card`): klik zobrazí jen ty úkoly, druhý klik filtr zruší, Hotovo
   ukáže hotové i při „skrýt hotové". Rozbalovátko „Všechny stavy" je zrušené —
-  nevracej ho.
+  nevracej ho. Páté okénko **Zobrazit vše** zruší všechny filtry (okénko, oblast,
+  priorita, hledání) a ukáže i hotové (`allShown`).
 - **Řazení tabulky** kliknutím na záhlaví (`COLS`, stav `sortBy`): 1. klik podle
   `first` (termín od nejbližšího, priorita od kritické, data a číslo od nejnovějšího,
   text A–Z), 2. klik obráceně, 3. klik zpět na výchozí řazení v `visible()`.
