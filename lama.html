@@ -67,6 +67,10 @@
 
   .tblwrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
+  thead th.sortable{cursor:pointer;user-select:none}
+  thead th.sortable:hover{background:#1f4677}
+  thead th.sortable.on{background:#0d7377}
+  thead th .arr{font-size:9px}
   thead th{background:#16355f;color:#fff;text-align:left;padding:9px 10px;font-size:10.5px;
     text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
   tbody td{padding:7px 8px;border-bottom:1px solid #eef1f5;vertical-align:top}
@@ -290,6 +294,25 @@ let curList='agency';               // otevřená záložka (pamatuje si ji proh
 try{ const s=localStorage.getItem('lama-list'); if(LISTS.some(l=>l.k===s)) curList=s; }catch(e){}
 const listItems = () => items.filter(t=>listOf(t)===curList);
 let hideDone=true, toastMsg=null, toastKind='';
+/* Sloupce tabulky a řazení kliknutím na záhlaví. `first` = směr prvního kliku
+   (1 vzestupně, -1 sestupně) — termín od nejbližšího, priorita od kritické,
+   zadáno/číslo/po termínu/hotovo od nejnovějšího, text od A. Druhý klik pořadí
+   otočí, třetí vrátí výchozí řazení. Prázdné hodnoty jdou vždy dospod. */
+const STATUS_ORDER={'nový':0,'v řešení':1,'hotovo':2};
+const COLS=[
+  {k:'no',       l:'Č.',            first:-1, v:t=>Number(t.no||0)},
+  {k:'createdOn',l:'Zadáno',        first:-1, v:t=>t.createdOn||''},
+  {k:'createdBy',l:'Zadal',         first:1,  v:t=>t.createdBy||'￿'},
+  {k:'task',     l:'Úkol',          first:1,  v:t=>t.task||'￿'},
+  {k:'priority', l:'Priorita',      first:1,  v:t=>prioRank(t)},
+  {k:'area',     l:'Oblast / linka',first:1,  v:t=>t.area||'￿'},
+  {k:'due',      l:'Termín',        first:1,  v:t=>t.due||'9999'},
+  {k:'status',   l:'Stav',          first:1,  v:t=>STATUS_ORDER[t.status]??9},
+  {k:'late',     l:'Po termínu',    first:-1, v:t=>lateDays(t)},
+  {k:'note',     l:'Poznámka / vyjádření agentury', first:1, v:t=>t.note||'￿'},
+  {k:'closedOn', l:'Hotovo',        first:-1, v:t=>t.closedOn||''}
+];
+let sortBy=null;                    // {k, dir} nebo null = výchozí řazení
 const appEl=document.getElementById('app');
 function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t);
   toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
@@ -498,7 +521,15 @@ function visible(){
   const q=f.q.trim().toLowerCase();
   if(q) r=r.filter(t=>[t.no,t.task,t.area,t.note,t.createdBy]
     .some(v=>String(v||'').toLowerCase().includes(q)));
-  /* po termínu nahoru, pak podle priority a termínu, hotové dospod */
+  /* řazení kliknutím na sloupec; jinak výchozí pořadí */
+  if(sortBy){
+    const c=COLS.find(x=>x.k===sortBy.k);
+    if(c){ const s=sortBy.dir, val=c.v;
+      return r.sort((a,b)=>{ const x=val(a), y=val(b);
+        const d = typeof x==='number' ? x-y : String(x).localeCompare(String(y),'cs');
+        return d*s || Number(a.no||0)-Number(b.no||0); }); }
+  }
+  /* výchozí: po termínu nahoru, pak podle priority a termínu, hotové dospod */
   return r.sort((a,b)=>{
     if(isDone(a)!==isDone(b)) return isDone(a)?1:-1;
     if(isLate(a)!==isLate(b)) return isLate(a)?-1:1;
@@ -551,8 +582,9 @@ function listView(){
     </div>
     <div class="tblwrap"><table>
       <thead><tr>
-        <th>Č.</th><th>Zadáno</th><th>Zadal</th><th>Úkol</th><th>Priorita</th><th>Oblast / linka</th>
-        <th>Termín</th><th>Stav</th><th>Po termínu</th><th>Poznámka / vyjádření agentury</th><th>Hotovo</th><th></th>
+        ${COLS.map(c=>{ const on=sortBy&&sortBy.k===c.k;
+          return `<th class="sortable${on?' on':''}" data-a="sort" data-v="${c.k}" title="Seřadit podle sloupce ${esc(c.l)}">${esc(c.l)}${
+            on?` <span class="arr">${sortBy.dir===1?'▲':'▼'}</span>`:''}</th>`; }).join('')}<th></th>
       </tr></thead>
       <tbody>${rows.map(t=>{
         const lt=isLate(t), nf=(t.files||[]).length;
@@ -782,6 +814,13 @@ function bind(){
 async function act(a,v){
   switch(a){
     case 'reload': loaded=false; await load(true); return;
+    case 'sort':{
+      const c=COLS.find(x=>x.k===v); if(!c) return;
+      if(!sortBy || sortBy.k!==v) sortBy={k:v, dir:c.first};
+      else if(sortBy.dir===c.first) sortBy={k:v, dir:-c.first};
+      else sortBy=null;                 // třetí klik → výchozí řazení
+      break;
+    }
     case 'list':
       if(!LISTS.some(l=>l.k===v)) return;
       curList=v; try{ localStorage.setItem('lama-list',v); }catch(e){}
