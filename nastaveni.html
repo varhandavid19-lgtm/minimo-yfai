@@ -443,7 +443,12 @@ async function removeUser(uid, name){
 function render(){
   if(!ready){ return; }
   if(myAccess()==='none'){ appEl.innerHTML=denyView(); return; }
+  // překreslení (i po každém uložení změny v tabulce) nesmí odskočit — zapamatuj posuvníky
+  const tw=appEl.querySelector('.utblwrap'), tTop=tw?tw.scrollTop:0, tLeft=tw?tw.scrollLeft:0;
+  const wx=window.scrollX, wy=window.scrollY;
   appEl.innerHTML = view(); wire(); renderToast();
+  const nw=appEl.querySelector('.utblwrap'); if(nw){ nw.scrollTop=tTop; nw.scrollLeft=tLeft; }
+  window.scrollTo(wx, wy);
 }
 
 /* ===== Buňky editovatelné tabulky uživatelů ===== */
