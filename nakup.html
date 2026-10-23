@@ -2617,7 +2617,7 @@ async function act(a,v,el,ev){
       if(pass.length<6){toast('Heslo musí mít aspoň 6 znaků.','err');return;}
       try{
         const uid=await createUserAccount(email,pass);
-        await setDoc(doc(db,'users',uid),{name,email,role,team});
+        await setDoc(doc(db,'users',uid),{name,email,role,team,planStrict:true});   // Plánování: jen číst, zápis povolí admin
         ['nu-name','nu-email','nu-pass','nu-role','nu-team'].forEach(k=>delete drafts[k]);
         toast('Uživatel '+name+' založen. Předej mu heslo.','ok');
       }catch(e){ toast('Založení selhalo: '+authMsg(e.code),'err'); return; }

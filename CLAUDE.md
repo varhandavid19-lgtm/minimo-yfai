@@ -69,6 +69,10 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   na jméno se upraví nebo odebere — odebrání smaže i jeho nepřítomnosti, směny
   a rotaci. Staré záznamy v `people` bez `ext:true` se ignorují.
   Právo „Zapisovat jen sebe" se v plánování chová jako „Jen číst" (`secPerm`).
+  **Nové účty (od 10/2026) mají `planStrict:true`** (zakládá `index.html` `ensureUserDoc`
+  i formulář v `nakup.html`): výchozí právo v sekci = Jen číst ve skupině podle pozice, jinde
+  Skryté — zápis musí ručně povolit admin. Starší účty bez příznaku se řídí levelem jako dřív.
+  Logika je ve `defaultPerm` (dovolenky.html) a `planDefault` (nastaveni.html) — drž je shodné.
   **Plánuje se přímo v kalendáři, bez formulářů s datumy** (David, 10/2026):
   tažením myší v řádku člověka se označí dny (na dotyku dvě ťuknutí, Shift+klik
   rozšíří), dole se objeví lišta (`selBarView`) s druhy nepřítomnosti, ½ dne

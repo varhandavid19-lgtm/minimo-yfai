@@ -478,9 +478,14 @@ const levelOf = d => (d && d.level && LEVEL_RANK[d.level]) ? d.level : ((d && RO
 /* Práva v Plánování – pro každou sekci 4 stavy. Nejsou-li u člověka nastavená,
    odvodí se z jeho levelu (Approver a výše = vše, ostatní = jen sebe). Nastavují se v Nastavení. */
 const PERM_BY = {none:'Skryté', read:'Jen číst', self:'Zapisovat jen sebe', all:'Zapisovat všechny'};
-const defaultPerm = level => (LEVEL_RANK[level]||1) >= 3 ? 'all' : 'self';
+/* Účty založené od 10/2026 mají planStrict:true (David): výchozí je JEN ČÍST, a to jen ve skupině,
+   kam patří podle pozice — jinde Skryté. Jakékoli zapisování musí ručně povolit admin v Nastavení.
+   Starší účty bez planStrict se řídí levelem jako dřív. */
+const defaultPerm = (u, sectionKey) => (u && u.planStrict)
+  ? (inSection(u, sectionKey) ? 'read' : 'none')
+  : ((LEVEL_RANK[levelOf(u)]||1) >= 3 ? 'all' : 'self');
 const resolvePerm = (u, sectionKey) => { const p=u&&u.perms&&u.perms[sectionKey];
-  return (p && PERM_BY[p]) ? p : defaultPerm(levelOf(u)); };
+  return (p && PERM_BY[p]) ? p : defaultPerm(u, sectionKey); };
 /* Přístup k celému modulu Plánování (Skryté/Jen číst/Zapisovat) – zastřeší práva sekcí. */
 const resolveModule=(mods,level,key)=>{ const p=mods&&mods[key];
   if(p==='none'||p==='read'||p==='write') return p;
@@ -649,9 +654,10 @@ function subscribe(){
   // Lidé se berou z centrálního seznamu (kolekce users) – stejný zdroj jako Nastavení.
   unsubPeople = onSnapshot(collection(db,'users'),
     s=>{ subRetry=0; userPeople=s.docs.map(d=>{const x=d.data();
-           return {id:d.id, name:x.name||d.id, email:x.email||'', positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}, modules:x.modules||{}};});
+           return {id:d.id, name:x.name||d.id, email:x.email||'', positions:x.positions||[], level:x.level, role:x.role, perms:x.perms||{}, modules:x.modules||{}, planStrict:!!x.planStrict};});
          mergePeople();
-         myDoc = userPeople.find(u=>u.id===me.uid) || null;
+         // bez profilu (ještě nikdy na portálu) = nový účet → jen číst ve vlastní skupině (planStrict)
+         myDoc = userPeople.find(u=>u.id===me.uid) || {id:me.uid, positions:[], perms:{}, modules:{}, planStrict:true};
          render(); },
     e=>subErr('lidé',e));
   // Jména bez účtu v minimu (vepsaná přímo v plánování). Ve stejné kolekci můžou

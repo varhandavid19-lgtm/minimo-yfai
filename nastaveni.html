@@ -211,6 +211,12 @@ const PERM_STATES = [
 ];
 const PERM_BY = Object.fromEntries(PERM_STATES.map(p=>[p.key,p]));
 const defaultPerm = level => rankOf(level) >= 3 ? 'all' : 'self';
+/* Výchozí právo v sekci Plánování pro konkrétního člověka (stejně jako v dovolenky.html):
+   účty s planStrict (založené od 10/2026) = Jen číst ve vlastní skupině podle pozice, jinde Skryté;
+   starší účty podle levelu. SECTIONS se čte až při volání, pořadí deklarací nevadí. */
+const planDefault = (u, key) => (u && u.planStrict)
+  ? (((SECTIONS.find(s=>s.key===key)||{}).positions||[]).some(p=>(u.positions||[]).includes(p)) ? 'read' : 'none')
+  : defaultPerm(levelOf(u));
 
 /* ===== Přístup k celým modulům portálu (kdo který modul vidí / smí v něm zapisovat) ===== */
 const MODULES_LIST = [
@@ -495,7 +501,7 @@ function cellMod(u, m, rw){
   return `<select class="t-mod" data-uid="${esc(u.uid)}" data-mod="${m.key}" ${rw?'':'disabled'}>${opts}</select>`;
 }
 function cellPerm(u, s, rw){
-  const dp=defaultPerm(levelOf(u));
+  const dp=planDefault(u, s.key);
   const cur=(u.perms&&u.perms[s.key])||'';
   const opts=`<option value="" ${cur===''?'selected':''} title="Výchozí podle levelu">⟲ ${esc(PERM_BY[dp].label)}</option>`
     + PERM_STATES.map(p=>`<option value="${p.key}" ${cur===p.key?'selected':''}>${esc(p.label)}</option>`).join('');
@@ -527,7 +533,7 @@ async function patchPerm(uid,key,val){ if(!canWriteSettings())return; const u=fi
    (dovolenky.html, canBonus). Když volba nově vede na „všechny" (ručně i přes „⟲ výchozí"),
    admin to musí potvrdit v okně (bonusConfirm). Zrušení nic neuloží a výběr se vrátí. */
 let bonusConfirm=null;   // {uid, name, val}
-const effPerm = (u, key, val) => val || defaultPerm(levelOf(u));
+const effPerm = (u, key, val) => val || planDefault(u, key);
 function onPermChange(uid, key, val){
   const u=findU(uid); if(!u) return;
   const was=effPerm(u, key, (u.perms||{})[key]||'');
