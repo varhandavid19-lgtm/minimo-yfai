@@ -79,6 +79,10 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   jména (od dneška) i v liště výběru (řádek Rytmus, od prvního označeného dne,
   `rotRowView`). Do minulosti NE — `assignRotation`/`clearRotation` to odmítnou.
   Nevracej horní formuláře.
+  **Poznámka ke dni** (nezávislá na směně i nepřítomnosti): řádek Poznámka v liště
+  + „💾 Uložit poznámku" (`saveDayNote`) → v dokumentu jména v `people` pole
+  `notes:{'RRRR-MM-DD':'text'}`, prázdná poznámku smaže (`deleteField`). Den
+  s poznámkou má v kalendáři oranžový roh, text je v bublině a v náhledu dne.
   Záložka **💰 Výpočet bonusů** (`mainTab='bonus'`, `bonusRows`): příplatky za
   měsíc z naplánovaných směn — **ručně zadaná** 12h směna (D12/O12/N12) +200 Kč
   (12h směny ze směnového rytmu NE — to je standard 12h lidí), směna v sobotu/neděli

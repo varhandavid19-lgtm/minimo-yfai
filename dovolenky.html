@@ -203,6 +203,10 @@
   @media(max-width:680px){.cal td.d .lab{font-size:11.5px}.cal td.shift .lab.lab-sh{font-size:11px}}
   /* směna naplánovaná pod nepřítomností: jemná modrá linka dole */
   .cal td.hasshift{box-shadow:inset 0 -3px 0 rgba(37,99,168,.4)}
+  /* den s poznámkou: tmavý trojúhelník v pravém horním rohu */
+  .cal td.d.hasnote{position:relative}
+  .cal td.d.hasnote::after{content:'';position:absolute;top:0;right:0;pointer-events:none;
+    border-top:9px solid #e8590c;border-left:9px solid transparent}
   /* Dnešek: prázdná políčka lehce oranžová, políčka s nepřítomností nechají svou barvu vyniknout */
   .cal td.today:not(.has){background:#fde3c8}
   /* Pruh dneška = jen oranžové linky po stranách sloupce (nepřekrývá barvy nepřítomností) */
@@ -301,7 +305,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp }
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
 /* ====== FIREBASE KONFIGURACE (projekt dovolenky) ======
@@ -510,6 +514,7 @@ let dlg=null;              // {personName, dateStr, items:[...]} – náhled dne
 let sel=null;              // označené dny v kalendáři {personId, a, b} (a = kde výběr začal)
 let selNote='';            // poznámka k nepřítomnosti z lišty výběru
 let selPlan='';            // rytmus vybraný v liště výběru
+let selNoteKey='', selNoteFor=null;   // pro který výběr (a rozsah) je selNote předvyplněná
 let busySel=false;         // ukládá se výběr
 let dragging=false, pendingRender=false;   // během tažení se nepřekresluje (zrušilo by tah)
 let collision=null;        // {list:[...], from, to, onOk} – upozornění na kolizi ve stejném úseku
@@ -637,7 +642,7 @@ function subscribe(){
   // ležet staré záznamy z původní aplikace Dovolenky — ty nemají ext:true a ignorují se.
   unsubExt = onSnapshot(collection(db,'people'),
     s=>{ extPeople=s.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.ext===true)
-           .map(x=>({id:x.id, name:x.name||'', email:'', positions:x.pos?[x.pos]:[], ext:true}));
+           .map(x=>({id:x.id, name:x.name||'', email:'', positions:x.pos?[x.pos]:[], ext:true, notes:x.notes||{}}));
          mergePeople(); render(); },
     e=>subErr('jména',e));
   unsubAbs = onSnapshot(collection(db,'absences'),
@@ -735,6 +740,21 @@ async function applyShift(code){
 }
 /* Vymaže z vybraných dnů nepřítomnosti i ručně naplánované směny.
    Směny z rotace se počítají z rytmu — ty zůstanou, dokud se rytmus neukončí. */
+/* Poznámka ke dni — nezávislá na směně i nepřítomnosti. Ukládá se do jména
+   v kolekci people jako notes:{'RRRR-MM-DD':'text'}; prázdná poznámku smaže. */
+async function saveDayNote(){
+  const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
+  if(!canEditPerson(p.id)) return;
+  const sn=document.getElementById('sb-note'); if(sn) selNote=sn.value;
+  const note=selNote.trim(), upd={};
+  eachDay(r[0], r[1], ds=>{ upd['notes.'+ds]= note ? note : deleteField(); });
+  busySel=true; render();
+  try{
+    await updateDoc(doc(db,'people',p.id), upd);
+    toast(note ? 'Poznámka uložena.' : 'Poznámka smazána.','ok'); sel=null; selNote='';
+  }catch(e){ toast('Poznámku se nepodařilo uložit: '+e.message,'err'); }
+  busySel=false; render();
+}
 async function clearSelection(){
   const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
   if(!canEditPerson(p.id)) return;
@@ -1118,6 +1138,9 @@ function selBarView(){
   const [from,to]=r, single=from===to;
   const n=plannableDays(p,from,to);
   const sh=sectionShifts(section);
+  // nový výběr → předvyplň uloženou poznámku dne (u jednoho dne), ať jde upravit
+  const key=p.id+'|'+from+'|'+to;
+  if(key!==selNoteKey || selNoteFor!==sel){ selNoteKey=key; selNoteFor=sel; selNote = single ? ((p.notes||{})[from]||'') : ''; }
   const btn=(attr,fill,label,title)=>`<button class="sb-btn" ${attr} title="${esc(title||label)}" ${busySel?'disabled':''}>
     <span class="sw" style="background:${fill}"></span>${esc(label)}</button>`;
   return `<div class="selbar" id="selbar">
@@ -1127,7 +1150,10 @@ function selBarView(){
     <div class="sb-row"><span class="sb-lbl">Nepřítomnost</span>
       ${TYPES.map(t=>btn(`data-abs="${esc(t.k)}"`, t.fill, t.k)).join('')}
       ${single?btn('data-abs="Dovolená" data-half="1"', TYPE_BY['Dovolená'].fill, '½ dne dovolené'):''}
-      <input type="text" id="sb-note" value="${esc(selNote)}" placeholder="poznámka (nepovinné)"></div>
+    </div>
+    <div class="sb-row"><span class="sb-lbl">Poznámka</span>
+      <input type="text" id="sb-note" value="${esc(selNote)}" placeholder="poznámka ke dni (uloží se i s nepřítomností)">
+      <button class="sb-btn" id="sb-savenote" ${busySel?'disabled':''} title="Uložit poznámku k označeným dnům (prázdná poznámku smaže)">💾 Uložit poznámku</button></div>
     ${sh.length?`<div class="sb-row"><span class="sb-lbl">Směna</span>
       ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?s.name:(s.k+' · '+s.name), s.name+(s.hours?' ('+s.hours+')':''))).join('')}</div>`:''}
     ${rotRowView(p, from)}
@@ -1295,6 +1321,8 @@ function calendarView(){
         inner = S.noLabel ? '' : `<span class="lab lab-sh">${esc(s.code)}</span>`;   // Salaried = jen barva, bez písmene
         tt+=` • směna ${S.name}${S.hours?(' ('+S.hours+')'):''}${s.rot?' (rotace)':''}`;
       }
+      const dn=(p.notes||{})[dd.ds];
+      if(dn){ cls+=' hasnote'; tt+=` • 📝 ${dn}`; }
       if(sr && sel.personId===p.id && dd.ds>=sr[0] && dd.ds<=sr[1]) cls+=' sel';
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
@@ -1340,7 +1368,7 @@ function dialogView(){
   const holNote = dlg.holiday ? `<p style="margin:10px 0 0;color:#6d3fc4"><b>Státní svátek:</b> ${esc(dlg.holiday)}</p>` : '';
   return `<div class="dlg-wrap" id="dlg-wrap"><div class="dlg">
     <div class="t">${esc(dlg.personName)} · ${dCz(dlg.dateStr)}<button class="x" id="dlg-x">✕</button></div>
-    <div class="c">${items}${shiftItem}${empty}${holNote}${roNote}</div>
+    <div class="c">${items}${shiftItem}${empty}${dlg.note?`<p style="margin:10px 0 0"><b>📝 Poznámka:</b> ${esc(dlg.note)}</p>`:''}${holNote}${roNote}</div>
     <div class="b"><button class="btn-ghost" id="dlg-close">Zavřít</button></div>
   </div></div>`;
 }
@@ -1450,6 +1478,7 @@ function wireApp(){
   document.getElementById('sb-rotclear')?.addEventListener('click',()=>{ const r=selRange();
     if(r && confirm(`Ukončit směnový rytmus od ${dCz(r[0])}? Co bylo předtím, zůstane.`)) clearRotation(sel.personId, r[0]); });
   const sn=document.getElementById('sb-note'); sn?.addEventListener('input',()=>{selNote=sn.value;});
+  document.getElementById('sb-savenote')?.addEventListener('click',saveDayNote);
 
   // náhled dne (pro toho, kdo plán jen prohlíží) — zavírání
   document.getElementById('dlg-x')?.addEventListener('click',()=>{dlg=null;render();});
@@ -1516,7 +1545,8 @@ function openDay(personId,dateStr){
   // směna toho dne: ručně naplánovaná má přednost před rytmem
   const man=shifts.find(s=>s.personId===personId && s.from<=dateStr && s.to>=dateStr);
   const code=man ? man.shift : rotationCodeFor(personId, dateStr);
-  dlg={personName:p.name, dateStr, items, holiday:hol, shift:code||'', shiftRot:!man&&!!code, readonly:true};
+  dlg={personName:p.name, dateStr, items, holiday:hol, shift:code||'', shiftRot:!man&&!!code,
+       note:(p.notes||{})[dateStr]||'', readonly:true};
   render();
 }
 
