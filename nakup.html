@@ -198,7 +198,6 @@
   .recvgrid .span2{grid-column:span 2}
   /* box Nákup/příjem: levá polovina Nákup, pravá Příjem, každá s nadpisem */
   .recvcols{display:grid;grid-template-columns:1fr 1fr}
-  .pvtag{margin-left:10px;background:#fff4e8;border:1px solid #f6821f;color:#7a3b06;border-radius:12px;padding:2px 9px;font-size:11px;font-weight:700}
   .recvcol{padding:10px 12px 12px;min-width:0}
   .recvcol+.recvcol{border-left:1px solid #e3eaf5}
   .recvcol h4{margin:0 0 8px;padding-bottom:5px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy-2);border-bottom:2px solid #dbe6f7}
@@ -661,10 +660,6 @@ const dateCz = d => d ? String(d).slice(0,10).split('-').reverse().map(x=>String
    Dodací list/servisní výkaz, Datum přijetí, Přijímané množství, Komentář). Starší požadavky beze změny. */
 const RECV2_FROM = '2026-10-26';
 const isRecv2 = r => !!r && String(r.created||'') >= RECV2_FROM;
-/* Testovací náhled: nakup.html?nahled=novy ukáže v detailu KAŽDÉHO požadavku nové rozložení boxu
-   Nákup/příjem — jen pro zobrazení, editace boxu je v náhledu vypnutá. Ukládání i Správa požadavků
-   se dál řídí skutečným datem (isRecv2), takže náhled nic nezapíše. */
-const PREVIEW_RECV2 = (()=>{ try{ return new URLSearchParams(location.search).get('nahled')==='novy'; }catch(e){ return false; } })();
 const acc = c => (cfg?.accounts||[]).find(a=>a.code===c);
 const accName = c => (acc(c)||{}).name || '';
 const accLabel = c => c ? (accName(c)?c+' — '+accName(c):c) : '';
@@ -1225,9 +1220,7 @@ function modalView(){
   // Požadavky založené od RECV2_FROM mají jiná pole (David, 10/2026); starší zůstávají beze změny.
   // Společná pole (reqNo, orderNo, receivedQty, receivedDate, skladComment) jsou stejná data, jen jinak pojmenovaná.
   const qtyView = (r.receivedQty!==undefined&&r.receivedQty!=='')?esc(r.receivedQty)+' / '+esc(r.mnozstvi||0)+' ks':'—';
-  const pv2 = PREVIEW_RECV2 && !isRecv2(r);            // starý požadavek zobrazený v testovacím náhledu
-  const recvEdOk = recvEditable && !pv2;                 // v náhledu se box Nákup/příjem needituje
-  const recvBody = (isRecv2(r)||pv2) ? ((recvEdit && recvEdOk) ? recvCols(`
+  const recvBody = isRecv2(r) ? ((recvEdit && recvEditable) ? recvCols(`
       <label>Nabídka<input id="e-offer" value="${esc(r.offerNo||'')}"></label>
       <label>Req.č.<input id="e-reqno" value="${esc(r.reqNo||'')}"></label>
       <label>Objednávka QAD<input id="e-qad" value="${esc(r.qadOrder||'')}"></label>
@@ -1265,7 +1258,7 @@ function modalView(){
       <div><span>Datum přijetí</span><b>${r.receivedDate?esc(dateCz(r.receivedDate)):'—'}</b></div>
       <div><span>Doklad</span><b>${(r.docType||r.docNo)?esc(((r.docType||'')+' '+(r.docNo||'')).trim()):'—'}</b></div>
       <div><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>`,'');
-  const receiveInfo = !isNew ? `<div class="recvbox"><div class="recvh">📦 Nákup/příjem${pv2?'<span class="pvtag">🔍 testovací náhled nového rozložení — nic se neukládá</span>':''}${recvEdOk?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
+  const receiveInfo = !isNew ? `<div class="recvbox"><div class="recvh">📦 Nákup/příjem${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
   // Dodavatel (pod Nákup/příjem): jméno je TOTÉŽ pole `dodavatel` jako v záložce Požadavek,
   // k němu číslo dodavatele, IČO/DIČ a splatnost faktur. Upravuje skladník/admin jako příjem.
   const supBody = (supEdit && recvEditable) ? `<div class="recvgrid recvedit">
