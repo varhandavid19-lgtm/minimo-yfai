@@ -192,8 +192,10 @@
   .rotrow select{flex:1 1 220px}
   .cal td.d:hover{outline:2px solid #2a5ea3;outline-offset:-2px;position:relative;z-index:2}
   .cal th.we,.cal td.we{background:#e9edf3}
-  .cal th.hol,.cal td.hol{background:#e6d9fb}
-  .cal th.hol{color:#6d3fc4}
+  /* státní svátek: sytě fialový sloupec s fialovými okraji, záhlaví plné fialové */
+  .cal td.hol{background:#d6c1fa;box-shadow:inset 2px 0 0 #8b5cf6,inset -2px 0 0 #8b5cf6}
+  .cal tr.days th.hol{background:#7c4dd6;color:#fff;font-weight:800}
+  .cal tr.days th.hol .wd{color:#e6d9fb}
   .cal .mstart{border-left:2px solid #c3d0e2}
   .cal tr.days th.today{background:#f6821f;color:#fff;font-weight:800;border-radius:5px}
   .cal-inner{position:relative;width:max-content;min-width:100%}
@@ -212,7 +214,8 @@
   /* Pruh dneška = jen oranžové linky po stranách sloupce (nepřekrývá barvy nepřítomností) */
   .today-band{position:absolute;top:0;bottom:0;z-index:2;pointer-events:none;
     box-shadow:inset 3px 0 0 #e8590c,inset -3px 0 0 #e8590c}
-  .cal td.holmark{box-shadow:inset 0 3px 0 #9b6ff0}
+  /* svátek pod směnou / nepřítomností: silný fialový pruh nahoře + fialové okraje sloupce */
+  .cal td.holmark{box-shadow:inset 0 5px 0 #7c4dd6,inset 2px 0 0 #8b5cf6,inset -2px 0 0 #8b5cf6}
   /* nadpis úseku (skupiny pozic) v kalendáři */
   .cal tr.grp td{background:#e7eefb;border-top:2px solid #c3d0e2;border-bottom:1px solid #c3d0e2;height:24px}
   .cal tr.grp td.grp-name{position:sticky;left:0;z-index:3;text-align:left;padding:0 12px;font-size:11px;
@@ -358,7 +361,7 @@ const TYPES = [
   {k:'Služební cesta',  fill:'#5b9df5', short:'SC'},
 ];
 const TYPE_BY = Object.fromEntries(TYPES.map(t=>[t.k,t]));
-const HOLIDAY_FILL = '#b98cf0';
+const HOLIDAY_FILL = '#7c4dd6';
 const DEFAULT_VACATION = 25;   // výchozí nárok na dovolenou (pracovních dní za rok)
 
 const MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
