@@ -80,6 +80,9 @@
   /* každý druhý řádek jemně zelený (pruhy kvůli přehlednosti), najetý řádek modravý */
   table.utbl tbody tr:nth-child(even) td{background:#e4f2e7}
   table.utbl tbody tr:hover td,table.utbl tbody tr:hover td.stick{background:#e6eef9}
+  /* řádek, na kterém se právě pracuje (klik do něj), zůstane zvýrazněný, dokud se neklikne mimo tabulku */
+  table.utbl tbody tr.active td,table.utbl tbody tr.active td.stick{background:#fff1c7}
+  table.utbl tbody tr.active td.stick{box-shadow:inset 4px 0 0 #f6821f,1px 0 0 var(--line)}
   table.utbl thead th.stick{z-index:4}
   table.utbl select{font-size:11.5px;padding:3px 4px;width:100%;min-width:0;border:1px solid var(--line);border-radius:6px;background:#fff}
   table.utbl select.t-level{min-width:96px}
@@ -249,6 +252,7 @@ const SECTIONS = [
 ];
 
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let activeUid=null;   // zvýrazněný řádek tabulky uživatelů (klik do řádku), klik mimo tabulku ho zruší
 const badge = key => { const l=LEVEL_BY[key]||LEVEL_BY.basic; return `<span class="badge" style="background:${l.color}">${esc(l.label)}</span>`; };
 
 let me=null, myLevel='basic', myModules={}, myPositions=[], users=[], ready=false, unsub=null, toastMsg=null, toastKind='';
@@ -524,7 +528,7 @@ function view(){
     const delBtn = u.uid===me.uid
       ? `<span class="uid" title="Sebe nelze smazat">—</span>`
       : `<button class="udel" data-del="${u.uid}" data-name="${esc(u.name||u.uid)}" title="Smazat uživatele">✕</button>`;
-    return `<tr>
+    return `<tr data-uid="${esc(u.uid)}" class="${u.uid===activeUid?'active':''}">
       <td class="stick">${esc(u.name||'—')}${meMark}</td>
       <td>${cellLevel(u,rw)}</td>
       <td class="poscell">${cellPos(u,rw)}</td>
@@ -582,6 +586,16 @@ function view(){
     </div></div>
   </main>`;
 }
+
+/* Zvýraznění řádku: klik do řádku tabulky uživatelů ho označí, klik kamkoli mimo tabulku
+   zvýraznění zruší. Posluchač je na dokumentu jen jednou (wire() běží při každém překreslení),
+   stav drží activeUid, takže zvýraznění přežije i překreslení po uložení změny. */
+document.addEventListener('pointerdown', e=>{
+  const tr=e.target.closest && e.target.closest('table.utbl tbody tr[data-uid]');
+  if(!tr && e.target.closest && e.target.closest('.utblwrap')) return;   // záhlaví / posuvník tabulky — nech být
+  activeUid = tr ? tr.dataset.uid : null;
+  document.querySelectorAll('table.utbl tbody tr[data-uid]').forEach(r=>r.classList.toggle('active', r.dataset.uid===activeUid));
+});
 
 function wire(){
   document.getElementById('btn-logout')?.addEventListener('click',()=>signOut(auth));
