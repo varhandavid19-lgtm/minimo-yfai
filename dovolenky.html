@@ -264,6 +264,11 @@
   .egrid .f.span3{grid-column:span 3}
   .egrid .f label{font-size:12px;font-weight:700;color:#41506b;margin-bottom:4px;display:block}
   .dlg .b .grow1{flex:1}
+  /* potvrzení odebrání osoby z plánování (v okně, ne vyskakovací okénko prohlížeče) */
+  .delconf{margin:0 16px 12px;padding:12px 14px;border:2px solid var(--red);border-radius:10px;background:#fdecea;
+    color:#7a1d14;font-size:13px;display:flex;flex-direction:column;gap:6px}
+  .delconf-b{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+  .delconf.clearconf{margin:4px 0 0;border-color:#f6821f;background:#fff4e8;color:#7a3b06}
   @media(max-width:560px){.egrid{grid-template-columns:1fr 1fr}.egrid .f.span2,.egrid .f.span3{grid-column:span 2}}
   .dlg .t{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;padding:12px 16px;
     font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
@@ -845,8 +850,8 @@ async function clearPlanning(personId){
   const p=allUsers.find(x=>x.id===personId);
   if(!p) return;
   if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
-  if(!confirm(`Vymazat celé plánování ${p.name} od ${dCz(from)} dál?\n\nZmizí směnový rytmus i ručně zadané směny. `
-    +'Minulost, dovolené a jiné nepřítomnosti zůstanou.')) return;
+  // dva kliky: první ukáže v okně oranžové potvrzení (pdlg.confirmClear), teprve „Ano, vymazat" maže
+  if(pdlg && !pdlg.confirmClear){ pdlg.confirmClear=true; pdlg.confirmDel=false; render(); return; }
   try{
     await clearRange('shifts', p, from, '9999-12-31');
     const past=rotSegments(personId).filter(s=>s.from<from);
@@ -888,12 +893,12 @@ async function savePerson(){
     pdlg=null; render();
   }catch(e){ pdlg.msg='Nepodařilo se uložit: '+e.message; render(); }
 }
+/* Odebrání jména jde na dva kliky: první ukáže v okně červené potvrzení
+   (personDelConfirm), teprve „Ano, odebrat" maže. */
 async function removePerson(){
   const p=extPeople.find(x=>x.id===pdlg.id); if(!p) return;
   const abs=absences.filter(a=>a.personId===p.id), shs=shifts.filter(s=>s.personId===p.id);
-  if(!confirm(`Opravdu odebrat ${p.name} z plánování?`
-    +((abs.length||shs.length)?`\n\nSmaže se i ${abs.length} nepřítomností a ${shs.length} naplánovaných směn.`:'')
-    +'\n\nTohle se nedá vrátit.')) return;
+  if(!pdlg.confirmDel){ pdlg.confirmDel=true; pdlg.confirmClear=false; pdlg.msg=''; render(); return; }
   try{
     await Promise.all(abs.map(a=>deleteDoc(doc(db,'absences',a.id)))
       .concat(shs.map(s=>deleteDoc(doc(db,'shifts',s.id)))));
@@ -917,12 +922,22 @@ function personDlgView(){
       ${pdlg.id?rotationBox():''}
       ${pdlg.msg?`<div class="formfoot"><span class="msg err">${esc(pdlg.msg)}</span></div>`:''}
     </div>
+    ${pdlg.confirmDel?personDelConfirm():''}
     <div class="b">
-      ${pdlg.id?'<button class="btn-danger" id="pd-del">Odebrat osobu z plánování</button><span class="grow1"></span>':''}
+      ${pdlg.id&&!pdlg.confirmDel?'<button class="btn-danger" id="pd-del">Odebrat osobu z plánování</button>':''}<span class="grow1"></span>
       <button class="btn-ghost" id="pd-cancel">Zrušit</button>
       <button class="btn-primary" id="pd-save">Uložit</button>
     </div>
   </div></div>`;
+}
+function personDelConfirm(){
+  const abs=absences.filter(a=>a.personId===pdlg.id).length, shs=shifts.filter(s=>s.personId===pdlg.id).length;
+  return `<div class="delconf">
+    <b>⚠️ Opravdu odebrat ${esc(pdlg.name||'tuto osobu')} z plánování?</b>
+    <div>Smaže se i ${abs} nepřítomností, ${shs} ručně zadaných směn a směnový rytmus. Tohle se nedá vrátit.</div>
+    <div class="delconf-b"><button class="btn-ghost" id="pd-del-no">Ne, nechat</button>
+      <button class="btn-danger" id="pd-del-yes">Ano, odebrat</button></div>
+  </div>`;
 }
 /* Směnový rytmus na celý rok (rotace) — nastavuje se v okně jména. */
 function rotationBox(){
@@ -935,7 +950,13 @@ function rotationBox(){
     <label>🔁 Směnový rytmus na celý rok</label>
     <div class="rotrow"><select id="pd-plan">${pOpts}</select>
       <button class="btn-primary" id="pd-rot">Rozplánovat od dneška</button>
-      ${(rotSegments(pdlg.id).length||futureShifts(pdlg.id).length)?'<button class="btn-orange" id="pd-rotclear">Vymazat plánování</button>':''}</div>
+      ${(rotSegments(pdlg.id).length||futureShifts(pdlg.id).length)&&!pdlg.confirmClear?'<button class="btn-orange" id="pd-rotclear">Vymazat plánování</button>':''}</div>
+    ${pdlg.confirmClear?`<div class="delconf clearconf">
+      <b>⚠️ Opravdu vymazat celé plánování ${esc(pdlg.name||'')} od ${dCz(today())} dál?</b>
+      <div>Zmizí směnový rytmus i ${futureShifts(pdlg.id).length} ručně zadaných směn. Minulost, dovolené a jiné nepřítomnosti zůstanou. Tohle se nedá vrátit.</div>
+      <div class="delconf-b"><button class="btn-ghost" id="pd-clear-no">Ne, nechat</button>
+        <button class="btn-orange" id="pd-clear-yes">Ano, vymazat</button></div>
+    </div>`:''}
     <div class="hintmini">${cur&&cur.plan?('Nyní: <b>'+esc(ROT_PLANS[cur.plan]?ROT_PLANS[cur.plan].label:cur.plan)+'</b> od '+dCz(cur.from)+'. '):''}Minulost se nemění. Dovolené a ručně označené směny rytmus v kalendáři přebijí.</div>
   </div>`;
 }
@@ -1491,8 +1512,12 @@ function wireApp(){
     document.getElementById('pd-plan')?.addEventListener('change',e=>{pdlg.plan=e.target.value;});
     document.getElementById('pd-rot')?.addEventListener('click',()=>assignRotation(pdlg.id, document.getElementById('pd-plan').value));
     document.getElementById('pd-rotclear')?.addEventListener('click',()=>clearPlanning(pdlg.id));
+    document.getElementById('pd-clear-yes')?.addEventListener('click',()=>clearPlanning(pdlg.id));
+    document.getElementById('pd-clear-no')?.addEventListener('click',()=>{pdlg.confirmClear=false; render();});
     document.getElementById('pd-save')?.addEventListener('click',savePerson);
     document.getElementById('pd-del')?.addEventListener('click',removePerson);
+    document.getElementById('pd-del-yes')?.addEventListener('click',removePerson);
+    document.getElementById('pd-del-no')?.addEventListener('click',()=>{pdlg.confirmDel=false; render();});
     document.getElementById('pd-cancel')?.addEventListener('click',()=>{pdlg=null;render();});
     document.getElementById('pd-x')?.addEventListener('click',()=>{pdlg=null;render();});
     document.getElementById('pd-wrap')?.addEventListener('click',e=>{if(e.target.id==='pd-wrap'){pdlg=null;render();}});
