@@ -1198,7 +1198,7 @@ function modalView(){
         <input id="e-docno" value="${esc(r.docNo||'')}" placeholder="číslo dokladu"></div></label>
       <label class="span2">Komentář skladu<input id="e-skladcomment" value="${esc(r.skladComment||'')}" placeholder="nepřepíše Poznámku"></label>
     </div>
-    <div class="recvsave"><button class="btn-ok" data-a="recv-save">Uložit příjem/sklad</button></div>` : `<div class="recvgrid">
+    <div class="recvsave"><button class="btn-ok" data-a="recv-save">Uložit nákup/příjem</button></div>` : `<div class="recvgrid">
       <div><span>Req no.</span><b>${esc(r.reqNo||'—')}</b></div>
       <div><span>RFQ no.</span><b>${esc(r.rfqNo||'—')}</b></div>
       <div><span>Order no.</span><b>${esc(r.orderNo||'—')}</b></div>
@@ -1208,7 +1208,7 @@ function modalView(){
       <div><span>Doklad</span><b>${(r.docType||r.docNo)?esc(((r.docType||'')+' '+(r.docNo||'')).trim()):'—'}</b></div>
       <div class="span2"><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>
     </div>`;
-  const receiveInfo = !isNew ? `<div class="recvbox"><div class="recvh">📦 Příjem / sklad${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
+  const receiveInfo = !isNew ? `<div class="recvbox"><div class="recvh">📦 Nákup/příjem${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
   const attCan = canAttach(r);
   const attBlock = renderAttachments(r,isNew,attCan);
   const histContent = (r.hist&&r.hist.length)
@@ -2540,8 +2540,8 @@ async function act(a,v,el,ev){
       const patch={reqNo:editing.reqNo||'',rfqNo:editing.rfqNo||'',orderNo:editing.orderNo||'',dssiItem:editing.dssiItem||'',
         receivedQty:(editing.receivedQty===''||editing.receivedQty===undefined)?'':Number(editing.receivedQty),
         receivedDate:editing.receivedDate||'',docType:editing.docType||'',docNo:editing.docNo||'',skladComment:editing.skladComment||''};
-      patch.hist=(editing.hist||[]).concat(`${today()} · ${me.name} · upravil příjem/sklad`);
-      try{ await updateDoc(doc(db,'requests',rid),patch); editing.hist=patch.hist; recvEdit=false; toast('Příjem/sklad uložen.','ok'); }
+      patch.hist=(editing.hist||[]).concat(`${today()} · ${me.name} · upravil nákup/příjem`);
+      try{ await updateDoc(doc(db,'requests',rid),patch); editing.hist=patch.hist; recvEdit=false; toast('Nákup/příjem uložen.','ok'); }
       catch(e){ toast('Uložení selhalo: '+e.message,'err'); return; }
       break;
     }
