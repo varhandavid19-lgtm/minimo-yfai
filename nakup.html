@@ -89,9 +89,10 @@
   thead tr.colf input,thead tr.colf select{width:100%;min-width:0;font-size:11px;padding:4px 6px;border:1px solid #3a5a86;border-radius:5px;background:#fff;color:#16233a}
   thead tr.colf input:focus,thead tr.colf select:focus{outline:2px solid #7fb0ff;border-color:#7fb0ff}
   tbody td{padding:8px 10px;border-bottom:1px solid #eef1f5;vertical-align:top;background:var(--row,transparent)}
-  /* řádek pod myší a označený řádek (1. klik): žlutě s oranžovým proužkem vlevo — stejně jako v Nastavení */
-  tbody tr[data-a="row-pick"]:hover td,tbody tr.picked td{background:#fff1c7}
-  tbody tr[data-a="row-pick"]:hover td:first-child,tbody tr.picked td:first-child{box-shadow:inset 4px 0 0 #f6821f}
+  /* řádek pod myší a označený řádek (1. klik): FIALOVĚ — barva, kterou nepoužívá žádný stav (bílá/žlutá/oranžová/modrá/zelená/šedá/červená) */
+  tbody tr[data-a="row-pick"]:hover td{background:#ece3ff}
+  tbody tr.picked td,tbody tr.picked:hover td{background:#d9c8ff}
+  tbody tr[data-a="row-pick"]:hover td:first-child,tbody tr.picked td:first-child{box-shadow:inset 4px 0 0 #7c4dd6}
   tr.crit td{background:#f8d2ce}
   tr.crit td:first-child{box-shadow:inset 4px 0 0 var(--red)}
   .legend{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:9px 13px;border-bottom:1px solid var(--line);background:#fff;font-size:11px;color:var(--muted)}
