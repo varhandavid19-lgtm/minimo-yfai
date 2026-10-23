@@ -1216,7 +1216,7 @@ function modalView(){
     : `<div class="attempty">Zatím žádné záznamy v historii.</div>`;
   const tabbar = !isNew ? `<div class="mtabs">
       <button class="mtab ${modalTab==='pozadavek'?'on':''}" data-a="mtab" data-v="pozadavek">Požadavek</button>
-      <button class="mtab ${modalTab==='prijem'?'on':''}" data-a="mtab" data-v="prijem">Příjem / Sklad</button>
+      <button class="mtab ${modalTab==='prijem'?'on':''}" data-a="mtab" data-v="prijem">Nákup/příjem</button>
       <button class="mtab ${modalTab==='prilohy'?'on':''}" data-a="mtab" data-v="prilohy">Přílohy${(r.files&&r.files.length)?` (${r.files.length})`:''}</button>
       <button class="mtab ${modalTab==='historie'?'on':''}" data-a="mtab" data-v="historie">Historie</button>
     </div>` : '';
