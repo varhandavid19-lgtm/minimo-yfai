@@ -89,7 +89,9 @@
   thead tr.colf input,thead tr.colf select{width:100%;min-width:0;font-size:11px;padding:4px 6px;border:1px solid #3a5a86;border-radius:5px;background:#fff;color:#16233a}
   thead tr.colf input:focus,thead tr.colf select:focus{outline:2px solid #7fb0ff;border-color:#7fb0ff}
   tbody td{padding:8px 10px;border-bottom:1px solid #eef1f5;vertical-align:top;background:var(--row,transparent)}
-  tbody tr:hover td{filter:brightness(.975)}
+  /* řádek pod myší a označený řádek (1. klik): žlutě s oranžovým proužkem vlevo — stejně jako v Nastavení */
+  tbody tr[data-a="row-pick"]:hover td,tbody tr.picked td{background:#fff1c7}
+  tbody tr[data-a="row-pick"]:hover td:first-child,tbody tr.picked td:first-child{box-shadow:inset 4px 0 0 #f6821f}
   tr.crit td{background:#f8d2ce}
   tr.crit td:first-child{box-shadow:inset 4px 0 0 var(--red)}
   .legend{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:9px 13px;border-bottom:1px solid var(--line);background:#fff;font-size:11px;color:var(--muted)}
@@ -601,6 +603,7 @@ let dlg=null, toastMsg=null, toastKind='', drafts={};
 let loginBusy=false, loginErr='';
 let qrOpen=false, qr=null;   // stav QR skeneru
 let manage={on:false};                                        // režim „Správa požadavků" (jen skladník/admin)
+let pickedReq=null;                                          // označený řádek tabulky (1. klik), 2. klik ho otevře
 let mgrSel=new Set();                                          // vybrané řádky (_id)
 let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
 let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
@@ -998,7 +1001,7 @@ function listView(){
       ${rr.length?rr.map(r=>{
         const late=r.datum&&r.datum<today()&&!['doručeno','zamítnuto'].includes(r.status);
         const crit=r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status);
-        return `<tr class="${crit?'crit':''} ${manage.on&&mgrSel.has(r._id)?'rowsel':''}" style="--row:${ROW_TINT[r.status]||'#fff'};cursor:pointer" data-a="open" data-v="${r._id}" title="Otevřít detail">
+        return `<tr class="${crit?'crit':''} ${manage.on&&mgrSel.has(r._id)?'rowsel':''} ${pickedReq===r._id?'picked':''}" style="--row:${ROW_TINT[r.status]||'#fff'};cursor:pointer" data-a="row-pick" data-v="${r._id}" title="Klikni pro označení, dalším klikem otevřeš detail">
           ${manage.on?`<td class="selcol" data-label="Vybrat" onclick="event.stopPropagation()"><input type="checkbox" data-a="mgr-selrow" data-v="${r._id}" ${mgrSel.has(r._id)?'checked':''}></td>`:''}
           <td data-col="status" data-label="Stav">${badge(r.status,STATUSES)}</td>
           <td data-col="poradove" data-label="Č. požadavku"><b>${esc(r.poradove||'—')}</b></td>
@@ -2229,6 +2232,14 @@ async function updateRequest(){
 /* ==========================================================
    BIND + AKCE
    ========================================================== */
+/* Klik kamkoli mimo tabulku požadavků (a mimo otevřené okno) zruší označení řádku.
+   Posluchač je na dokumentu jen jednou; stav drží pickedReq, takže označení přežije překreslení. */
+document.addEventListener("pointerdown", e=>{
+  if(!pickedReq || !e.target.closest) return;
+  if(e.target.closest("#tblwrap, #tbltop, .overlay")) return;
+  pickedReq=null;
+  document.querySelectorAll("tr.picked").forEach(r=>r.classList.remove("picked"));
+});
 function bind(){
   const ov=document.querySelector('.overlay[data-a="close-bg"]');
   if(ov) ov.addEventListener('mousedown',e=>{ downOnOverlay=(e.target===ov); });
@@ -2312,6 +2323,12 @@ async function act(a,v,el,ev){
   if(isNakupRO() && WRITE_ACTIONS.has(a)){ toast('Tento modul máte jen pro čtení.','err'); return; }
   switch(a){
     case 'reload': location.reload(); return;
+    // řádek tabulky: 1. klik ho označí (žlutě), 2. klik na tentýž řádek otevře detail
+    case 'row-pick':
+      if(pickedReq!==v){ pickedReq=v;
+        document.querySelectorAll('tr[data-a="row-pick"]').forEach(r=>r.classList.toggle('picked', r.dataset.v===pickedReq));
+        return; }
+      return act('open',v,el,ev);
     case 'login':{
       const email=(document.getElementById('lg-user').value||'').trim();
       const pass=document.getElementById('lg-pass').value||'';

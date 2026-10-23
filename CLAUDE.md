@@ -590,6 +590,9 @@ Přehled všech 5× proč / A3 z kolekce `problems`.
   Nepřeváděj na obyčejný zápis — jinak dva lidé naráz dostanou stejné číslo.
 - Logo „YFAI minimo“ v hlavičce je inline SVG ve funkci `logoSvg()`. Neodstraňuj.
 - Podbarvení řádků tabulky podle stavu (nový = bílý). Neruš bez vyžádání.
+- Řádek tabulky požadavků (`row-pick`, David, 10/2026): 1. klik ho označí žlutě
+  (`pickedReq`), 2. klik na tentýž řádek otevře detail; klik mimo tabulku označení zruší.
+  Řádek pod myší je žlutý taky (stejně jako tabulka uživatelů v Nastavení).
 
 ### Když server zamítne zápis
 Chyby zápisu prohání `writeHint(e)`. Místo anglického „Missing or insufficient
