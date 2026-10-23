@@ -835,6 +835,27 @@ async function clearRotation(personId, from){
     toast('Rytmus ukončen od '+dCz(from)+'. Co bylo předtím, zůstalo beze změny.','ok'); pdlg=null; sel=null; render();
   }catch(e){ toast('Nepodařilo se zrušit: '+e.message,'err'); }
 }
+/* „Vymazat plánování" v okně jména: od dneška dál zmizí rytmus I ručně zadané směny.
+   Minulost, nepřítomnosti (dovolené…) a poznámky zůstanou. */
+const futureShifts = personId => shifts.filter(s=>s.personId===personId && s.to>=today());
+async function clearPlanning(personId){
+  const from=today();
+  const p=allUsers.find(x=>x.id===personId);
+  if(!p) return;
+  if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
+  if(!confirm(`Vymazat celé plánování ${p.name} od ${dCz(from)} dál?\n\nZmizí směnový rytmus i ručně zadané směny. `
+    +'Minulost, dovolené a jiné nepřítomnosti zůstanou.')) return;
+  try{
+    await clearRange('shifts', p, from, '9999-12-31');
+    const past=rotSegments(personId).filter(s=>s.from<from);
+    if(past.length){   // co bylo před dneškem, zůstane, od dneška rytmus končí
+      await setDoc(doc(db,'rotations',personId),{segments:past.concat([{plan:'',from}]), by:me.email, at:serverTimestamp()});
+    }else if(rotById[personId]){
+      await deleteDoc(doc(db,'rotations',personId));
+    }
+    toast('Plánování vymazáno od '+dCz(from)+'. Minulost a nepřítomnosti zůstaly.','ok'); pdlg=null; sel=null; render();
+  }catch(e){ toast('Nepodařilo se vymazat: '+e.message,'err'); }
+}
 
 /* ---- Jména bez účtu ----
    Ne každý, koho plánujeme, má v minimu účet. Takové jméno se vepíše přímo tady
@@ -912,7 +933,7 @@ function rotationBox(){
     <label>🔁 Směnový rytmus na celý rok</label>
     <div class="rotrow"><select id="pd-plan">${pOpts}</select>
       <button class="btn-primary" id="pd-rot">Rozplánovat od dneška</button>
-      ${rotSegments(pdlg.id).length?'<button class="btn-ghost" id="pd-rotclear">Ukončit rytmus</button>':''}</div>
+      ${(rotSegments(pdlg.id).length||futureShifts(pdlg.id).length)?'<button class="btn-ghost" id="pd-rotclear">Vymazat plánování</button>':''}</div>
     <div class="hintmini">${cur&&cur.plan?('Nyní: <b>'+esc(ROT_PLANS[cur.plan]?ROT_PLANS[cur.plan].label:cur.plan)+'</b> od '+dCz(cur.from)+'. '):''}Minulost se nemění. Dovolené a ručně označené směny rytmus v kalendáři přebijí.</div>
   </div>`;
 }
@@ -1467,7 +1488,7 @@ function wireApp(){
     document.getElementById('pd-pos')?.addEventListener('change',e=>{pdlg.pos=e.target.value;});
     document.getElementById('pd-plan')?.addEventListener('change',e=>{pdlg.plan=e.target.value;});
     document.getElementById('pd-rot')?.addEventListener('click',()=>assignRotation(pdlg.id, document.getElementById('pd-plan').value));
-    document.getElementById('pd-rotclear')?.addEventListener('click',()=>clearRotation(pdlg.id));
+    document.getElementById('pd-rotclear')?.addEventListener('click',()=>clearPlanning(pdlg.id));
     document.getElementById('pd-save')?.addEventListener('click',savePerson);
     document.getElementById('pd-del')?.addEventListener('click',removePerson);
     document.getElementById('pd-cancel')?.addEventListener('click',()=>{pdlg=null;render();});

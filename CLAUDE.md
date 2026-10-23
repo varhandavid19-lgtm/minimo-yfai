@@ -78,6 +78,8 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   nepřekresluje (`dragging`). Směnový rytmus na rok (rotace) jde nastavit v okně
   jména (od dneška) i v liště výběru (řádek Rytmus, od prvního označeného dne,
   `rotRowView`). Do minulosti NE — `assignRotation`/`clearRotation` to odmítnou.
+  Tlačítko **„Vymazat plánování"** v okně jména (`clearPlanning`, David, 10/2026) smaže
+  od dneška dál rytmus I ručně zadané směny; minulost, nepřítomnosti a poznámky zůstanou.
   Nevracej horní formuláře.
   **Poznámka ke dni** (nezávislá na směně i nepřítomnosti): řádek Poznámka v liště
   + „💾 Uložit poznámku" (`saveDayNote`) → v dokumentu jména v `people` pole
