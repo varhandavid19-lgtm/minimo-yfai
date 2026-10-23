@@ -412,6 +412,10 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
   záložku: „Blíží se termín" po uplynutí 1/3 a 2/3 doby od `createdOn` do `due`
   — každá připomínka jednou, server ji značí do pole `remind:{t1,t2}` — a „Po
   termínu"). `LISTS` ve funkcích musí odpovídat `LISTS` v lama.html.
+- **Okénka nahoře (Nové / V řešení / Po termínu / Hotovo) jsou filtr stavu**
+  (`CARDS`, `f.card`): klik zobrazí jen ty úkoly, druhý klik filtr zruší, Hotovo
+  ukáže hotové i při „skrýt hotové". Rozbalovátko „Všechny stavy" je zrušené —
+  nevracej ho.
 - **Řazení tabulky** kliknutím na záhlaví (`COLS`, stav `sortBy`): 1. klik podle
   `first` (termín od nejbližšího, priorita od kritické, data a číslo od nejnovějšího,
   text A–Z), 2. klik obráceně, 3. klik zpět na výchozí řazení v `visible()`.

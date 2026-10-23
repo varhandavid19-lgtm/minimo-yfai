@@ -51,6 +51,12 @@
   .kcard .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
   .kcard .val{font-size:23px;font-weight:800;margin:3px 0 1px}
   .kcard .note{font-size:11px;color:var(--muted)}
+  /* okénka jsou zároveň filtr stavu */
+  button.kcard{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+    transition:box-shadow .12s,transform .12s}
+  button.kcard:hover{box-shadow:0 6px 16px rgba(15,47,95,.12);transform:translateY(-1px)}
+  button.kcard.on{background:#e4f2f2;border-color:var(--teal);box-shadow:0 0 0 2px var(--teal) inset}
+  button.kcard.on .lbl{color:var(--teal-dark)}
 
   .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid transparent;white-space:nowrap}
   .b-blue{background:#eef4fc;color:var(--blue);border-color:#cfe0f5}
@@ -289,7 +295,15 @@ let me=null, loginBusy=false, loginErr='';
 let items=[], loaded=false, busy='', errMsg='';
 let open=null, oMsg='', pending=[];
 let ntf=null, nMsg='';              // okno ✉️ Notifikace (jen správce): kopie meta/lamacfg.notify
-let f={area:'',status:'',priority:'',q:''};
+let f={area:'',card:'',priority:'',q:''};
+/* Okénka nahoře jsou zároveň filtr stavu: klik zobrazí jen ty úkoly, druhý klik filtr zruší.
+   Samostatné rozbalovátko „Všechny stavy" je pryč (David, 10/2026). */
+const CARDS=[
+  {k:'new',  l:'Nové',       note:()=> 'čeká na převzetí', color:()=>'#2563a8', test:t=>t.status==='nový'},
+  {k:'wip',  l:'V řešení',   note:()=> 'rozpracováno',     color:()=>'#b7791f', test:t=>t.status==='v řešení'},
+  {k:'late', l:'Po termínu', note:n=> n?'řeš hned':'všechno v termínu', color:n=>n?'#c0392b':'#1f9254', test:t=>isLate(t)},
+  {k:'done', l:'Hotovo',     note:(n,L)=>`celkem ${L.length} úkolů`,     color:()=>'#1f9254', test:t=>isDone(t)}
+];
 let curList='agency';               // otevřená záložka (pamatuje si ji prohlížeč)
 try{ const s=localStorage.getItem('lama-list'); if(LISTS.some(l=>l.k===s)) curList=s; }catch(e){}
 const listItems = () => items.filter(t=>listOf(t)===curList);
@@ -515,9 +529,10 @@ async function removeFile(i){
 function visible(){
   let r=listItems();
   if(f.area)   r=r.filter(t=>t.area===f.area);
-  if(f.status) r=r.filter(t=>t.status===f.status);
+  const card=CARDS.find(c=>c.k===f.card);
+  if(card) r=r.filter(card.test);
   if(f.priority) r=r.filter(t=>prioOf(t).k===f.priority);
-  if(hideDone) r=r.filter(t=>!isDone(t));
+  if(hideDone && f.card!=='done') r=r.filter(t=>!isDone(t));   // okénko Hotovo ukáže hotové vždy
   const q=f.q.trim().toLowerCase();
   if(q) r=r.filter(t=>[t.no,t.task,t.area,t.note,t.createdBy]
     .some(v=>String(v||'').toLowerCase().includes(q)));
@@ -556,15 +571,10 @@ function listView(){
   const areas=[...new Set(AREAS.concat(items.map(t=>t.area)))].filter(Boolean);
   return `
   ${tabsView()}
-  <div class="cards">
-    <div class="kcard" style="border-left-color:#2563a8"><div class="lbl">Nové</div>
-      <div class="val">${L.filter(t=>t.status==='nový').length}</div><div class="note">čeká na převzetí</div></div>
-    <div class="kcard" style="border-left-color:#b7791f"><div class="lbl">V řešení</div>
-      <div class="val">${L.filter(t=>t.status==='v řešení').length}</div><div class="note">rozpracováno</div></div>
-    <div class="kcard" style="border-left-color:${late.length?'#c0392b':'#1f9254'}"><div class="lbl">Po termínu</div>
-      <div class="val">${late.length}</div><div class="note">${late.length?'řeš hned':'všechno v termínu'}</div></div>
-    <div class="kcard" style="border-left-color:#1f9254"><div class="lbl">Hotovo</div>
-      <div class="val">${L.filter(isDone).length}</div><div class="note">celkem ${L.length} úkolů</div></div>
+  <div class="cards">${CARDS.map(c=>{ const n=L.filter(c.test).length, on=f.card===c.k;
+    return `<button class="kcard${on?' on':''}" data-a="card" data-v="${c.k}" style="border-left-color:${c.color(n)}"
+      title="${on?'Zrušit filtr':'Zobrazit jen: '+esc(c.l)}">
+      <div class="lbl">${esc(c.l)}${on?' · filtr ✕':''}</div><div class="val">${n}</div><div class="note">${esc(c.note(n,L))}</div></button>`; }).join('')}
   </div>
 
   <div class="panel">
@@ -573,7 +583,6 @@ function listView(){
       ${canWrite()?`<button class="btn-teal" data-a="new">+ Nový úkol</button>`:''}
       <input class="grow" id="lm-q" placeholder="Hledat v úkolu, poznámce, oblasti…" value="${esc(f.q)}">
       <select id="lm-farea"><option value="">Všechny oblasti</option>${areas.map(a=>`<option ${f.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
-      <select id="lm-fstatus"><option value="">Všechny stavy</option>${STATUS.map(s=>`<option ${f.status===s.k?'selected':''}>${s.k}</option>`).join('')}</select>
       <select id="lm-fprio"><option value="">Všechny priority</option>${PRIORITIES.map(p=>`<option ${f.priority===p.k?'selected':''}>${p.k}</option>`).join('')}</select>
       <label class="check"><input type="checkbox" id="lm-hide" ${hideDone?'checked':''}> skrýt hotové</label>
       <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
@@ -800,7 +809,7 @@ function bind(){
   const q=document.getElementById('lm-q');
   if(q) q.oninput=()=>{ f.q=q.value; const p=q.selectionStart; render();
     const n=document.getElementById('lm-q'); if(n){ n.focus(); try{n.setSelectionRange(p,p);}catch(e){} } };
-  for(const [id,key] of [['lm-farea','area'],['lm-fstatus','status'],['lm-fprio','priority']]){
+  for(const [id,key] of [['lm-farea','area'],['lm-fprio','priority']]){
     const el=document.getElementById(id); if(el) el.onchange=()=>{ f[key]=el.value; render(); };
   }
   const hc=document.getElementById('lm-hide'); if(hc) hc.onchange=()=>{ hideDone=hc.checked; render(); };
@@ -814,6 +823,7 @@ function bind(){
 async function act(a,v){
   switch(a){
     case 'reload': loaded=false; await load(true); return;
+    case 'card': f.card = (f.card===v ? '' : v); break;   // druhý klik filtr zruší
     case 'sort':{
       const c=COLS.find(x=>x.k===v); if(!c) return;
       if(!sortBy || sortBy.k!==v) sortBy={k:v, dir:c.first};
