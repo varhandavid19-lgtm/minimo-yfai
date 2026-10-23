@@ -656,6 +656,10 @@ function dashPreset(){ if(!dashRange.od&&!dashRange.do) return 'all';
   if(dashRange.od===y.od&&dashRange.do===y.do) return 'year';
   return ''; }
 const dateCz = d => d ? String(d).slice(0,10).split('-').reverse().map(x=>String(Number(x))).join('. ')+'.' : '—';
+/* Od tohoto data založení má box Nákup/příjem nová pole (Nabídka, Req.č., Objednávka QAD, Order no. /
+   Dodací list/servisní výkaz, Datum přijetí, Přijímané množství, Komentář). Starší požadavky beze změny. */
+const RECV2_FROM = '2026-10-26';
+const isRecv2 = r => !!r && String(r.created||'') >= RECV2_FROM;
 const acc = c => (cfg?.accounts||[]).find(a=>a.code===c);
 const accName = c => (acc(c)||{}).name || '';
 const accLabel = c => c ? (accName(c)?c+' — '+accName(c):c) : '';
@@ -1191,7 +1195,7 @@ function modalView(){
       : (me.role==='schvalovatel'
       ? `<div class="robar">Jako schvalovatel požadavek neupravuješ — rozhoduješ o něm tlačítky dole. Změny údajů zadej skladu.</div>`
       : `<div class="robar">Požadavek je jen ke čtení. Změnu domluv se skladem.</div>`);
-  const hasRecv = !isNew && (r.reqNo||r.rfqNo||r.orderNo||r.dssiItem||r.receivedDate||r.docType||r.docNo||r.skladComment||(r.receivedQty!==undefined&&r.receivedQty!==''));
+  const hasRecv = !isNew && (r.reqNo||r.rfqNo||r.orderNo||r.dssiItem||r.receivedDate||r.docType||r.docNo||r.skladComment||r.offerNo||r.qadOrder||r.dlNo||(r.receivedQty!==undefined&&r.receivedQty!==''));
   const recvEditable = !isNew && P().edit;                 // přepsat req. čísla smí jen skladník/admin
   const showRecv = hasRecv || recvEditable;
   // box Nákup/příjem má dvě poloviny: vlevo NÁKUP (čísla requestu/poptávky/objednávky), vpravo PŘÍJEM
@@ -1199,7 +1203,28 @@ function modalView(){
       <div class="recvcol"><h4>Nákup</h4><div class="recvgrid ${cls}">${nakup}</div></div>
       <div class="recvcol"><h4>Příjem</h4><div class="recvgrid ${cls}">${prijem}</div></div>
     </div>`;
-  const recvBody = (recvEdit && recvEditable) ? recvCols(`
+  // Požadavky založené od RECV2_FROM mají jiná pole (David, 10/2026); starší zůstávají beze změny.
+  // Společná pole (reqNo, orderNo, receivedQty, receivedDate, skladComment) jsou stejná data, jen jinak pojmenovaná.
+  const qtyView = (r.receivedQty!==undefined&&r.receivedQty!=='')?esc(r.receivedQty)+' / '+esc(r.mnozstvi||0)+' ks':'—';
+  const recvBody = isRecv2(r) ? ((recvEdit && recvEditable) ? recvCols(`
+      <label>Nabídka<input id="e-offer" value="${esc(r.offerNo||'')}"></label>
+      <label>Req.č.<input id="e-reqno" value="${esc(r.reqNo||'')}"></label>
+      <label>Objednávka QAD<input id="e-qad" value="${esc(r.qadOrder||'')}"></label>
+      <label>Order no.<input id="e-orderno" value="${esc(r.orderNo||'')}"></label>`,`
+      <label>Dodací list/servisní výkaz<input id="e-dl" value="${esc(r.dlNo||'')}"></label>
+      <label>Datum přijetí<input id="e-recvdate" type="date" value="${esc(r.receivedDate||'')}"></label>
+      <label>Přijímané množství<input id="e-recvqty" type="number" min="0" step="1" value="${esc((r.receivedQty===undefined||r.receivedQty==='')?'':r.receivedQty)}"></label>
+      <label>Komentář<input id="e-skladcomment" value="${esc(r.skladComment||'')}" placeholder="nepřepíše Poznámku"></label>`,'recvedit')
+    + `<div class="recvsave"><button class="btn-ok" data-a="recv-save">Uložit nákup/příjem</button></div>` : recvCols(`
+      <div><span>Nabídka</span><b>${esc(r.offerNo||'—')}</b></div>
+      <div><span>Req.č.</span><b>${esc(r.reqNo||'—')}</b></div>
+      <div><span>Objednávka QAD</span><b>${esc(r.qadOrder||'—')}</b></div>
+      <div><span>Order no.</span><b>${esc(r.orderNo||'—')}</b></div>`,`
+      <div><span>Dodací list/servisní výkaz</span><b>${esc(r.dlNo||'—')}</b></div>
+      <div><span>Datum přijetí</span><b>${r.receivedDate?esc(dateCz(r.receivedDate)):'—'}</b></div>
+      <div><span>Přijímané množství</span><b>${qtyView}</b></div>
+      <div><span>Komentář</span><b>${esc(r.skladComment||'—')}</b></div>`,''))
+    : (recvEdit && recvEditable) ? recvCols(`
       <label>Req no.<input id="e-reqno" value="${esc(r.reqNo||'')}"></label>
       <label>RFQ no.<input id="e-rfqno" value="${esc(r.rfqNo||'')}"></label>
       <label>Order no.<input id="e-orderno" value="${esc(r.orderNo||'')}"></label>
@@ -1462,10 +1487,12 @@ function collect(){
   Object.keys(set).forEach(k=>{if(set[k]!==undefined)editing[k]=set[k];});
   const ns=document.getElementById('e-newstock'); if(ns) editing.newStock=ns.checked;
   // editace sekce Příjem/sklad (jen pokud jsou její pole na stránce)
+  // — čte se jen pole, které na stránce opravdu je (staré a nové rozložení mají jiná pole)
   if(document.getElementById('e-reqno')){
-    editing.reqNo=g('e-reqno')||''; editing.rfqNo=g('e-rfqno')||''; editing.orderNo=g('e-orderno')||''; editing.dssiItem=g('e-dssi')||'';
-    const rq=g('e-recvqty'); editing.receivedQty=(rq===''||rq===undefined)?'':Number(rq);
-    editing.receivedDate=g('e-recvdate')||''; editing.docType=g('e-doctype')||''; editing.docNo=g('e-docno')||''; editing.skladComment=g('e-skladcomment')||'';
+    const rv={reqNo:'e-reqno',rfqNo:'e-rfqno',orderNo:'e-orderno',dssiItem:'e-dssi',receivedDate:'e-recvdate',docType:'e-doctype',
+      docNo:'e-docno',skladComment:'e-skladcomment',offerNo:'e-offer',qadOrder:'e-qad',dlNo:'e-dl'};
+    Object.entries(rv).forEach(([k,id])=>{ const v=g(id); if(v!==undefined) editing[k]=v||''; });
+    const rq=g('e-recvqty'); if(rq!==undefined) editing.receivedQty=(rq==='')?'':Number(rq);
   }
   // editace boxu Dodavatel (jen pokud jsou jeho pole na stránce)
   if(document.getElementById('e-sup-name')){
@@ -2581,7 +2608,8 @@ async function act(a,v,el,ev){
       const rid=editing._id;
       const patch={reqNo:editing.reqNo||'',rfqNo:editing.rfqNo||'',orderNo:editing.orderNo||'',dssiItem:editing.dssiItem||'',
         receivedQty:(editing.receivedQty===''||editing.receivedQty===undefined)?'':Number(editing.receivedQty),
-        receivedDate:editing.receivedDate||'',docType:editing.docType||'',docNo:editing.docNo||'',skladComment:editing.skladComment||''};
+        receivedDate:editing.receivedDate||'',docType:editing.docType||'',docNo:editing.docNo||'',skladComment:editing.skladComment||'',
+        offerNo:editing.offerNo||'',qadOrder:editing.qadOrder||'',dlNo:editing.dlNo||''};   // nová pole (požadavky od 26. 10. 2026)
       patch.hist=(editing.hist||[]).concat(`${today()} · ${me.name} · upravil nákup/příjem`);
       try{ await updateDoc(doc(db,'requests',rid),patch); editing.hist=patch.hist; recvEdit=false; toast('Nákup/příjem uložen.','ok'); }
       catch(e){ toast('Uložení selhalo: '+e.message,'err'); return; }

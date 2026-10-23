@@ -604,6 +604,11 @@ Přehled všech 5× proč / A3 z kolekce `problems`.
   a pod ním box **„🏢 Dodavatel“** (David, 10/2026) — `dodavatel` (TOTÉŽ pole jako v záložce
   Požadavek), `supplierNo`, `supplierIco` (IČO/DIČ), `supplierDue` (splatnost faktur, text).
   Oba boxy edituje jen skladník/admin (`P().edit`), každý má vlastní Editace/Uložit.
+  **Požadavky založené od 26. 10. 2026** (`RECV2_FROM`, `isRecv2(r)` podle `created`) mají v boxu
+  jiná pole: Nákup = Nabídka (`offerNo`), Req.č. (`reqNo`), Objednávka QAD (`qadOrder`), Order no.
+  (`orderNo`); Příjem = Dodací list/servisní výkaz (`dlNo`), Datum přijetí, Přijímané množství
+  (`receivedQty`), Komentář (`skladComment`). Starší požadavky mají původní pole — neměnit je.
+  `collect()` čte jen pole, která jsou na stránce, jinak by uložení smazalo pole druhého rozložení.
 
 ### Když server zamítne zápis
 Chyby zápisu prohání `writeHint(e)`. Místo anglického „Missing or insufficient
