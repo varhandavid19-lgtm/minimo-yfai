@@ -600,6 +600,10 @@ Přehled všech 5× proč / A3 z kolekce `problems`.
 - Řádek tabulky požadavků (`row-pick`, David, 10/2026): 1. klik ho označí žlutě
   (`pickedReq`), 2. klik na tentýž řádek otevře detail; klik mimo tabulku označení zruší.
   Řádek pod myší je žlutý taky (stejně jako tabulka uživatelů v Nastavení).
+- Detail požadavku, záložka **Nákup/příjem**: box „📦 Nákup/příjem“ (req./RFQ/order no., příjem)
+  a pod ním box **„🏢 Dodavatel“** (David, 10/2026) — `dodavatel` (TOTÉŽ pole jako v záložce
+  Požadavek), `supplierNo`, `supplierIco` (IČO/DIČ), `supplierDue` (splatnost faktur, text).
+  Oba boxy edituje jen skladník/admin (`P().edit`), každý má vlastní Editace/Uložit.
 
 ### Když server zamítne zápis
 Chyby zápisu prohání `writeHint(e)`. Místo anglického „Missing or insufficient

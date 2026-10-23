@@ -607,6 +607,7 @@ let manage={on:false};                                        // režim „Sprá
 let pickedReq=null;                                          // označený řádek tabulky (1. klik), 2. klik ho otevře
 let mgrSel=new Set();                                          // vybrané řádky (_id)
 let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:''};  // políčka panelu správy
+let supEdit=false;                                            // editace boxu Dodavatel v detailu požadavku
 let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
 let uploadBusy=false;                                         // právě se nahrává příloha
 let downOnOverlay=false;                                      // stisk myši začal na ztmavené ploše (kvůli zavírání kliknutím vedle)
@@ -1209,6 +1210,21 @@ function modalView(){
       <div class="span2"><span>Komentář skladu</span><b>${esc(r.skladComment||'—')}</b></div>
     </div>`;
   const receiveInfo = !isNew ? `<div class="recvbox"><div class="recvh">📦 Nákup/příjem${recvEditable?`<button class="recv-editbtn" data-a="recv-edit">${recvEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${recvBody}</div>` : '';
+  // Dodavatel (pod Nákup/příjem): jméno je TOTÉŽ pole `dodavatel` jako v záložce Požadavek,
+  // k němu číslo dodavatele, IČO/DIČ a splatnost faktur. Upravuje skladník/admin jako příjem.
+  const supBody = (supEdit && recvEditable) ? `<div class="recvgrid recvedit">
+      <label>Dodavatel<input id="e-sup-name" value="${esc(r.dodavatel||'')}"></label>
+      <label>Číslo dodavatele<input id="e-sup-no" value="${esc(r.supplierNo||'')}"></label>
+      <label>IČO/DIČ<input id="e-sup-ico" value="${esc(r.supplierIco||'')}"></label>
+      <label>Splatnost faktur<input id="e-sup-due" value="${esc(r.supplierDue||'')}" placeholder="např. 30 dní"></label>
+    </div>
+    <div class="recvsave"><button class="btn-ok" data-a="sup-save">Uložit dodavatele</button></div>` : `<div class="recvgrid">
+      <div><span>Dodavatel</span><b>${esc(r.dodavatel||'—')}</b></div>
+      <div><span>Číslo dodavatele</span><b>${esc(r.supplierNo||'—')}</b></div>
+      <div><span>IČO/DIČ</span><b>${esc(r.supplierIco||'—')}</b></div>
+      <div><span>Splatnost faktur</span><b>${esc(r.supplierDue||'—')}</b></div>
+    </div>`;
+  const supplierInfo = !isNew ? `<div class="recvbox"><div class="recvh">🏢 Dodavatel${recvEditable?`<button class="recv-editbtn" data-a="sup-edit">${supEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${supBody}</div>` : '';
   const attCan = canAttach(r);
   const attBlock = renderAttachments(r,isNew,attCan);
   const histContent = (r.hist&&r.hist.length)
@@ -1222,7 +1238,7 @@ function modalView(){
     </div>` : '';
   let content;
   if(isNew) content = `${roleBar}<div class="form">${body}</div>${attBlock}`;
-  else if(modalTab==='prijem') content = receiveInfo;
+  else if(modalTab==='prijem') content = receiveInfo + supplierInfo;
   else if(modalTab==='prilohy') content = attBlock;
   else if(modalTab==='historie') content = histContent;
   else content = `${roleBar}<div class="form">${body}</div>`;
@@ -1440,6 +1456,11 @@ function collect(){
     editing.reqNo=g('e-reqno')||''; editing.rfqNo=g('e-rfqno')||''; editing.orderNo=g('e-orderno')||''; editing.dssiItem=g('e-dssi')||'';
     const rq=g('e-recvqty'); editing.receivedQty=(rq===''||rq===undefined)?'':Number(rq);
     editing.receivedDate=g('e-recvdate')||''; editing.docType=g('e-doctype')||''; editing.docNo=g('e-docno')||''; editing.skladComment=g('e-skladcomment')||'';
+  }
+  // editace boxu Dodavatel (jen pokud jsou jeho pole na stránce)
+  if(document.getElementById('e-sup-name')){
+    editing.dodavatel=g('e-sup-name')||''; editing.supplierNo=g('e-sup-no')||'';
+    editing.supplierIco=g('e-sup-ico')||''; editing.supplierDue=g('e-sup-due')||'';
   }
 }
 function recalc(){
@@ -2315,7 +2336,7 @@ function syncTopScroll(){
     window.addEventListener('resize',()=>{ const t=document.getElementById('tbltop-inner'), w=document.getElementById('tblwrap'); const tb=w&&w.querySelector('table'); if(t&&tb) t.style.width=tb.scrollWidth+'px'; }); }
 }
 
-const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save','upload-file','del-file','import-file','import-confirm',
+const WRITE_ACTIONS=new Set(['new','save','del','dup','poptat','approve','reject','mgr-apply','mgr-receive','recv-save','sup-save','upload-file','del-file','import-file','import-confirm',
   'ireq-open','ireq-file','ireq-create',
   'add-user','add-sec','del-sec','add-mach','del-mach','add-acc','del-acc','acc-name','add-cc','del-cc','cc-name','save-rates','req',
   'user-role','user-name','user-email','user-phone','user-team']);
@@ -2369,14 +2390,14 @@ async function act(a,v,el,ev){
     case 'new':
       editing={status:'nový',typ:'Nový požadavek',poradove:'',sklad:'',popis:'',duvod:'',priorita:'běžná',mnozstvi:1,jednotka:'ks',cena:'',mena:'CZK',
         dodavatel:'',vyrobce:'',ucet:'',costcenter:'',usek:'',stroj:'',datum:'',min:0,max:0,newStock:false,url:'',notifyEmail:'',poznamka:''};
-      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; uploadBusy=false; errs={};footMsg='';break;
+      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; supEdit=false; uploadBusy=false; errs={};footMsg='';break;
     case 'open':{ editing=JSON.parse(JSON.stringify(rows.find(r=>r._id===v)));
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
-      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; uploadBusy=false; errs={};footMsg='';break;}
+      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; supEdit=false; uploadBusy=false; errs={};footMsg='';break;}
     case 'dup':{const s=rows.find(r=>r._id===v);
       editing=Object.assign(JSON.parse(JSON.stringify(s)),{_id:null,poradove:'',status:'nový',datum:'',approvedBy:null,approvedAt:null,hist:[],files:[]});
       if(editing.newStock===undefined) editing.newStock=(Number(editing.min)||0)>0||(Number(editing.max)||0)>0;
-      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; uploadBusy=false; errs={};footMsg='';break;}
+      modalTab='pozadavek'; pendingFiles=[]; recvEdit=false; supEdit=false; uploadBusy=false; errs={};footMsg='';break;}
 
     /* --- + Import požadavků (nabídka → víc požadavků najednou) --- */
     case 'ireq-open':
@@ -2490,7 +2511,7 @@ async function act(a,v,el,ev){
       // zavřít pozadím jen když stisk i puštění bylo na pozadí (ne tažení myší z okna ven při označování textu)
       if(a==='close-bg'&&(!downOnOverlay||(ev&&ev.target!==el))){ downOnOverlay=false; return; }
       downOnOverlay=false;
-      stopQr(); qrOpen=false; editing=null;recvEdit=false;uploadBusy=false;modalTab='pozadavek';pendingFiles=[];errs={};footMsg='';break;
+      stopQr(); qrOpen=false; editing=null;recvEdit=false;supEdit=false;uploadBusy=false;modalTab='pozadavek';pendingFiles=[];errs={};footMsg='';break;
 
     case 'mtab': collect(); modalTab=v; break;
 
@@ -2533,6 +2554,17 @@ async function act(a,v,el,ev){
     }
 
     case 'recv-edit':{ if(!P().edit||!editing||!editing._id)return; if(!recvEdit)collect(); recvEdit=!recvEdit; break; }
+    case 'sup-edit':{ if(!P().edit||!editing||!editing._id)return; if(!supEdit)collect(); supEdit=!supEdit; break; }
+    case 'sup-save':{
+      if(!P().edit||!editing||!editing._id)return;
+      collect();
+      const patch={dodavatel:editing.dodavatel||'',supplierNo:editing.supplierNo||'',
+        supplierIco:editing.supplierIco||'',supplierDue:editing.supplierDue||''};
+      patch.hist=(editing.hist||[]).concat(`${today()} · ${me.name} · upravil dodavatele`);
+      try{ await updateDoc(doc(db,'requests',editing._id),patch); editing.hist=patch.hist; supEdit=false; toast('Dodavatel uložen.','ok'); }
+      catch(e){ toast('Uložení selhalo: '+e.message,'err'); return; }
+      break;
+    }
     case 'recv-save':{
       if(!P().edit||!editing||!editing._id)return;
       collect();
