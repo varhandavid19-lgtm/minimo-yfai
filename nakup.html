@@ -660,6 +660,22 @@ const dateCz = d => d ? String(d).slice(0,10).split('-').reverse().map(x=>String
    Dodací list/servisní výkaz, Datum přijetí, Přijímané množství, Komentář). Starší požadavky beze změny. */
 const RECV2_FROM = '2026-10-26';
 const isRecv2 = r => !!r && String(r.created||'') >= RECV2_FROM;
+/* Učení dodavatelů (David, 10/2026): název uložený pracovníkem nákupu v boxu 🏢 Dodavatel je POTVRZENÝ
+   (supConfirmed). Co tam předtím napsal zadavatel, se pamatuje jako přezdívka (supAliases).
+   Našeptávač nabízí potvrzené názvy a napsaný dodavatel se při uložení sám přepíše na potvrzený.
+   Porovnává se bez velkých písmen, diakritiky, interpunkce a právní formy (Würth s.r.o. = wurth). */
+const SUP_LEGAL = new Set(['s','r','o','sro','a','as','spol','gmbh','kg','co','ltd','inc','ag','se','sa','cz','k','v','vos']);
+const supNorm = t => String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+  .replace(/[^a-z0-9]+/g,' ').trim().split(' ').filter(w=>w && !SUP_LEGAL.has(w)).join(' ');
+function supIndex(){                       // normalizovaný název/přezdívka → potvrzený název (novější vyhrává)
+  const map=new Map();
+  rows.filter(r=>r.supConfirmed && r.dodavatel)
+    .sort((a,b)=>String(a.supConfirmedAt||'').localeCompare(String(b.supConfirmedAt||'')))
+    .forEach(r=>{ [r.dodavatel, ...(r.supAliases||[])].forEach(n=>{ const k=supNorm(n); if(k) map.set(k, r.dodavatel); }); });
+  return map;
+}
+const canonSupplier = name => { const t=String(name||'').trim(), k=supNorm(t); return (k && supIndex().get(k)) || t; };
+const confirmedSuppliers = () => [...new Set(supIndex().values())].sort((a,b)=>a.localeCompare(b,'cs'));
 const acc = c => (cfg?.accounts||[]).find(a=>a.code===c);
 const accName = c => (acc(c)||{}).name || '';
 const accLabel = c => c ? (accName(c)?c+' — '+accName(c):c) : '';
@@ -1144,7 +1160,9 @@ function modalView(){
   const ro=(id,val,cls='')=>`<div class="f ${cls}"><label>${esc(fld(id).label)}</label><div class="ro">${val?esc(val):'<span class="muted">—</span>'}</div></div>`;
   const roL=(label,val,cls='')=>`<div class="f ${cls}"><label>${esc(label)}</label><div class="ro">${val?esc(val):'<span class="muted">—</span>'}</div></div>`;
   const vyrobci=[...new Set(rows.map(x=>x.vyrobce).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'cs'));
-  const dodavatele=[...new Set(rows.map(x=>x.dodavatel).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'cs'));
+  // našeptávač: potvrzené názvy dodavatelů (z boxu Dodavatel); dokud žádné nejsou, všechny použité
+  const confSup=confirmedSuppliers();
+  const dodavatele=confSup.length ? confSup : [...new Set(rows.map(x=>x.dodavatel).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'cs'));
   const stockOn=!!r.newStock;
   const isTxt = r.sklad==='TXT';
   const statusLocked = !P().edit;   // stav mění jen sklad/admin; ostatní (i autor u „nový") vidí jen náhled stavu
@@ -1262,7 +1280,7 @@ function modalView(){
   // Dodavatel (pod Nákup/příjem): jméno je TOTÉŽ pole `dodavatel` jako v záložce Požadavek,
   // k němu číslo dodavatele, IČO/DIČ a splatnost faktur. Upravuje skladník/admin jako příjem.
   const supBody = (supEdit && recvEditable) ? `<div class="recvgrid recvedit">
-      <label>Dodavatel<input id="e-sup-name" value="${esc(r.dodavatel||'')}"></label>
+      <label>Dodavatel<input id="e-sup-name" list="sup-conf-list" value="${esc(r.dodavatel||'')}"><datalist id="sup-conf-list">${confirmedSuppliers().map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist></label>
       <label>Číslo dodavatele<input id="e-sup-no" value="${esc(r.supplierNo||'')}"></label>
       <label>IČO/DIČ<input id="e-sup-ico" value="${esc(r.supplierIco||'')}"></label>
       <label>Splatnost faktur<input id="e-sup-due" value="${esc(r.supplierDue||'')}" placeholder="např. 30 dní"></label>
@@ -2141,7 +2159,7 @@ async function ireqCreate(){
       const rec={ poradove, status:'nový', typ:r.typ||'Nový požadavek', sklad:String(r.sklad||'').trim(),
         popis:String(r.popis||'').trim(), duvod:String(r.duvod||'').trim(), priorita:r.priorita||'běžná',
         mnozstvi:Number(r.mnozstvi)||0, jednotka:r.jednotka||'ks', cena:Number(r.cena)||0, mena:r.mena||'CZK',
-        dodavatel:String(r.dodavatel||'').trim(), vyrobce:String(r.vyrobce||'').trim(),
+        dodavatel:canonSupplier(r.dodavatel), vyrobce:String(r.vyrobce||'').trim(),
         ucet:r.ucet||'', costcenter:r.costcenter||'', usek:r.usek||'', stroj:r.stroj||'', datum:r.datum||'',
         min:0, max:0, newStock:false, url:String(r.url||'').trim(), notifyEmail:String(r.notifyEmail||'').trim(),
         poznamka:String(r.poznamka||'').trim(),
@@ -2252,7 +2270,7 @@ async function runImport(){
     try{
       const poradove=await nextNumber();
       const rec={ poradove, status:'nový', typ:'Doplnění skladu', sklad:d.sklad, popis:d.popis, duvod:'Podlimitní položka (import z Maxima)',
-        priorita:'běžná', mnozstvi:d.mnozstvi||0, cena:d.cena||0, mena:'EUR', dodavatel:d.dodavatel||'', vyrobce:d.vyrobce||'',
+        priorita:'běžná', mnozstvi:d.mnozstvi||0, cena:d.cena||0, mena:'EUR', dodavatel:canonSupplier(d.dodavatel), vyrobce:d.vyrobce||'',
         ucet:'511305', costcenter:'', usek:'Maintenance', stroj:'', datum:'', min:0, max:0, newStock:false, url:'', notifyEmail:'', poznamka:d.poznamka||'',
         author:me.uid, authorName:me.name, authorEmail:me.email, created:today(), createdTs:serverTimestamp(),
         approvedBy:null, approvedAt:null, hist:[`${today()} · ${me.name} · založeno importem z Maxima (doplnění skladu, účet 511305, linka Maintenance)`] };
@@ -2504,6 +2522,7 @@ async function act(a,v,el,ev){
       const isNew=!editing._id;
       if(!canEditRow(isNew, editing))return;
       collect();
+      if(editing.dodavatel) editing.dodavatel=canonSupplier(editing.dodavatel);   // naučený dodavatel → potvrzený název
       if(isNew&&!P().edit)editing.status='nový';
       if(!validate()){footMsg='Doplň povinná pole označená červeně.';modalTab='pozadavek';render();return;}
       try{
@@ -2611,9 +2630,27 @@ async function act(a,v,el,ev){
       collect();
       const patch={dodavatel:editing.dodavatel||'',supplierNo:editing.supplierNo||'',
         supplierIco:editing.supplierIco||'',supplierDue:editing.supplierDue||''};
-      patch.hist=(editing.hist||[]).concat(`${today()} · ${me.name} · upravil dodavatele`);
-      try{ await updateDoc(doc(db,'requests',editing._id),patch); editing.hist=patch.hist; supEdit=false; toast('Dodavatel uložen.','ok'); }
+      const old=rows.find(x=>x._id===editing._id)||{};
+      const before=String(old.dodavatel||'').trim(), now=String(patch.dodavatel||'').trim();
+      patch.dodavatel=now; patch.supConfirmed=!!now;          // uložením v boxu je dodavatel POTVRZENÝ
+      patch.supConfirmedBy=me.name; patch.supConfirmedAt=new Date().toISOString();
+      const al=new Set(old.supAliases||[]); if(before && supNorm(before)!==supNorm(now)) al.add(before);   // přezdívka = co psal zadavatel
+      patch.supAliases=[...al];
+      patch.hist=(editing.hist||[]).concat(`${today()} · ${me.name} · upravil dodavatele${now?' (potvrzeno)':''}`);
+      try{ await updateDoc(doc(db,'requests',editing._id),patch); editing.hist=patch.hist; Object.assign(editing,patch); supEdit=false; }
       catch(e){ toast('Uložení selhalo: '+e.message,'err'); return; }
+      // dodatečně sjednotit ostatní NEpotvrzené požadavky se stejným nebo dřív opraveným názvem
+      let unified=0;
+      if(now){
+        const keys=new Set([now, ...patch.supAliases].map(supNorm).filter(Boolean));
+        const others=rows.filter(x=>x._id!==editing._id && !x.supConfirmed && x.dodavatel && x.dodavatel!==now && keys.has(supNorm(x.dodavatel)));
+        for(const x of others){
+          try{ await updateDoc(doc(db,'requests',x._id),{dodavatel:now,
+            hist:(x.hist||[]).concat(`${today()} · ${me.name} · dodavatel sjednocen podle potvrzeného: ${x.dodavatel} → ${now}`)}); unified++; }
+          catch(e){}
+        }
+      }
+      toast('Dodavatel uložen'+(now?' a potvrzen':'')+'.'+(unified?` Sjednoceno i v dalších požadavcích: ${unified}.`:''),'ok');
       break;
     }
     case 'recv-save':{

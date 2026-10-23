@@ -604,6 +604,11 @@ Přehled všech 5× proč / A3 z kolekce `problems`.
   a pod ním box **„🏢 Dodavatel“** (David, 10/2026) — `dodavatel` (TOTÉŽ pole jako v záložce
   Požadavek), `supplierNo`, `supplierIco` (IČO/DIČ), `supplierDue` (splatnost faktur, text).
   Oba boxy edituje jen skladník/admin (`P().edit`), každý má vlastní Editace/Uložit.
+  **Učení dodavatelů** (David, 10/2026): uložení boxu Dodavatel = dodavatel POTVRZEN (`supConfirmed`,
+  `supConfirmedBy/At`), původní text zadavatele se uloží jako přezdívka (`supAliases`). Našeptávač ve
+  formuláři nabízí jen potvrzené názvy (`confirmedSuppliers`); při uložení/importu se napsaný dodavatel
+  přepíše na potvrzený (`canonSupplier`, porovnání `supNorm` bez diakritiky a právní formy). Po potvrzení
+  se stejně přepíšou i ostatní NEpotvrzené požadavky (zápis do historie). Žádná zvláštní kolekce.
   **Požadavky založené od 26. 10. 2026** (`RECV2_FROM`, `isRecv2(r)` podle `created`) mají v boxu
   jiná pole: Nákup = Nabídka (`offerNo`), Req.č. (`reqNo`), Objednávka QAD (`qadOrder`), Order no.
   (`orderNo`); Příjem = Dodací list/servisní výkaz (`dlNo`), Datum přijetí, Přijímané množství
