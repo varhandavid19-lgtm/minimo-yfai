@@ -86,7 +86,9 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   (`BONUS_12H`, `BONUS_WEEKEND`). Celodenní nepřítomnost směnu ruší, půl dne
   dovolené ne. Svátky příplatek nemají. Vidí jen kdo má v sekci „Zapisovat všechny".
   Výjimka (`WEEKEND_EXEMPT`): noční **N** (8h) začínající v neděli ve 22:00 víkendový
-  příplatek NEMÁ — nahrazuje páteční noční. Nedělní N12 ho má.
+  příplatek NEMÁ — nahrazuje páteční noční. Nedělní N12 ho má, ALE ruční směna
+  zadaná na den, kdy má člověk podle rytmu tuhle výjimečnou nedělní N (např. ruční
+  N12 místo ní), víkendový příplatek také nemá — jen 200 Kč za 12h.
   Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
   v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky
   a šipky posouvají po měsících (`calMonth`), v roce po letech.

@@ -1004,7 +1004,8 @@ function tabBar(){
    standard). Směna v sobotu/neděli (podle dne začátku, ruční i z rytmu) +1000 Kč.
    Obojí se sčítá.
    VÝJIMKA: noční N (8h) začínající v neděli ve 22:00 víkendový příplatek nemá —
-   nahrazuje páteční noční (WEEKEND_EXEMPT).
+   nahrazuje páteční noční (WEEKEND_EXEMPT). Platí i pro ruční směnu zadanou na den,
+   kdy má člověk podle rytmu tuhle výjimečnou N (např. ruční N12 místo ní → jen 200 Kč).
    Den s celodenní nepřítomností se nepočítá (půl dne dovolené směnu neruší).
    Svátky příplatek nemají. Vidí jen kdo má v sekci „Zapisovat všechny".
    ========================================================== */
@@ -1033,7 +1034,10 @@ function bonusRows(y, m){
         if(!code) return;
         // 12h příplatek jen za RUČNĚ zadanou 12h směnu (8h člověk jde na 12h), ne za 12h z rytmu
         const dow=new Date(ds+'T00:00:00').getDay(), h12=!!man && SHIFTS_12H.includes(code);
-        const we=(dow===0||dow===6) && !((WEEKEND_EXEMPT[code]||[]).includes(dow));
+        // výjimka platí i pro ruční směnu, která jen nahrazuje/prodlužuje výjimečnou směnu
+        // z rytmu (ruční N12 místo nedělní N → jen 200 Kč za 12h, ne víkend)
+        const exempt=c=>!!c && (WEEKEND_EXEMPT[c]||[]).includes(dow);
+        const we=(dow===0||dow===6) && !exempt(code) && !(man && exempt(rotationCodeFor(p.id, ds)));
         r.shifts++;
         if(h12){ r.n12++; r.b12+=BONUS_12H; }
         if(we){ r.nWe++; r.bWe+=BONUS_WEEKEND; }
