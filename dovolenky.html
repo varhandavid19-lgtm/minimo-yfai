@@ -1000,8 +1000,9 @@ function tabBar(){
 
 /* ==========================================================
    VÝPOČET BONUSŮ — příplatky za směny (David, 10/2026)
-   Za každou naplánovanou směnu (ruční i z rytmu): 12h směna +200 Kč,
-   směna v sobotu/neděli (podle dne začátku) +1000 Kč, obojí se sčítá.
+   Ručně zadaná 12h směna +200 Kč (12h směny ze směnového rytmu ne — to je jejich
+   standard). Směna v sobotu/neděli (podle dne začátku, ruční i z rytmu) +1000 Kč.
+   Obojí se sčítá.
    VÝJIMKA: noční N (8h) začínající v neděli ve 22:00 víkendový příplatek nemá —
    nahrazuje páteční noční (WEEKEND_EXEMPT).
    Den s celodenní nepřítomností se nepočítá (půl dne dovolené směnu neruší).
@@ -1030,7 +1031,8 @@ function bonusRows(y, m){
         const man=(sm[p.id]||{})[ds];
         const code = man ? man.shift : rotationCodeFor(p.id, ds);
         if(!code) return;
-        const dow=new Date(ds+'T00:00:00').getDay(), h12=SHIFTS_12H.includes(code);
+        // 12h příplatek jen za RUČNĚ zadanou 12h směnu (8h člověk jde na 12h), ne za 12h z rytmu
+        const dow=new Date(ds+'T00:00:00').getDay(), h12=!!man && SHIFTS_12H.includes(code);
         const we=(dow===0||dow===6) && !((WEEKEND_EXEMPT[code]||[]).includes(dow));
         r.shifts++;
         if(h12){ r.n12++; r.b12+=BONUS_12H; }
@@ -1058,10 +1060,10 @@ function bonusView(){
       <button class="nav" id="bn-next" title="Další měsíc">›</button>
       <button class="btn-ghost" id="bn-today">Tento měsíc</button>
       <button class="btn-ghost" id="bn-export">⭳ Export CSV</button>
-      <span class="hint">12h směna +${czk(BONUS_12H)} · směna v sobotu/neděli +${czk(BONUS_WEEKEND)} (kromě noční N z neděle na pondělí) · obojí se sčítá · najetím na řádek uvidíš dny</span>
+      <span class="hint">ručně zadaná 12h směna +${czk(BONUS_12H)} (12h z rytmu ne) · směna v sobotu/neděli +${czk(BONUS_WEEKEND)} (kromě noční N z neděle na pondělí) · obojí se sčítá · najetím na řádek uvidíš dny</span>
     </div>
     <div class="panel"><div class="tblwrap"><table class="ptable bonus">
-      <thead><tr><th>Sekce</th><th>Úsek</th><th>Jméno</th><th class="num">Směn</th><th class="num">z toho 12h</th>
+      <thead><tr><th>Sekce</th><th>Úsek</th><th>Jméno</th><th class="num">Směn</th><th class="num">ručních 12h</th>
         <th class="num">Víkendových</th><th class="num">Příplatek 12h</th><th class="num">Příplatek víkend</th><th class="num">Celkem</th></tr></thead>
       <tbody>${body}</tbody>
       ${rows.length?`<tfoot><tr><td colspan="3"><b>Celkem</b></td><td class="num">${sum('shifts')}</td><td class="num">${sum('n12')}</td>
@@ -1072,7 +1074,7 @@ function bonusView(){
 function exportBonusCsv(){
   const rows=bonusRows(bonusYear, bonusMonth);
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
-  const csv=[line(['Měsíc','Sekce','Úsek','Jméno','Směn','z toho 12h','Víkendových','Příplatek 12h (Kč)','Příplatek víkend (Kč)','Celkem (Kč)','Dny s příplatkem'])]
+  const csv=[line(['Měsíc','Sekce','Úsek','Jméno','Směn','ručních 12h','Víkendových','Příplatek 12h (Kč)','Příplatek víkend (Kč)','Celkem (Kč)','Dny s příplatkem'])]
     .concat(rows.map(r=>line([`${MONTHS[bonusMonth]} ${bonusYear}`,r.sec,r.pos,r.name,r.shifts,r.n12,r.nWe,r.b12,r.bWe,r.total,r.days.join(', ')]))).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download=`bonusy_${bonusYear}-${String(bonusMonth+1).padStart(2,'0')}.csv`;

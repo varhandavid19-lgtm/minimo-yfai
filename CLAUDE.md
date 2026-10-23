@@ -80,8 +80,9 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   `rotRowView`). Do minulosti NE — `assignRotation`/`clearRotation` to odmítnou.
   Nevracej horní formuláře.
   Záložka **💰 Výpočet bonusů** (`mainTab='bonus'`, `bonusRows`): příplatky za
-  měsíc z naplánovaných směn (ručních i z rytmu) — 12h směna (D12/O12/N12)
-  +200 Kč, směna v sobotu/neděli (den začátku) +1000 Kč, obojí se sčítá
+  měsíc z naplánovaných směn — **ručně zadaná** 12h směna (D12/O12/N12) +200 Kč
+  (12h směny ze směnového rytmu NE — to je standard 12h lidí), směna v sobotu/neděli
+  (den začátku, ruční i z rytmu) +1000 Kč, obojí se sčítá
   (`BONUS_12H`, `BONUS_WEEKEND`). Celodenní nepřítomnost směnu ruší, půl dne
   dovolené ne. Svátky příplatek nemají. Vidí jen kdo má v sekci „Zapisovat všechny".
   Výjimka (`WEEKEND_EXEMPT`): noční **N** (8h) začínající v neděli ve 22:00 víkendový
