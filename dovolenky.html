@@ -1002,12 +1002,16 @@ function tabBar(){
    VÝPOČET BONUSŮ — příplatky za směny (David, 10/2026)
    Za každou naplánovanou směnu (ruční i z rytmu): 12h směna +200 Kč,
    směna v sobotu/neděli (podle dne začátku) +1000 Kč, obojí se sčítá.
+   VÝJIMKA: noční N (8h) začínající v neděli ve 22:00 víkendový příplatek nemá —
+   nahrazuje páteční noční (WEEKEND_EXEMPT).
    Den s celodenní nepřítomností se nepočítá (půl dne dovolené směnu neruší).
    Svátky příplatek nemají. Vidí jen kdo má v sekci „Zapisovat všechny".
    ========================================================== */
 const BONUS_12H = 200;
 const BONUS_WEEKEND = 1000;
 const SHIFTS_12H = ['D12','O12','N12'];
+/* Směny, které v daný den týdne (0 = neděle) za víkendové nepočítáme. */
+const WEEKEND_EXEMPT = { N: [0] };
 const bonusSections = () => SECTIONS.filter(s=>secPerm(s.key)==='all');
 const czk = n => n.toLocaleString('cs-CZ')+' Kč';
 /* Spočítá příplatky za měsíc pro lidi vybraných sekcí. */
@@ -1026,7 +1030,8 @@ function bonusRows(y, m){
         const man=(sm[p.id]||{})[ds];
         const code = man ? man.shift : rotationCodeFor(p.id, ds);
         if(!code) return;
-        const dow=new Date(ds+'T00:00:00').getDay(), we=(dow===0||dow===6), h12=SHIFTS_12H.includes(code);
+        const dow=new Date(ds+'T00:00:00').getDay(), h12=SHIFTS_12H.includes(code);
+        const we=(dow===0||dow===6) && !((WEEKEND_EXEMPT[code]||[]).includes(dow));
         r.shifts++;
         if(h12){ r.n12++; r.b12+=BONUS_12H; }
         if(we){ r.nWe++; r.bWe+=BONUS_WEEKEND; }
@@ -1053,7 +1058,7 @@ function bonusView(){
       <button class="nav" id="bn-next" title="Další měsíc">›</button>
       <button class="btn-ghost" id="bn-today">Tento měsíc</button>
       <button class="btn-ghost" id="bn-export">⭳ Export CSV</button>
-      <span class="hint">12h směna +${czk(BONUS_12H)} · směna v sobotu/neděli +${czk(BONUS_WEEKEND)} · obojí se sčítá · najetím na řádek uvidíš dny</span>
+      <span class="hint">12h směna +${czk(BONUS_12H)} · směna v sobotu/neděli +${czk(BONUS_WEEKEND)} (kromě noční N z neděle na pondělí) · obojí se sčítá · najetím na řádek uvidíš dny</span>
     </div>
     <div class="panel"><div class="tblwrap"><table class="ptable bonus">
       <thead><tr><th>Sekce</th><th>Úsek</th><th>Jméno</th><th class="num">Směn</th><th class="num">z toho 12h</th>
