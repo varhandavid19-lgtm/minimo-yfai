@@ -85,6 +85,10 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   Tlačítko **„Vymazat plánování"** v okně jména (`clearPlanning`, David, 10/2026) smaže
   od dneška dál rytmus I ručně zadané směny; minulost, nepřítomnosti a poznámky zůstanou.
   Nevracej horní formuláře.
+  **Řádky kalendáře jsou seskupené podle SMĚNY** (směnového rytmu platného dnes,
+  `planOf` v `calendarView`), ne podle pozice; pořadí jako `ROT_GROUPS`, dole „Bez
+  směnového rytmu". Pozice je šedě za jménem. Do sekcí (Engineering/Maintenance/
+  Toolsetters) se lidé dál řadí podle pozice.
   **Poznámka ke dni** (nezávislá na směně i nepřítomnosti): řádek Poznámka v liště
   + „💾 Uložit poznámku" (`saveDayNote`) → v dokumentu jména v `people` pole
   `notes:{'RRRR-MM-DD':'text'}`, prázdná poznámku smaže (`deleteField`). Den

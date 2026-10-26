@@ -230,6 +230,7 @@
     font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy-2);white-space:nowrap;box-shadow:2px 0 0 #c3d0e2}
   .cal tr.grp td.grp-name .grp-n{opacity:.6;font-weight:600}
   .cal tr.grp:hover td.grp-name{background:#e7eefb}
+  .cal td.name .pos{font-weight:500;color:var(--muted);font-size:11.5px}
   .cal tr.grp .grp-add{margin-left:6px;padding:1px 7px;font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;
     background:#fff;border:1px solid #c3d0e2;color:var(--navy-2);border-radius:10px;cursor:pointer;vertical-align:1px}
   .cal tr.grp .grp-add:hover{background:var(--navy-2);color:#fff}
@@ -1388,24 +1389,29 @@ function calendarView(){
       if(sr && sel.personId===p.id && dd.ds>=sr[0] && dd.ds<=sr[1]) cls+=' sel';
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
+    // pozice za jménem (skupiny jsou podle směny, ne podle pozice)
+    const pos=(p.positions||[]).find(x=>POS2SECTION[x]===section)||(p.positions||[])[0]||'';
+    const label=`${esc(p.name)}${pos?`<span class="pos"> · ${esc(pos)}</span>`:''}`;
+    const tip=`${p.name}${pos?' · '+pos:''}`;
     const nameCell = (p.ext && canEditAll())
-      ? `<td class="name ext edit" data-ext="${p.id}" title="${esc(p.name)} — kliknutím upravíš nebo odebereš">${esc(p.name)}</td>`
-      : p.ext ? `<td class="name ext" title="${esc(p.name)}">${esc(p.name)}</td>`
-      : `<td class="name" title="${esc(p.name)}">${esc(p.name)}</td>`;
+      ? `<td class="name ext edit" data-ext="${p.id}" title="${esc(tip)} — kliknutím upravíš nebo odebereš">${label}</td>`
+      : p.ext ? `<td class="name ext" title="${esc(tip)}">${label}</td>`
+      : `<td class="name" title="${esc(tip)}">${label}</td>`;
     return `<tr>${nameCell}${cells}</tr>`;
   };
-  // rozdělení tabulky po úsecích (pozicích) sekce: nadpis úseku + lidé abecedně pod ním.
-  // Kdo má v sekci víc úseků, zařadí se jen do PRVNÍHO ze svých úseků (objeví se jednou).
-  const secPositions=(SECTIONS.find(s=>s.key===section)||{}).positions||[];
-  const primaryPos = p => (p.positions||[]).find(pos=>POS2SECTION[pos]===section);
-  const groupsByPos={};
-  people.forEach(p=>{ const pos=primaryPos(p); if(!pos) return; (groupsByPos[pos]||(groupsByPos[pos]=[])).push(p); });
+  // Rozdělení tabulky podle SMĚNY (směnového rytmu platného dnes), ne podle pozice —
+  // pozice je za jménem (David, 10/2026). Pořadí skupin jako v nabídce rytmů,
+  // kdo rytmus nemá, je dole ve skupině „Bez směnového rytmu".
+  const planOrder=ROT_GROUPS.flatMap(g=>g.plans).concat(Object.keys(ROT_PLANS)).filter((k,i,a)=>a.indexOf(k)===i);
+  const planOf = p => { const s=activeSeg(p.id, today()); return (s && s.plan && ROT_PLANS[s.plan]) ? s.plan : ''; };
+  const groupsByPlan={};
+  people.forEach(p=>{ const k=planOf(p); (groupsByPlan[k]||(groupsByPlan[k]=[])).push(p); });
   const rowsHtml=[];
-  secPositions.forEach(pos=>{
-    const grp=(groupsByPos[pos]||[]).sort(bySurname);
+  planOrder.concat(['']).forEach(k=>{
+    const grp=(groupsByPlan[k]||[]).sort(bySurname);
     if(!grp.length) return;
-    rowsHtml.push(`<tr class="grp"><td class="name grp-name" title="${esc(pos)}">${esc(pos)} <span class="grp-n">(${grp.length})</span>${
-      canEditAll()?` <button class="grp-add" data-add-pos="${esc(pos)}" title="Přidat jméno do úseku ${esc(pos)}">+ jméno</button>`:''}</td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
+    const title = k ? ROT_PLANS[k].label : 'Bez směnového rytmu';
+    rowsHtml.push(`<tr class="grp"><td class="name grp-name" title="${esc(title)}">${esc(title)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
     grp.forEach(p=>rowsHtml.push(personRow(p)));
   });
   const body=rowsHtml.join('');
