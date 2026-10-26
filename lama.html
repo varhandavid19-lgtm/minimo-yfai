@@ -394,7 +394,8 @@ function collect(){
   if(!document.getElementById('lm-task')) return open;     // okno není vykreslené
   Object.assign(open,{
     createdOn:g('lm-created')||open.createdOn, task:g('lm-task'), area:g('lm-area'),
-    due:g('lm-due'), status:g('lm-status')||open.status, priority:g('lm-prio')||prioOf(open).k, note:g('lm-note')
+    due:g('lm-due'), status:g('lm-status')||open.status, priority:g('lm-prio')||prioOf(open).k, note:g('lm-note'),
+    list:g('lm-list')||listOf(open)
   });
   return open;
 }
@@ -432,13 +433,15 @@ async function save(){
       const orig=items.find(x=>x._id===t._id)||{};
       const add=[];
       if(orig.due && t.due && orig.due!==t.due) add.push(dueChangeNote(orig.due, t.due));
+      const moved = listOf(orig)!==listOf(t);   // přesun do jiné záložky
+      if(moved) add.push(`přesunuto: ${listLabel(listOf(orig))} → ${listLabel(listOf(t))}`);
       const other=['task','area','status','priority','note','createdOn'].some(k=>String(orig[k]??'')!==String(t[k]??''));
       if(closing) add.push('úkol hotov'); else if(other || !add.length) add.push('upraveno');
       const hist=(t.hist||[]).concat(add.map(a=>`${today()} · ${me.name} · ${a}`));
       const {_id,...data}=t; data.hist=hist;
       await updateDoc(doc(db,'lama',t._id), data);
       t.hist=hist; sync(t);
-      toast('Uloženo.','ok');
+      toast(moved ? `Úkol ${t.no} přesunut do záložky ${listLabel(listOf(t))}.` : 'Uloženo.','ok');
     }
     open=null; oMsg='';
   }catch(e){ oMsg='Uložení selhalo. '+writeHint(e); }
@@ -710,6 +713,8 @@ function itemModal(){
       <div class="f"><label>Priorita</label>
         <select id="lm-prio" ${ro?'disabled':''}>${PRIORITIES.map(p=>`<option ${prioOf(t).k===p.k?'selected':''}>${p.k}</option>`).join('')}</select></div>
       <div class="f"><label>Hotovo dne</label><div class="ro">${t.closedOn?dateCz(t.closedOn)+(t.closedBy?' · '+esc(t.closedBy):''):'—'}</div></div>
+      <div class="f span2"><label>Záložka <span class="muted" style="font-weight:400">— změnou úkol přesuneš</span></label>
+        <select id="lm-list" ${ro?'disabled':''}>${LISTS.map(l=>`<option value="${l.k}" ${listOf(t)===l.k?'selected':''}>${esc(l.label)}</option>`).join('')}</select></div>
 
       <div class="f span4"><label>Poznámka / vyjádření agentury</label>
         <textarea id="lm-note" rows="3" placeholder="Co agentura udělala, co chybí, na co čeká…" ${ro?'disabled':''}>${esc(t.note||'')}</textarea></div>
