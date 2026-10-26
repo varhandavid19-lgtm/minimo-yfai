@@ -1287,7 +1287,47 @@ function overtimeRows(y, m){
   });
   return rows;
 }
+/* Přesčasy za ROK = součet měsíců (overtimeRows po měsících), řádek = sekce + jméno.
+   Přepínač Měsíc / Rok si pamatuje prohlížeč (localStorage 'ot-mode'). */
+let otMode = (()=>{ try{ return localStorage.getItem('ot-mode')==='year' ? 'year' : 'month'; }catch(e){ return 'month'; } })();
+const MONTHS_SHORT = ['led','úno','bře','dub','kvě','čvn','čvc','srp','zář','říj','lis','pro'];
+function overtimeYearRows(y){
+  const by=new Map();
+  for(let m=0;m<12;m++) overtimeRows(y,m).forEach(r=>{
+    const k=r.sec+'|'+r.name;
+    const t=by.get(k) || {sec:r.sec, pos:r.pos, name:r.name, rhythm:false, months:Array(12).fill(0), total:0, extra:0, ext:0};
+    t.rhythm = t.rhythm || r.rhythm; t.months[m]=r.hours; t.total+=r.hours; t.extra+=r.extra; t.ext+=r.ext;
+    by.set(k,t);
+  });
+  return [...by.values()];
+}
+const otSwitch = () => `<div class="viewsw"><button id="ot-m" class="${otMode==='month'?'on':''}">Měsíc</button><button id="ot-y" class="${otMode==='year'?'on':''}">Rok</button></div>`;
+function overtimeYearView(){
+  const rows=overtimeYearRows(bonusYear);
+  const colSum=m=>rows.reduce((a,r)=>a+r.months[m],0), tot=rows.reduce((a,r)=>a+r.total,0);
+  const body=rows.length ? rows.map(r=>`<tr class="${r.total?'':'zero'}">
+      <td>${esc(r.sec)}</td><td>${esc(r.pos)}</td><td class="nm">${esc(r.name)}</td>
+      ${r.rhythm ? r.months.map(h=>`<td class="num">${h||'—'}</td>`).join('')+`<td class="num"><b>${r.total?r.total+' h':'—'}</b></td>`
+        : `<td colspan="13" class="num" style="color:var(--muted)">bez směnového rytmu</td>`}</tr>`).join('')
+    : `<tr><td colspan="16" class="tempty">V sekcích zatím nejsou žádní lidé.</td></tr>`;
+  return `<div class="calbar">
+      ${otSwitch()}
+      <button class="nav" id="ot-yprev" title="Předchozí rok">‹</button>
+      <div class="yr">${bonusYear}</div>
+      <button class="nav" id="ot-ynext" title="Další rok">›</button>
+      <button class="btn-ghost" id="ot-ythis">Tento rok</button>
+      <button class="btn-ghost" id="ot-export">⭳ Export CSV</button>
+      <span class="hint">hodiny přesčasu po měsících a součet za rok · počítá se stejně jako za měsíc</span>
+    </div>
+    <div class="panel"><div class="tblwrap"><table class="ptable bonus">
+      <thead><tr><th>Sekce</th><th>Úsek</th><th>Jméno</th>${MONTHS_SHORT.map(m=>`<th class="num">${m}</th>`).join('')}<th class="num">Rok celkem</th></tr></thead>
+      <tbody>${body}</tbody>
+      ${rows.length?`<tfoot><tr><td colspan="3"><b>Celkem</b></td>${MONTHS_SHORT.map((_,m)=>`<td class="num">${colSum(m)||'—'}</td>`).join('')}
+        <td class="num"><b>${tot} h</b></td></tr></tfoot>`:''}
+    </table></div></div>`;
+}
 function overtimeView(){
+  if(otMode==='year') return overtimeYearView();
   const rows=overtimeRows(bonusYear, bonusMonth);
   const sum=k=>rows.reduce((a,r)=>a+r[k],0);
   const body=rows.length ? rows.map(r=>`<tr class="${r.hours?'':'zero'}" title="${esc(r.days.join('\n')||(r.rhythm?'Bez přesčasů':'Nemá směnový rytmus — nepočítá se'))}">
@@ -1296,6 +1336,7 @@ function overtimeView(){
         : `<td colspan="3" class="num" style="color:var(--muted)">bez směnového rytmu</td>`}</tr>`).join('')
     : `<tr><td colspan="6" class="tempty">V sekcích zatím nejsou žádní lidé.</td></tr>`;
   return `<div class="calbar">
+      ${otSwitch()}
       <button class="nav" id="bn-prev" title="Předchozí měsíc">‹</button>
       <div class="yr">${MONTHS[bonusMonth]} ${bonusYear}</div>
       <button class="nav" id="bn-next" title="Další měsíc">›</button>
@@ -1312,8 +1353,18 @@ function overtimeView(){
     </table></div></div>`;
 }
 function exportOvertimeCsv(){
-  const rows=overtimeRows(bonusYear, bonusMonth);
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  if(otMode==='year'){
+    const yr=overtimeYearRows(bonusYear);
+    const csvY=[line(['Rok','Sekce','Úsek','Jméno',...MONTHS,'Rok celkem (h)','Směn navíc','Prodloužení 8h→12h'])]
+      .concat(yr.map(r=>line([bonusYear,r.sec,r.pos,r.name,
+        ...(r.rhythm?r.months:Array(12).fill('')), r.rhythm?r.total:'bez rytmu', r.rhythm?r.extra:'', r.rhythm?r.ext:'']))).join('\n');
+    const urlY=URL.createObjectURL(new Blob([String.fromCharCode(0xFEFF)+csvY],{type:'text/csv;charset=utf-8'}));
+    const aY=document.createElement('a'); aY.href=urlY; aY.download=`prescasy_${bonusYear}.csv`;
+    document.body.appendChild(aY); aY.click(); aY.remove(); setTimeout(()=>URL.revokeObjectURL(urlY),2000);
+    return;
+  }
+  const rows=overtimeRows(bonusYear, bonusMonth);
   const csv=[line(['Měsíc','Sekce','Úsek','Jméno','Směn navíc','Prodloužení 8h→12h','Přesčas (h)','Dny'])]
     .concat(rows.map(r=>line([`${MONTHS[bonusMonth]} ${bonusYear}`,r.sec,r.pos,r.name,
       r.rhythm?r.extra:'',r.rhythm?r.ext:'',r.rhythm?r.hours:'bez rytmu',r.days.join(', ')]))).join('\n');
@@ -1654,6 +1705,13 @@ function wireApp(){
   document.getElementById('bn-next')?.addEventListener('click',()=>bshift(1));
   document.getElementById('bn-today')?.addEventListener('click',()=>{ const n=new Date(); bonusYear=n.getFullYear(); bonusMonth=n.getMonth(); render(); });
   document.getElementById('bn-export')?.addEventListener('click',exportBonusCsv);
+  // přesčasy: přepínač Měsíc / Rok a šipky roku
+  const otSet=m=>{ otMode=m; try{ localStorage.setItem('ot-mode',m); }catch(e){} render(); };
+  document.getElementById('ot-m')?.addEventListener('click',()=>otSet('month'));
+  document.getElementById('ot-y')?.addEventListener('click',()=>otSet('year'));
+  document.getElementById('ot-yprev')?.addEventListener('click',()=>{ bonusYear--; render(); });
+  document.getElementById('ot-ynext')?.addEventListener('click',()=>{ bonusYear++; render(); });
+  document.getElementById('ot-ythis')?.addEventListener('click',()=>{ bonusYear=new Date().getFullYear(); render(); });
 
   // rok kalendáře + skok na dnešek
   // šipky posouvají o rok, v zobrazení „Měsíc" o měsíc
