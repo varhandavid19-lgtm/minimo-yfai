@@ -241,6 +241,12 @@
   .cal tr.grp td.grp-name .grp-n{opacity:.6;font-weight:600}
   .cal tr.grp:hover td.grp-name{background:#e7eefb}
   .cal td.name .pos{font-weight:500;color:var(--muted);font-size:11.5px}
+  /* ⏱ přesčasy za jménem — přilepené vlevo jako jméno (left se nastavuje v kódu) */
+  .cal td.otc,.cal th.otc{position:sticky;z-index:3;background:#fff;text-align:center;padding:0 2px;
+    font-size:12px;font-weight:800;color:#b45309;white-space:nowrap;border-right:1px solid #eef1f6}
+  .cal td.otc.otc2,.cal th.otc.otc2{box-shadow:2px 0 0 #e6ebf2}
+  .cal td.otc.ot0{color:#c3ccd8;font-weight:600}
+  .cal tr.days th.otc{z-index:8;background:#fff4e8;color:#b45309;font-size:10.5px;font-weight:800}
   .cal tr.grp .grp-add{margin-left:6px;padding:1px 7px;font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;
     background:#fff;border:1px solid #c3d0e2;color:var(--navy-2);border-radius:10px;cursor:pointer;vertical-align:1px}
   .cal tr.grp .grp-add:hover{background:var(--navy-2);color:#fff}
@@ -1263,6 +1269,21 @@ function exportBonusCsv(){
 const SHIFT_HOURS = {R:8, O:8, N:8, DEN:8, SAL:8, D12:12, O12:12, N12:12};
 const shiftH = c => SHIFT_HOURS[c] || 0;
 const otSections = () => SECTIONS.filter(s=>secPerm(s.key)==='all');
+/* Přesčasy jednoho člověka za období od–do (abs/sm = absenceMap/shiftMap pokrývající období). */
+function personOvertime(p, from, to, abs, sm){
+  const r={rhythm:false, extra:0, ext:0, hours:0, days:[]};
+  eachDay(from,to,ds=>{
+    const seg=activeSeg(p.id, ds);
+    if(seg && seg.plan) r.rhythm=true; else return;          // bez rytmu ten den → nepočítá se
+    const a=(abs[p.id]||{})[ds];
+    if(a && a.days!==0.5) return;                            // celý den nepřítomen
+    const man=(sm[p.id]||{})[ds]; if(!man) return;           // jen ručně zadané směny
+    const rc=rotCodeOn(p.id, ds);
+    if(!rc){ const h=shiftH(man.shift); r.extra++; r.hours+=h; r.days.push(`${dCz(ds)} ${man.shift} navíc (+${h} h)`); }
+    else if(shiftH(man.shift)===12 && shiftH(rc)===8){ r.ext++; r.hours+=4; r.days.push(`${dCz(ds)} ${rc}→${man.shift} (+4 h)`); }
+  });
+  return r;
+}
 function overtimeRows(y, m){
   const from=iso(y,m,1), to=iso(y,m,new Date(y,m+1,0).getDate());
   const abs=absenceMap(from,to), sm=shiftMap(from,to);
@@ -1270,19 +1291,8 @@ function overtimeRows(y, m){
   otSections().forEach(sec=>{
     const secPos=sec.positions;
     allUsers.filter(u=>inSection(u,sec.key)).sort(bySurname).forEach(p=>{
-      const r={sec:sec.label, pos:(p.positions||[]).find(x=>secPos.includes(x))||'', name:p.name,
-        rhythm:false, extra:0, ext:0, hours:0, days:[]};
-      eachDay(from,to,ds=>{
-        const seg=activeSeg(p.id, ds);
-        if(seg && seg.plan) r.rhythm=true; else return;          // bez rytmu ten den → nepočítá se
-        const a=(abs[p.id]||{})[ds];
-        if(a && a.days!==0.5) return;                            // celý den nepřítomen
-        const man=(sm[p.id]||{})[ds]; if(!man) return;           // jen ručně zadané směny
-        const rc=rotCodeOn(p.id, ds);
-        if(!rc){ const h=shiftH(man.shift); r.extra++; r.hours+=h; r.days.push(`${dCz(ds)} ${man.shift} navíc (+${h} h)`); }
-        else if(shiftH(man.shift)===12 && shiftH(rc)===8){ r.ext++; r.hours+=4; r.days.push(`${dCz(ds)} ${rc}→${man.shift} (+4 h)`); }
-      });
-      rows.push(r);
+      rows.push(Object.assign({sec:sec.label, pos:(p.positions||[]).find(x=>secPos.includes(x))||'', name:p.name},
+        personOvertime(p, from, to, abs, sm)));
     });
   });
   return rows;
@@ -1526,16 +1536,21 @@ function calendarView(){
   const monthView=calView==='month';
   // v Měsíci je místa dost: širší sloupec se jménem, ať je vidět celé jméno i pozice (dny se o kus zúží)
   const NC=mob?110:(monthView?300:180), DC=mob?30:34;
+  // ⏱ přesčasy hned za jménem (David, 10/2026): „měs." = zobrazený měsíc (v Roku aktuální měsíc,
+  // jen pro letošní rok), „rok" = celý zobrazený rok. Vidí kdo v sekci zapisuje všechny; na mobilu ne.
+  const showOt = !mob && canEditAll(), OTW=50;
+  const otMonth = monthView ? calMonth : (calYear===new Date().getFullYear() ? new Date().getMonth() : -1);
   const yearMonths=buildYear(calYear), months=monthView?[yearMonths[calMonth]]:yearMonths;
   const by=absenceMap(iso(calYear,0,1),iso(calYear,11,31)), sm=shiftMap(iso(calYear,0,1),iso(calYear,11,31));
   const allDays=months.flatMap(mo=>mo.days);
   const sr=selRange();                       // označené dny (tažením)
   // měsíc: sloupce dnů se rozdělí o šířku obrazovky (bez pevné šířky), na úzkém displeji aspoň DC
-  const colgroup=`<colgroup><col style="width:${NC}px">${allDays.map(()=>monthView?'<col>':`<col style="width:${DC}px">`).join('')}</colgroup>`;
-  const tblStyle=monthView?` style="width:100%;min-width:${NC+allDays.length*DC}px"`:'';
-  const monthsRow=`<tr class="months"><th class="corner">${calYear}</th>${
+  const colgroup=`<colgroup><col style="width:${NC}px">${showOt?`<col style="width:${OTW}px"><col style="width:${OTW}px">`:''}${allDays.map(()=>monthView?'<col>':`<col style="width:${DC}px">`).join('')}</colgroup>`;
+  const tblStyle=monthView?` style="width:100%;min-width:${NC+(showOt?2*OTW:0)+allDays.length*DC}px"`:'';
+  const monthsRow=`<tr class="months"><th class="corner"${showOt?' colspan="3"':''}>${calYear}</th>${
     months.map(mo=>`<th class="mstart ${mo.alt?'malt':''}" colspan="${mo.days.length}">${mo.name}</th>`).join('')}</tr>`;
-  const daysRow=`<tr class="days"><th class="corner">Zaměstnanec</th>${
+  const otHead = showOt ? `<th class="otc" style="left:${NC}px" title="Přesčas za ${otMonth>=0?MONTHS[otMonth]+' '+calYear:'měsíc (jen pro letošní rok)'} — ručně zadané směny navíc proti rytmu">⏱ ${otMonth>=0?MONTHS_SHORT[otMonth]:'měs.'}</th><th class="otc otc2" style="left:${NC+OTW}px" title="Přesčas za rok ${calYear}">⏱ ${calYear}</th>` : '';
+  const daysRow=`<tr class="days"><th class="corner">Zaměstnanec</th>${otHead}${
     allDays.map(dd=>{
       let cls='';
       if(dd.holiday)cls='hol'; else if(dd.weekend)cls='we'; else if(dd.alt)cls='malt';
@@ -1601,7 +1616,17 @@ function calendarView(){
       ? `<td class="name ext edit" data-ext="${p.id}" title="${esc(tip)} — kliknutím upravíš nebo odebereš">${label}</td>`
       : p.ext ? `<td class="name ext" title="${esc(tip)}">${label}</td>`
       : `<td class="name" title="${esc(tip)}">${label}</td>`;
-    return `<tr data-prow="${p.id}"${activeRow===p.id?' class="active"':''}>${nameCell}${cells}</tr>`;
+    let otCells='';
+    if(showOt){
+      const ys=iso(calYear,0,1), ye=iso(calYear,11,31);
+      const oy=personOvertime(p, ys, ye, by, sm);
+      const om=otMonth>=0 ? personOvertime(p, iso(calYear,otMonth,1), iso(calYear,otMonth,new Date(calYear,otMonth+1,0).getDate()), by, sm) : null;
+      const cell=(r,left,cls,lbl)=> !r ? `<td class="otc ${cls} ot0" style="left:${left}px">—</td>`
+        : !r.rhythm ? `<td class="otc ${cls} ot0" style="left:${left}px" title="Bez směnového rytmu — přesčasy se nepočítají">·</td>`
+        : `<td class="otc ${cls}${r.hours?'':' ot0'}" style="left:${left}px" title="${esc(lbl+': '+(r.days.join(', ')||'bez přesčasů'))}">${r.hours?r.hours+' h':'0'}</td>`;
+      otCells = cell(om, NC, '', otMonth>=0?MONTHS[otMonth]+' '+calYear:'') + cell(oy, NC+OTW, 'otc2', 'rok '+calYear);
+    }
+    return `<tr data-prow="${p.id}"${activeRow===p.id?' class="active"':''}>${nameCell}${otCells}${cells}</tr>`;
   };
   // Rozdělení tabulky podle SMĚNY (směnového rytmu platného dnes), ne podle pozice —
   // pozice je za jménem (David, 10/2026). Pořadí skupin jako v nabídce rytmů,
@@ -1619,7 +1644,7 @@ function calendarView(){
     const grp=(groupsByPlan[k]||[]).sort(byPos);
     if(!grp.length) return;
     const title = k ? ROT_PLANS[k].label : 'Bez směnového rytmu';
-    rowsHtml.push(`<tr class="grp"><td class="name grp-name" title="${esc(title)}">${esc(title)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
+    rowsHtml.push(`<tr class="grp"><td class="name grp-name"${showOt?' colspan="3"':''} title="${esc(title)}">${esc(title)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
     grp.forEach(p=>rowsHtml.push(personRow(p)));
   });
   const body=rowsHtml.join('');

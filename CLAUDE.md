@@ -139,6 +139,10 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   měsíc sdílí s bonusy (`bonusYear/bonusMonth`).
   Přepínač **Měsíc / Rok** (`otMode`, localStorage 'ot-mode'): v Roku `overtimeYearRows` sečte
   `overtimeRows` za 12 měsíců (řádek = sekce + jméno), sloupce po měsících + Rok celkem, export CSV taky.
+  **Přesčasy i přímo v kalendáři**: za jménem dva přilepené sloupce „⏱ měsíc" (zobrazený měsíc,
+  v Roku aktuální měsíc letošního roku) a „⏱ rok" (`showOt`, `personOvertime` — stejný výpočet
+  jako záložka). Jen kdo v sekci zapisuje všechny, ne na mobilu. Rohová buňka a řádky skupin mají
+  pak colspan 3 — při úpravách sloupců kalendáře na to pamatuj.
   Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
   v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky
   a šipky posouvají po měsících (`calMonth`), v roce po letech.
