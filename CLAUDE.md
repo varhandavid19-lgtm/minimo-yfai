@@ -443,6 +443,9 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
   ukáže hotové i při „skrýt hotové". Rozbalovátko „Všechny stavy" je zrušené —
   nevracej ho. Páté okénko **Zobrazit vše** zruší všechny filtry (okénko, oblast,
   priorita, hledání) a ukáže i hotové (`allShown`).
+- **Řádky tabulky jako v Nákupu**: pod myší světle fialový, 1. klik řádek označí
+  (`pickedTask`, sytější fialová), 2. klik otevře detail, klik mimo tabulku označení
+  zruší; tlačítko Otevřít otevírá hned.
 - **Řazení tabulky** kliknutím na záhlaví (`COLS`, stav `sortBy`): 1. klik podle
   `first` (termín od nejbližšího, priorita od kritické, data a číslo od nejnovějšího,
   text A–Z), 2. klik obráceně, 3. klik zpět na výchozí řazení v `visible()`.

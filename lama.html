@@ -85,6 +85,10 @@
     text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
   tbody td{padding:7px 8px;border-bottom:1px solid #eef1f5;vertical-align:top}
   tbody tr:hover td{background:#fafbfd}
+  /* řádek pod myší a označený řádek fialově (stejně jako v Nákupu), ať nesplývá s barvami stavů */
+  tbody tr[data-a="row-pick"]:hover td{background:#ece3ff !important}
+  tbody tr.picked td,tbody tr.picked:hover td{background:#d9c8ff !important}
+  tbody tr[data-a="row-pick"]:hover td:first-child,tbody tr.picked td:first-child{box-shadow:inset 4px 0 0 #7c4dd6}
   tbody tr.clickable{cursor:pointer}
   tbody tr.late td{background:#fdecea}
   tbody tr.closed td{background:#e8f6ee;color:#1b5e3a}
@@ -299,6 +303,14 @@ let me=null, loginBusy=false, loginErr='';
 let items=[], loaded=false, busy='', errMsg='';
 let open=null, oMsg='', pending=[];
 let ntf=null, nMsg='';              // okno ✉️ Notifikace (jen správce): kopie meta/lamacfg.notify
+let pickedTask=null;                // označený řádek tabulky (1. klik), 2. klik otevře detail
+/* Klik kamkoli mimo tabulku (a mimo otevřené okno) označení řádku zruší — jako v Nákupu. */
+document.addEventListener('pointerdown', e=>{
+  if(!pickedTask || !e.target.closest) return;
+  if(e.target.closest('.tblwrap, .overlay')) return;
+  pickedTask=null;
+  document.querySelectorAll('tr.picked').forEach(r=>r.classList.remove('picked'));
+});
 let f={area:'',card:'',priority:'',q:''};
 /* Okénko „Zobrazit vše" svítí, když není žádný filtr a hotové nejsou skryté. */
 const allShown = () => !f.area && !f.card && !f.priority && !f.q.trim() && !hideDone;
@@ -621,7 +633,7 @@ function listView(){
       </tr></thead>
       <tbody>${rows.map(t=>{
         const lt=isLate(t), nf=(t.files||[]).length;
-        return `<tr class="clickable ${lt?'late':''} ${isDone(t)?'closed':''}"${canWrite()?' draggable="true" title="Přetažením na záložku nahoře úkol přesuneš"':''} data-a="open" data-v="${t._id}">
+        return `<tr class="clickable ${lt?'late':''} ${isDone(t)?'closed':''} ${pickedTask===t._id?'picked':''}"${canWrite()?' draggable="true" title="Klik označí, druhý klik otevře · přetažením na záložku úkol přesuneš"':''} data-a="row-pick" data-v="${t._id}">
           <td data-label="Č."><b>${esc(t.no)}</b>${nf?` <span class="clip" title="Přílohy">📎${nf}</span>`:''}</td>
           <td data-label="Zadáno" class="nowrap">${dateCz(t.createdOn)}</td>
           <td data-label="Zadal">${esc(t.createdBy||'')}</td>
@@ -633,7 +645,7 @@ function listView(){
           <td data-label="Po termínu" class="num">${lt?`<b style="color:var(--red)">${lateDays(t)} dní</b>`:'<span class="muted">—</span>'}</td>
           <td data-label="Poznámka" class="desc muted">${esc(t.note||'')}</td>
           <td data-label="Hotovo" class="nowrap">${t.closedOn?dateCz(t.closedOn):'<span class="muted">—</span>'}</td>
-          <td data-label="" class="nowrap"><button class="btn-ghost" style="padding:3px 9px;font-size:11px">Otevřít</button>${
+          <td data-label="" class="nowrap"><button class="btn-ghost" style="padding:3px 9px;font-size:11px" data-a="open" data-v="${t._id}">Otevřít</button>${
             canDelete()?` <button class="btn-del" style="padding:3px 9px;font-size:11px" data-a="del" data-v="${t._id}" title="Smazat úkol">Smazat</button>`:''}</td>
         </tr>`;}).join('') || `<tr><td colspan="12" class="empty">${items.length?'Nic neodpovídá filtru.'
           :(canWrite()?'Zatím tu nejsou žádné úkoly. Klikni na <b>+ Nový úkol</b>.':'Zatím tu nejsou žádné úkoly.')}</td></tr>`}
@@ -881,6 +893,12 @@ async function act(a,v){
       if(!canWrite()) return;
       open=emptyItem(); pending=[]; oMsg='';
       break;
+    // řádek tabulky: 1. klik ho označí (fialově), 2. klik na tentýž řádek otevře detail — jako v Nákupu
+    case 'row-pick':
+      if(pickedTask!==v){ pickedTask=v;
+        document.querySelectorAll('tr[data-a="row-pick"]').forEach(r=>r.classList.toggle('picked', r.dataset.v===pickedTask));
+        return; }
+      return act('open', v);
     case 'open':
       open=JSON.parse(JSON.stringify(items.find(x=>x._id===v)||{}));
       if(!open._id) open=null;
