@@ -116,6 +116,9 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   Naopak noční **z pátku na sobotu** víkendová JE (`WEEKEND_EXTRA`) — právě ji
   nedělní noční nahrazuje: 8h N vždy, 12h N12 jen ručně zadaná (směna navíc →
   200 + 1000 Kč). Páteční N12 z rytmu týmů H1–H4 víkendová není.
+  **Týmy H1–H4 dostávají bonus JEN za směnu NAD rytmus** (David, 10/2026): ručně zadanou
+  směnu na den, kdy mají podle rytmu volno (12h +200, sobota/neděle +1000). Směny z rytmu
+  (i víkendové) a ruční výměna směny v den, kdy tým stejně pracuje, bonus nemají.
   Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
   v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky
   a šipky posouvají po měsících (`calMonth`), v roce po letech.

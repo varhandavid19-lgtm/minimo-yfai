@@ -1152,6 +1152,10 @@ function bonusRows(y, m){
         const man=(sm[p.id]||{})[ds];
         const code = man ? man.shift : rotCodeOn(p.id, ds);
         if(!code) return;
+        // Týmy H1–H4 (David, 10/2026): víkendy i 12h směny z rytmu jsou jejich standard — bonus
+        // jen za směnu NAD rytmus = ručně zadanou na den, kdy mají podle rytmu volno.
+        const seg=activeSeg(p.id, ds);
+        if(seg && /^H\d$/.test(seg.plan||'') && !(man && !rotCodeOn(p.id, ds))){ r.shifts++; return; }
         // 12h příplatek jen za RUČNĚ zadanou 12h směnu (8h člověk jde na 12h), ne za 12h z rytmu
         const dow=new Date(ds+'T00:00:00').getDay(), h12=!!man && SHIFTS_12H.includes(code);
         // výjimka platí i pro ruční směnu, která jen nahrazuje/prodlužuje výjimečnou směnu
