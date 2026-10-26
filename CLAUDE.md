@@ -74,7 +74,8 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   Skryté — zápis musí ručně povolit admin. Starší účty bez příznaku se řídí levelem jako dřív.
   Logika je ve `defaultPerm` (dovolenky.html) a `planDefault` (nastaveni.html) — drž je shodné.
   **Plánuje se přímo v kalendáři, bez formulářů s datumy** (David, 10/2026):
-  tažením myší v řádku člověka se označí dny (na dotyku dvě ťuknutí, Shift+klik
+  1. klik do řádku ho jen označí (žlutě, `activeRow`/`rowWasActive`), teprve v označeném
+  řádku tažením myší označíš dny / 2. klik na jméno otevře okno jména (na dotyku dvě ťuknutí, Shift+klik
   rozšíří), dole se objeví lišta (`selBarView`) s druhy nepřítomnosti, ½ dne
   dovolené, směnami sekce a „Vymazat". Zápis nejdřív uvolní vybrané dny
   (`clearRange` — přesahující záznamy se rozdělí), pak uloží nový záznam. Směna

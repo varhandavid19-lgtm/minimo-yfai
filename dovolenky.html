@@ -551,12 +551,15 @@ let selNote='';            // poznámka k nepřítomnosti z lišty výběru
 let selPlan='';            // rytmus vybraný v liště výběru
 let selNoteKey='', selNoteFor=null;   // pro který výběr (a rozsah) je selNote předvyplněná
 let activeRow=null;        // zvýrazněný řádek kalendáře (klik do řádku), jako v Nastavení
+let rowWasActive=false;    // byl řádek označený už PŘED tímto klikem? (1. klik jen označí)
 /* Klik do řádku člověka ho zvýrazní, klik kamkoli mimo kalendář (a mimo lištu a okna)
-   zvýraznění zruší. Stav drží activeRow, takže přežije překreslení. */
+   zvýraznění zruší. Stav drží activeRow, takže přežije překreslení.
+   1. klik do řádku ho jen označí, nabídka (lišta / okno jména) se otevře až 2. klikem. */
 document.addEventListener('pointerdown', e=>{
   if(!e.target.closest) return;
   const tr=e.target.closest('.cal tbody tr[data-prow]');
   if(!tr && e.target.closest('.cal-wrap, .selbar, .dlg-wrap')) return;
+  rowWasActive = !!tr && activeRow===tr.dataset.prow;
   activeRow = tr ? tr.dataset.prow : null;
   document.querySelectorAll('.cal tbody tr[data-prow]').forEach(r=>r.classList.toggle('active', r.dataset.prow===activeRow));
 }, true);
@@ -1095,7 +1098,7 @@ function tabBar(){
   const isBonus = mainTab==='bonus' && bonusSections().length;
   const t=(s)=>`<button class="tab ${!isBonus&&section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
   const permNote = isBonus ? 'Příplatky se počítají z naplánovaných směn (ručních i z rytmu).'
-    : curPerm()==='all' ? 'Tažením v řádku člověka označ dny, dole pak vyber, co v nich má být.'
+    : curPerm()==='all' ? 'Klikem označ řádek člověka, pak v něm tažením označ dny a dole vyber, co v nich má být.'
     : 'Tuto sekci můžete jen prohlížet.';
   const bonusTab = bonusSections().length ? `<button class="tab tab-bonus ${isBonus?'active':''}" data-maintab="bonus">💰 Výpočet bonusů</button>` : '';
   return `<div class="tabbar">${visible.map(t).join('')}${bonusTab}<span class="tb-note">${permNote}</span></div>`;
@@ -1267,7 +1270,7 @@ function calBar(){
     <button class="btn-ghost" id="go-today">Dnes</button>
     ${canEditAll()?'<button class="btn-ghost" id="add-name" title="Přidat člověka, který nemá účet v minimu">👤 + Přidat jméno</button>':''}
     <span class="hint">${calView==='month'?'':'Posouvejte kalendář do stran ↔ · '}${canEditAll()
-      ? 'dny označíš tažením myší v řádku (na mobilu ťukni na první a pak na poslední den)'
+      ? '1. klik označí řádek, pak v něm tažením označ dny (na mobilu ťukni na první a pak na poslední den)'
       : 'kliknutím na políčko zobrazíte detail'}</span>
   </div>`;
 }
@@ -1598,6 +1601,7 @@ function wireApp(){
     const td=e.target.closest('td.d'); if(!td) return;
     const pid=td.getAttribute('data-person'), ds=td.getAttribute('data-date');
     if(!canEditPerson(pid)) return;                     // jen čtení → řeší klik (náhled)
+    if(!rowWasActive){ if(sel && sel.personId!==pid){ sel=null; render(); } return; }   // 1. klik jen označí řádek
     e.preventDefault();                                 // ať se při tažení neoznačuje text
     if(e.shiftKey && sel && sel.personId===pid) sel.b=ds;
     else sel={personId:pid, a:ds, b:ds};
@@ -1614,8 +1618,9 @@ function wireApp(){
   });
   wrap.addEventListener('click',e=>{
     const ap=e.target.closest('[data-add-pos]'); if(ap){ openPersonDlg(null, ap.getAttribute('data-add-pos')); return; }
-    const ex=e.target.closest('td[data-ext]'); if(ex){ openPersonDlg(ex.getAttribute('data-ext')); return; }
+    const ex=e.target.closest('td[data-ext]'); if(ex){ if(rowWasActive) openPersonDlg(ex.getAttribute('data-ext')); return; }
     const td=e.target.closest('td.d'); if(!td) return;
+    if(!rowWasActive) return;                            // 1. klik jen označil řádek
     const pid=td.getAttribute('data-person'), ds=td.getAttribute('data-date');
     if(!canEditPerson(pid)){ openDay(pid, ds); return; }
     if(e.pointerType==='mouse' || (e.detail>0 && !lastTouch)) return;   // myš už vyřešilo tažení
