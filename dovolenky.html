@@ -1393,8 +1393,9 @@ function calendarView(){
       canEditAll()?'Přidej je tlačítkem <b>👤 + Přidat jméno</b> nad kalendářem.':'Lidi do plánu přidává ten, kdo má v sekci právo zapisovat.'}</div></div>`;
   }
   const mob=window.innerWidth<=680;
-  const NC=mob?110:180, DC=mob?30:34;
   const monthView=calView==='month';
+  // v Měsíci je místa dost: širší sloupec se jménem, ať je vidět celé jméno i pozice (dny se o kus zúží)
+  const NC=mob?110:(monthView?300:180), DC=mob?30:34;
   const yearMonths=buildYear(calYear), months=monthView?[yearMonths[calMonth]]:yearMonths;
   const by=absenceMap(iso(calYear,0,1),iso(calYear,11,31)), sm=shiftMap(iso(calYear,0,1),iso(calYear,11,31));
   const allDays=months.flatMap(mo=>mo.days);
