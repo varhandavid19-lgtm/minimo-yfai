@@ -9,6 +9,10 @@
      notify: { agency:   {to:'a@x.cz, b@y.cz', newTask:true, done:true, remind:true, overdue:true},
                facility: {...}, internal: {...}, admin: {...} }
 
+   Totéž pro 📋 Požadavky na správce v Plánování směn (lama.html?mode=plan):
+   kolekce plan_tasks, nastavení v meta/plancfg.notify = { plan: {...} },
+   funkce planNewTask / planDone / planDaily (společný kód: makeHandlers, SOURCES).
+
    Funkce:
    - lamaNewTask  — nový úkol → e-mail adresátům jeho záložky
    - lamaDone     — úkol přepnut na „hotovo" → e-mail i s tím, kdo ho dokončil
@@ -34,15 +38,19 @@ setGlobalOptions({ region: 'europe-west1', maxInstances: 3 });
 const SMTP_USER = defineSecret('SMTP_USER');
 const SMTP_PASS = defineSecret('SMTP_PASS');
 
-const APP_URL = 'https://varhandavid19-lgtm.github.io/minimo-yfai/lama.html';
-/* Musí odpovídat LISTS v lama.html. */
-const LISTS = {
-  agency:   'Úkoly pro LAMA AGENCY',
-  facility: 'Facility meeting',
-  internal: 'Interní LAMA',
-  admin:    'Požadavky na správce'
+/* Zdroje úkolů. Stejné funkce obsluhují LAMA (lama.html) i 📋 Požadavky na správce
+   v Plánování směn (lama.html?mode=plan, kolekce plan_tasks, nastavení meta/plancfg).
+   lists musí odpovídat LISTS v lama.html (pro plan: režim mode=plan). */
+const BASE_URL = 'https://varhandavid19-lgtm.github.io/minimo-yfai/';
+const SOURCES = {
+  lama: { coll: 'lama', cfg: 'meta/lamacfg', url: BASE_URL + 'lama.html', def: 'agency',
+          where: 'v modulu Úkoly pro LAMA AGENCY',
+          lists: { agency: 'Úkoly pro LAMA AGENCY', facility: 'Facility meeting',
+                   internal: 'Interní LAMA', admin: 'Požadavky na správce' } },
+  plan: { coll: 'plan_tasks', cfg: 'meta/plancfg', url: BASE_URL + 'dovolenky.html', def: 'plan',
+          where: 'v Plánování směn → 📋 Požadavky na správce',
+          lists: { plan: 'Požadavky na správce (Plánování směn)' } }
 };
-const listOf = t => (LISTS[t && t.list] ? t.list : 'agency');
 
 /* ===== pomůcky ===== */
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -54,8 +62,8 @@ const dayNum = ds => Math.round(Date.parse(ds + 'T00:00:00Z') / 86400000);
 const parseTo = s => [...new Set(String(s || '').split(/[\s,;]+/).map(x => x.trim().toLowerCase())
   .filter(x => /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(x)))];
 
-async function notifyCfg() {
-  const s = await db.doc('meta/lamacfg').get();
+async function notifyCfgOf(src) {
+  const s = await db.doc(src.cfg).get();
   return (s.exists && s.data().notify) || {};
 }
 
@@ -86,11 +94,16 @@ async function send(to, subject, html, text) {
   return rec.ok;
 }
 
+/* Obsluha jednoho zdroje úkolů (SOURCES.lama / SOURCES.plan) — e-maily i ranní přehled. */
+function makeHandlers(src) {
+const APP_URL = src.url, LISTS = src.lists;
+const listOf = t => (LISTS[t && t.list] ? t.list : src.def);
+const notifyCfg = () => notifyCfgOf(src);
 const wrap = (title, body) => `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#16233a;max-width:640px">
   <div style="background:#1b4b8f;color:#fff;padding:12px 16px;border-radius:8px 8px 0 0;font-weight:700">minimo · YFAI — ${esc(title)}</div>
   <div style="border:1px solid #dde4ec;border-top:0;border-radius:0 0 8px 8px;padding:14px 16px">${body}
     <p style="margin:18px 0 0"><a href="${APP_URL}" style="background:#0d7377;color:#fff;padding:9px 14px;border-radius:6px;text-decoration:none;font-weight:700">Otevřít v minimu</a></p>
-    <p style="margin:14px 0 0;font-size:11px;color:#6b7a90">Automatická zpráva z minima. Odběr upravuje správce v modulu Úkoly pro LAMA AGENCY → ✉️ Notifikace.</p>
+    <p style="margin:14px 0 0;font-size:11px;color:#6b7a90">Automatická zpráva z minima. Odběr upravuje správce ${esc(src.where)} → ✉️ Notifikace.</p>
   </div></div>`;
 const taskRow = t => `<tr>
   <td style="padding:6px 8px;border-bottom:1px solid #eef1f5;white-space:nowrap"><b>${esc(t.no)}</b></td>
@@ -103,7 +116,7 @@ const taskTable = (rows) => `<table style="border-collapse:collapse;width:100%;f
 const taskLine = t => `${t.no} · ${t.task} · termín ${dateCz(t.due)}${t.priority && t.priority !== 'běžná' ? ' · ' + t.priority : ''}`;
 
 /* ===== 1) nový úkol ===== */
-exports.lamaNewTask = onDocumentCreated({ document: 'lama/{id}', secrets: [SMTP_USER, SMTP_PASS] }, async (event) => {
+const newTask = async (event) => {
   const t = event.data && event.data.data(); if (!t) return;
   const list = listOf(t);
   const c = (await notifyCfg())[list] || {};
@@ -114,11 +127,11 @@ exports.lamaNewTask = onDocumentCreated({ document: 'lama/{id}', secrets: [SMTP_
     <p style="margin:10px 0 0;color:#41506b">Zadal: ${esc(t.createdBy || '')} · ${esc(dateCz(t.createdOn))}</p>`;
   await send(to, subject, wrap('nový úkol', body),
     `Nový úkol v záložce ${LISTS[list]}:\n${taskLine(t)}\nZadal: ${t.createdBy || ''}\n\n${APP_URL}`);
-});
+};
 
 /* ===== 1b) úkol hotový — i s tím, kdo dokončení zaklikl (pole closedBy) =====
    Posílá se jen při přechodu do stavu „hotovo", ne při každé další úpravě. */
-exports.lamaDone = onDocumentUpdated({ document: 'lama/{id}', secrets: [SMTP_USER, SMTP_PASS] }, async (event) => {
+const done = async (event) => {
   const before = event.data && event.data.before.data(), t = event.data && event.data.after.data();
   if (!before || !t || before.status === 'hotovo' || t.status !== 'hotovo') return;
   const list = listOf(t);
@@ -133,7 +146,7 @@ exports.lamaDone = onDocumentUpdated({ document: 'lama/{id}', secrets: [SMTP_USE
     ${t.note ? `<p style="margin:6px 0 0;color:#41506b">Poznámka: ${esc(t.note)}</p>` : ''}`;
   await send(to, subject, wrap('úkol hotov', body),
     `Úkol hotov v záložce ${LISTS[list]}:\n${taskLine(t)}\nDokončení zaklikl(a): ${who} · ${when}${t.note ? '\nPoznámka: ' + t.note : ''}\n\n${APP_URL}`);
-});
+};
 
 /* ===== 2+3) ranní připomínky a souhrn po termínu ===== */
 /* Které připomínky (1/3, 2/3 doby) úkol dnes nově dosáhl. Úkol po termínu
@@ -151,10 +164,10 @@ function dueReminders(t, today) {
   return hit;
 }
 
-exports.lamaDaily = onSchedule({ schedule: '0 7 * * *', timeZone: 'Europe/Prague', secrets: [SMTP_USER, SMTP_PASS] }, async () => {
+const daily = async () => {
   const today = todayPrague();
   const cfg = await notifyCfg();
-  const snap = await db.collection('lama').get();
+  const snap = await db.collection(src.coll).get();
   const byList = {};
   const marks = [];   // [ref, {remind}] — zapíše se až po odeslání
   snap.forEach(doc => {
@@ -192,5 +205,19 @@ exports.lamaDaily = onSchedule({ schedule: '0 7 * * *', timeZone: 'Europe/Prague
     if (ok && c.remind !== false) marks.push(...L.soonRefs);
   }
   for (const [ref, data] of marks) await ref.update(data);
-  logger.info('Ranní přehled hotov', { today, lists: Object.keys(byList).length, marked: marks.length });
-});
+  logger.info('Ranní přehled hotov', { src: src.coll, today, lists: Object.keys(byList).length, marked: marks.length });
+};
+return { newTask, done, daily };
+}
+
+const LAMA = makeHandlers(SOURCES.lama), PLAN = makeHandlers(SOURCES.plan);
+const opts = doc => ({ document: doc, secrets: [SMTP_USER, SMTP_PASS] });
+const morning = { schedule: '0 7 * * *', timeZone: 'Europe/Prague', secrets: [SMTP_USER, SMTP_PASS] };
+// Úkoly pro LAMA AGENCY (názvy funkcí beze změny, ať se při nasazení nic nemaže)
+exports.lamaNewTask = onDocumentCreated(opts('lama/{id}'), LAMA.newTask);
+exports.lamaDone    = onDocumentUpdated(opts('lama/{id}'), LAMA.done);
+exports.lamaDaily   = onSchedule(morning, LAMA.daily);
+// 📋 Požadavky na správce v Plánování směn
+exports.planNewTask = onDocumentCreated(opts('plan_tasks/{id}'), PLAN.newTask);
+exports.planDone    = onDocumentUpdated(opts('plan_tasks/{id}'), PLAN.done);
+exports.planDaily   = onSchedule(morning, PLAN.daily);

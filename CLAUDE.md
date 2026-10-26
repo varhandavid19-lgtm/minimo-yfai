@@ -21,6 +21,13 @@ modul je vlastní stránka.
   (vidí správci a PE koordinátoři; komukoli dalšímu přístup přidá David v Nastavení)
 - `lama.html` — Úkoly pro LAMA AGENCY: úkoly pro externí agenturu
   (vidí jen správci; komukoli dalšímu přístup přidá David v Nastavení)
+  **Tentýž soubor slouží i záložce 📋 Požadavky na správce v Plánování směn** (David, 10/2026):
+  `dovolenky.html` ho vkládá jako `lama.html?mode=plan&embed=1` (iframe v `#tasks-host` MIMO
+  `#app`, ať se při překreslení Plánování znovu nenačítá). V režimu plan: VLASTNÍ úkoly v kolekci
+  `plan_tasks`, čítač `meta/plancfg`, přílohy `plantasks/…`, jedna záložka `plan`; přístup má
+  každý, kdo v Plánování smí zapisovat v jakékoli sekci (jen sebe / všechny) — `planAccess`
+  v lama.html a `canPlanTasks` v dovolenky.html musí zůstat shodné. E-maily: `functions/index.js`
+  (`SOURCES.plan`, funkce planNewTask/planDone/planDaily). Nekopíruj LAMA do dovolenky.html.
 - `nastaveni.html` — uživatelé, úrovně a přístupy k modulům
 - `header.js` + `header.css` — SPOLEČNÁ hlavička všech modulů.
   Nová stránka ji vykreslí přes `window.uheaderHTML({module, cur, user, level,

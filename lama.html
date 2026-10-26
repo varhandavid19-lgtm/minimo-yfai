@@ -181,6 +181,7 @@
     input,select,textarea{font-size:16px}
     .btn-cam,.filebtn{flex:1 1 100%;justify-content:center;text-align:center}
   }
+  main.embed{max-width:none;margin:0;padding:0 0 30px}
 </style>
 </head>
 <body>
@@ -213,6 +214,23 @@ const db = getFirestore(fbApp);
 const storage = getStorage(fbApp);
 
 /* ==========================================================
+   Režim „Plánování směn" (David, 10/2026): stejná stránka slouží i záložce
+   📋 Požadavky na správce v Plánování směn — dovolenky.html ji vkládá jako
+   lama.html?mode=plan&embed=1. Úkoly jsou VLASTNÍ (kolekce plan_tasks, čítač
+   meta/plancfg, přílohy plantasks/…), s úkoly LAMA se nemíchají. Přístup má
+   každý, kdo v Plánování smí zapisovat (v jakékoli sekci jen sebe / všechny).
+   embed=1 = bez hlavičky portálu (je uvnitř Plánování).
+   ========================================================== */
+const QS = new URLSearchParams(location.search);
+const PLAN_MODE = QS.get('mode')==='plan';
+const EMBED = QS.get('embed')==='1';
+const COLL   = PLAN_MODE ? 'plan_tasks' : 'lama';
+const CFG_ID = PLAN_MODE ? 'plancfg'    : 'lamacfg';
+const STORE  = PLAN_MODE ? 'plantasks'  : 'lama';
+const MOD_NAME = PLAN_MODE ? 'Požadavky na správce (Plánování směn)' : 'Úkoly pro LAMA AGENCY';
+if(PLAN_MODE) document.title='Požadavky na správce — Plánování směn — YFAI minimo';
+
+/* ==========================================================
    Kdo do modulu smí
    Výchozí stav: správci podle e-mailu smí zapisovat, ostatní modul vůbec
    nevidí. Komukoli dalšímu (např. teamleaderovi agentury) se přístup nastaví
@@ -223,7 +241,21 @@ const storage = getStorage(fbApp);
    ========================================================== */
 const OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
 const isOwner = e => OWNERS.includes(String(e||'').trim().toLowerCase());
+/* Plánování: smí zapisovat v aspoň jedné sekci (Zapisovat jen sebe / všechny)?
+   Stejná logika práv jako v dovolenky.html (resolvePerm/defaultPerm) a nastaveni.html. */
+const PLAN_SEC_KEYS = ['engineering','maintenance','toolsetters'];
+const LEVEL_RANK = {basic:1,warehouse:2,approver:3,wadmin:4,superadmin:5};
+function planAccess(u){
+  if(!u) return 'none';
+  const cap=(u.modules||{}).plan;
+  if(cap==='none'||cap==='read') return 'none';            // modul Plánování skrytý / jen číst
+  const dflt = u.planStrict ? 'read' : ((LEVEL_RANK[u.level]||1)>=3 ? 'all' : 'self');
+  const can = PLAN_SEC_KEYS.some(k=>{ const p=(u.perms||{})[k];
+    const eff=['none','read','self','all'].includes(p) ? p : dflt; return eff==='self'||eff==='all'; });
+  return can ? 'write' : 'none';
+}
 const lamaAccess = u => {
+  if(PLAN_MODE) return planAccess(u);
   if(!u) return 'none';
   const set=(u.modules||{}).lama;
   if(set==='none'||set==='read'||set==='write') return set;
@@ -251,13 +283,13 @@ const PRIORITIES = [
 /* Záložky modulu — každá je samostatný seznam se stejnou tabulkou a stejnými poli.
    Úkol patří do seznamu podle pole `list`; starší úkoly bez něj jsou v „agency".
    Čísla úkolů jdou z jednoho společného čítače (meta/lamacfg.seq) přes všechny záložky. */
-const LISTS = [
+const LISTS = PLAN_MODE ? [{k:'plan', label:'Požadavky na správce'}] : [
   {k:'agency',   label:'Úkoly pro LAMA AGENCY'},
   {k:'facility', label:'Facility meeting'},
   {k:'internal', label:'Interní LAMA'},
   {k:'admin',    label:'Požadavky na správce'}
 ];
-const listOf = t => (LISTS.some(l=>l.k===(t&&t.list)) ? t.list : 'agency');
+const listOf = t => (LISTS.some(l=>l.k===(t&&t.list)) ? t.list : LISTS[0].k);
 const listLabel = k => (LISTS.find(l=>l.k===k)||LISTS[0]).label;
 const prioOf = t => (PRIORITIES.find(p=>p.k===(t&&t.priority)) || PRIORITIES[2]);
 const prioRank = t => PRIORITIES.indexOf(prioOf(t));
@@ -291,6 +323,7 @@ const lateDays = t => isLate(t) ? Math.floor((Date.parse(today())-Date.parse(t.d
 function writeHint(e){
   const code=(e&&(e.code||e.message))||'';
   if(/permission|insufficient/i.test(String(code))){
+    if(PLAN_MODE) return 'Server zápis odmítl. Nejspíš nejsou publikovaná pravidla Firestore pro Požadavky na správce v Plánování — dej vědět Davidovi.';
     return lamaAccess(me)==='read'
       ? 'K úkolům pro LAMA AGENCY máš přístup jen na čtení. O zápis požádej Davida — nastaví ho v Nastavení u tvého jména.'
       : 'Server zápis odmítl. Zkontroluj v Nastavení, že máš u Úkolů pro LAMA AGENCY „Zapisovat". Pokud ano, nejspíš nejsou publikovaná pravidla Firestore.';
@@ -322,8 +355,8 @@ const CARDS=[
   {k:'late', l:'Po termínu', note:n=> n?'řeš hned':'všechno v termínu', color:n=>n?'#c0392b':'#1f9254', test:t=>isLate(t)},
   {k:'done', l:'Hotovo',     note:(n,L)=>`celkem ${L.length} úkolů`,     color:()=>'#1f9254', test:t=>isDone(t)}
 ];
-let curList='agency';               // otevřená záložka (pamatuje si ji prohlížeč)
-try{ const s=localStorage.getItem('lama-list'); if(LISTS.some(l=>l.k===s)) curList=s; }catch(e){}
+let curList=LISTS[0].k;             // otevřená záložka (pamatuje si ji prohlížeč)
+try{ const s=localStorage.getItem(PLAN_MODE?'plantasks-list':'lama-list'); if(LISTS.some(l=>l.k===s)) curList=s; }catch(e){}
 const listItems = () => items.filter(t=>listOf(t)===curList);
 let hideDone=true, toastMsg=null, toastKind='';
 /* Sloupce tabulky a řazení kliknutím na záhlaví. `first` = směr prvního kliku
@@ -341,7 +374,7 @@ const COLS=[
   {k:'due',      l:'Termín',        first:1,  v:t=>t.due||'9999'},
   {k:'status',   l:'Stav',          first:1,  v:t=>STATUS_ORDER[t.status]??9},
   {k:'late',     l:'Po termínu',    first:-1, v:t=>lateDays(t)},
-  {k:'note',     l:'Poznámka / vyjádření agentury', first:1, v:t=>t.note||'￿'},
+  {k:'note',     l:PLAN_MODE?'Poznámka / vyjádření':'Poznámka / vyjádření agentury', first:1, v:t=>t.note||'￿'},
   {k:'closedOn', l:'Hotovo',        first:-1, v:t=>t.closedOn||''}
 ];
 let sortBy=null;                    // {k, dir} nebo null = výchozí řazení
@@ -358,7 +391,7 @@ async function loadProfile(user){
   try{ const s=await getDoc(ref); if(s.exists()) d=s.data(); }catch(e){}
   const role = isOwner(user.email) ? 'admin' : (d.role||'zadavatel');
   return {uid:user.uid, email:user.email, name:d.name||(user.email||'').split('@')[0], role,
-          positions:d.positions||[], modules:d.modules||{},
+          positions:d.positions||[], modules:d.modules||{}, perms:d.perms||{}, planStrict:!!d.planStrict,
           level:d.level || ROLE2LEVEL[role] || 'basic'};
 }
 onAuthStateChanged(auth, async user=>{
@@ -374,7 +407,7 @@ async function load(force){
   if(loaded && !force) return;
   errMsg=''; busy='Načítám úkoly…'; render();
   try{
-    const qs=await getDocs(query(collection(db,'lama'), orderBy('createdOn','desc'), limit(1000)));
+    const qs=await getDocs(query(collection(db,COLL), orderBy('createdOn','desc'), limit(1000)));
     items=qs.docs.map(d=>Object.assign({_id:d.id}, d.data()));
     loaded=true;
   }catch(e){ errMsg=writeHint(e); }
@@ -383,7 +416,7 @@ async function load(force){
 /* Číslo úkolu je prosté pořadové číslo — 1, 2, 3… Generuje se TRANSAKCÍ,
    jinak by dva lidi naráz dostali stejné. */
 async function nextNo(){
-  const ref=doc(db,'meta','lamacfg');
+  const ref=doc(db,'meta',CFG_ID);
   const n=await runTransaction(db, async tx=>{
     const s=await tx.get(ref);
     const cur=(((s.data()||{}).seq)||0)+1;
@@ -430,7 +463,7 @@ async function save(){
       const rec={no, createdOn:t.createdOn||today(), createdBy:me.name, task:t.task, area:t.area||'',
         due:t.due, status:t.status, priority:prioOf(t).k, list:listOf(t), closedOn:t.closedOn, closedBy:t.closedBy||'', note:t.note||'', files:[],
         hist:[`${today()} · ${me.name} · úkol zadán (${listLabel(listOf(t))})`]};
-      const ref=await addDoc(collection(db,'lama'), rec);
+      const ref=await addDoc(collection(db,COLL), rec);
       /* přílohy vybrané ještě před uložením nahrajeme teď, když máme id */
       if(pending.length){
         const arr=[], hist=rec.hist.slice();
@@ -455,7 +488,7 @@ async function save(){
       if(closing) add.push('úkol hotov'); else if(other || !add.length) add.push('upraveno');
       const hist=(t.hist||[]).concat(add.map(a=>`${today()} · ${me.name} · ${a}`));
       const {_id,...data}=t; data.hist=hist;
-      await updateDoc(doc(db,'lama',t._id), data);
+      await updateDoc(doc(db,COLL,t._id), data);
       t.hist=hist; sync(t);
       toast(moved ? `Úkol ${t.no} přesunut do záložky ${listLabel(listOf(t))}.` : 'Uloženo.','ok');
     }
@@ -470,7 +503,7 @@ async function moveTask(id, list){
   if(!LISTS.some(l=>l.k===list) || listOf(t)===list) return;
   const hist=(t.hist||[]).concat(`${today()} · ${me.name} · přesunuto: ${listLabel(listOf(t))} → ${listLabel(list)}`);
   try{
-    await updateDoc(doc(db,'lama',id), {list, hist});
+    await updateDoc(doc(db,COLL,id), {list, hist});
     t.list=list; t.hist=hist;
     toast(`Úkol ${t.no} přesunut do záložky ${listLabel(list)}.`,'ok');
   }catch(e){ toast('Přesun se nepovedl. '+writeHint(e),'err'); }
@@ -484,7 +517,7 @@ async function removeItem(id){
   busy='Mažu úkol…'; render();
   try{
     for(const fl of (t.files||[])){ try{ await deleteObject(sref(storage,fl.path)); }catch(e){ /* nemusí tam být */ } }
-    await deleteDoc(doc(db,'lama',id));
+    await deleteDoc(doc(db,COLL,id));
     items=items.filter(x=>x._id!==id);
     if(open && open._id===id){ open=null; oMsg=''; }
     toast('Úkol '+t.no+' smazán.','ok');
@@ -512,7 +545,7 @@ async function shrink(f){
 }
 async function upload(id, f){
   const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-80);
-  const path='lama/'+id+'/'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'_'+safe;
+  const path=STORE+'/'+id+'/'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'_'+safe;
   const st=sref(storage,path);
   await uploadBytes(st,f,{contentType:f.type||'application/octet-stream'});
   return {name:f.name, path, url:await getDownloadURL(st), size:f.size, type:f.type||'', at:today(), by:me.name};
@@ -538,7 +571,7 @@ async function addFiles(list){
     catch(e){ toast('Nenahrálo se: '+fl.name+' — '+((e&&e.message)||e),'err'); }
   }
   if(n){
-    try{ await updateDoc(doc(db,'lama',t._id), {files:arr, hist});
+    try{ await updateDoc(doc(db,COLL,t._id), {files:arr, hist});
          t.files=arr; t.hist=hist; sync(t);
          toast(n===1?'Příloha nahrána.':n+' příloh nahráno.','ok'); }
     catch(e){ toast('Uložení příloh selhalo. '+writeHint(e),'err'); }
@@ -553,7 +586,7 @@ async function removeFile(i){
   try{ await deleteObject(sref(storage,fl.path)); }catch(e){ /* v úložišti už být nemusí */ }
   files.splice(i,1);
   const hist=(t.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${fl.name}`);
-  try{ await updateDoc(doc(db,'lama',t._id), {files, hist}); t.files=files; t.hist=hist; sync(t); }
+  try{ await updateDoc(doc(db,COLL,t._id), {files, hist}); t.files=files; t.hist=hist; sync(t); }
   catch(e){ toast('Smazání selhalo. '+writeHint(e),'err'); }
   render();
 }
@@ -660,7 +693,7 @@ function listView(){
 async function openNtf(){
   if(!canDelete()) return;
   nMsg=''; ntf={};
-  try{ const s=await getDoc(doc(db,'meta','lamacfg')); ntf=JSON.parse(JSON.stringify((s.exists() && s.data().notify) || {})); }
+  try{ const s=await getDoc(doc(db,'meta',CFG_ID)); ntf=JSON.parse(JSON.stringify((s.exists() && s.data().notify) || {})); }
   catch(e){ nMsg='Nastavení se nepodařilo načíst. '+writeHint(e); }
   LISTS.forEach(l=>{ ntf[l.k]=Object.assign({to:'', newTask:true, done:true, remind:true, overdue:true}, ntf[l.k]||{}); });
   render();
@@ -681,7 +714,7 @@ async function saveNtf(){
     .forEach(a=>{ if(!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(a)) bad.push(a); }));
   if(bad.length){ nMsg='Tohle nevypadá jako e-mail: '+bad.join(', '); render(); return; }
   nMsg='Ukládám…'; render();
-  try{ await setDoc(doc(db,'meta','lamacfg'),{notify:ntf},{merge:true}); ntf=null; nMsg=''; toast('Notifikace uloženy.','ok'); }
+  try{ await setDoc(doc(db,'meta',CFG_ID),{notify:ntf},{merge:true}); ntf=null; nMsg=''; toast('Notifikace uloženy.','ok'); }
   catch(e){ nMsg='Uložení selhalo. '+writeHint(e); render(); }
 }
 function ntfModal(){
@@ -716,7 +749,7 @@ function itemModal(){
   const files=isNew ? pending.map(fl=>({name:fl.name,size:fl.size,pending:true,url:'',type:fl.type}))
                     : (t.files||[]);
   return `
-  <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Úkol pro LAMA AGENCY">
+  <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="${PLAN_MODE?'Požadavek na správce':'Úkol pro LAMA AGENCY'}">
     <h3>${isNew?'Nový úkol — '+esc(listLabel(listOf(t))):'Úkol '+esc(t.no)+' — '+esc(listLabel(listOf(t)))}
       <button class="x" data-a="close" aria-label="Zavřít">✕</button></h3>
     <div class="robar">
@@ -732,7 +765,7 @@ function itemModal(){
         <datalist id="lm-areas">${AREAS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist></div>
 
       <div class="f span4"><label>Úkol <span style="color:var(--red)">*</span></label>
-        <textarea id="lm-task" rows="3" placeholder="Co má agentura udělat" ${ro?'disabled':''}>${esc(t.task||'')}</textarea></div>
+        <textarea id="lm-task" rows="3" placeholder="${PLAN_MODE?'Co je potřeba zařídit':'Co má agentura udělat'}" ${ro?'disabled':''}>${esc(t.task||'')}</textarea></div>
 
       <div class="f"><label>Termín <span style="color:var(--red)">*</span></label>
         <input id="lm-due" type="date" value="${esc(t.due||'')}" ${ro?'disabled':''}${lt?' style="color:var(--red);font-weight:700"':''}></div>
@@ -744,8 +777,8 @@ function itemModal(){
       <div class="f span2"><label>Záložka <span class="muted" style="font-weight:400">— změnou úkol přesuneš</span></label>
         <select id="lm-list" ${ro?'disabled':''}>${LISTS.map(l=>`<option value="${l.k}" ${listOf(t)===l.k?'selected':''}>${esc(l.label)}</option>`).join('')}</select></div>
 
-      <div class="f span4"><label>Poznámka / vyjádření agentury</label>
-        <textarea id="lm-note" rows="3" placeholder="Co agentura udělala, co chybí, na co čeká…" ${ro?'disabled':''}>${esc(t.note||'')}</textarea></div>
+      <div class="f span4"><label>${PLAN_MODE?'Poznámka / vyjádření':'Poznámka / vyjádření agentury'}</label>
+        <textarea id="lm-note" rows="3" placeholder="${PLAN_MODE?'Co se udělalo, co chybí, na co se čeká…':'Co agentura udělala, co chybí, na co čeká…'}" ${ro?'disabled':''}>${esc(t.note||'')}</textarea></div>
 
       <div class="sect">Přílohy a fotky</div>
       <div class="f span4">
@@ -810,11 +843,13 @@ function render(){
 }
 /* Kdo do modulu nesmí, skončí na hlavní stránce s moduly, kam smí. */
 function noAccessView(){
+  if(PLAN_MODE) return `<div class="notice">Do Požadavků na správce má přístup jen ten, kdo v Plánování směn smí zapisovat.</div>`;
   location.replace('index.html?noaccess=lama');
   return `<div class="notice">K úkolům pro LAMA AGENCY nemáš přístup — přecházím na hlavní stránku…</div>`;
 }
 function shell(inner){
-  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Úkoly pro LAMA AGENCY', cur:'lama',
+  if(EMBED) return `<main class="embed">${inner}</main>`;   // uvnitř Plánování: bez hlavičky portálu
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:MOD_NAME, cur:PLAN_MODE?'dovolenky':'lama',
     user:esc(me.email), email:esc(me.email), level:(LEVEL_LABEL[me.level]||''),
     positions:me.positions||[], mods:me.modules||{}, logoutAttr:'id="btn-logout"',
     modules:['portal','nakup','dovolenky','nastaveni','opravy','engineering','shopfloor','lama']}) : '';
@@ -822,7 +857,7 @@ function shell(inner){
 }
 function loginView(){
   return `<div class="login-wrap"><form class="login" id="loginForm">
-    <h2>minimo · YFAI</h2><p>Úkoly pro LAMA AGENCY</p>
+    <h2>minimo · YFAI</h2><p>${esc(MOD_NAME)}</p>
     ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
     <input type="email" id="li-email" placeholder="E-mail" autocomplete="username">
     <input type="password" id="li-pass" placeholder="Heslo" autocomplete="current-password">
@@ -887,7 +922,7 @@ async function act(a,v){
     }
     case 'list':
       if(!LISTS.some(l=>l.k===v)) return;
-      curList=v; try{ localStorage.setItem('lama-list',v); }catch(e){}
+      curList=v; try{ localStorage.setItem(PLAN_MODE?'plantasks-list':'lama-list',v); }catch(e){}
       break;
     case 'new':
       if(!canWrite()) return;

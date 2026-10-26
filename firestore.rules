@@ -204,6 +204,22 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // --- Požadavky na správce v Plánování směn (lama.html?mode=plan) ---
+    // Stejně jako ostatní kolekce Plánování: kdo smí zapisovat, hlídá aplikace
+    // (jen ten, kdo v Plánování smí zapisovat). Mazat smí jen správce.
+    match /plan_tasks/{id} {
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+    // Čítač čísel požadavků + nastavení e-mailů (notify, mění jen správce).
+    match /meta/plancfg {
+      allow read, create: if signedIn();
+      allow update: if isAdmin()
+                    || (signedIn()
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq']));
+      allow delete: if isAdmin();
+    }
+
     // Záznam v historii importů jde jen založit, ne měnit ani mazat.
     match /dt_imports/{id} {
       allow read:   if signedIn();

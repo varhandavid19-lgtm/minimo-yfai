@@ -104,6 +104,10 @@
   .ptable.bonus tr.zero td{color:#9aa7b8}
   .ptable.bonus tfoot td{background:#eef3fb;border-top:2px solid #c3d0e2;font-weight:700;padding:9px 11px}
   .tab.tab-bonus{margin-left:12px}
+  /* záložka Požadavky na správce: vložená stránka lama.html?mode=plan přes celou výšku okna */
+  main.tasks-main{display:none}
+  .tasks-host{padding:8px 20px 20px}
+  .tasks-frame{display:block;width:100%;height:calc(100vh - 190px);min-height:520px;border:0;background:transparent}
   .tabbar{overflow-x:auto;max-width:100vw}
   .tabbar .tab{flex:none;white-space:nowrap}
 
@@ -545,7 +549,12 @@ let calMonth=_now0.getMonth();     // měsíc v zobrazení „Měsíc" (0 = lede
 /* Zobrazení: 'year' = celý rok s posuvníkem, 'month' = jeden měsíc roztažený na šířku.
    Volba si pamatuje prohlížeč (jen pohodlí jednoho uživatele). */
 let calView='year';
-let mainTab='plan';                // 'plan' = kalendář sekce, 'bonus' = výpočet bonusů
+let mainTab='plan';                // 'plan' = kalendář sekce, 'bonus' = výpočet bonusů, 'tasks' = Požadavky na správce
+/* 📋 Požadavky na správce (David, 10/2026): vidí ji každý, kdo v Plánování smí zapisovat
+   v jakékoli sekci (Zapisovat jen sebe / všechny) a nemá modul Plánování jen pro čtení.
+   Obsah je lama.html?mode=plan&embed=1 — stejné funkce jako záložka v LAMA, ale vlastní
+   úkoly (kolekce plan_tasks). Stejná podmínka přístupu je v lama.html (planAccess). */
+const canPlanTasks = () => modCap()==='write' && SECTIONS.some(s=>['self','all'].includes(resolvePerm(myDoc, s.key)));
 let bonusYear=_now0.getFullYear(), bonusMonth=_now0.getMonth();
 try{ if(localStorage.getItem('plan-view')==='month') calView='month'; }catch(e){}
 let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
@@ -1013,7 +1022,22 @@ function openPersonDlg(id, pos){
    ========================================================== */
 const appEl=document.getElementById('app');
 
-function render(){
+/* Vložená stránka Požadavků na správce žije MIMO #app: Plánování se překresluje při každé
+   změně dat a iframe by se pokaždé znovu načetl (ztratil by se rozepsaný úkol). Vytvoří se
+   jednou, pak se jen ukazuje/schovává podle záložky. */
+function syncTasksFrame(){
+  let h=document.getElementById('tasks-host');
+  const on = !!me && mainTab==='tasks' && canPlanTasks();
+  if(!on){ if(h) h.style.display='none'; return; }
+  if(!h){
+    h=document.createElement('div'); h.id='tasks-host'; h.className='tasks-host';
+    h.innerHTML='<iframe class="tasks-frame" src="lama.html?mode=plan&embed=1" title="Požadavky na správce"></iframe>';
+    appEl.after(h);
+  }
+  h.style.display='block';
+}
+function render(){ renderInner(); syncTasksFrame(); }
+function renderInner(){
   if(dragging){ pendingRender=true; return; }
   const c=document.querySelector('.cal-wrap');
   if(c){ calScrollL=c.scrollLeft; calScrollT=c.scrollTop; }
@@ -1080,6 +1104,11 @@ function appView(){
     return `${headerView()}<main><div class="empty-cal" style="margin-top:20px">
       Do Plánování směn nemáš přístup — přecházím na hlavní stránku…</div></main>`;
   }
+  if(mainTab==='tasks' && canPlanTasks()){
+    return `${headerView()}
+  ${tabBar()}
+  <main class="tasks-main"></main>`;   // obsah je v #tasks-host (syncTasksFrame), mimo překreslování
+  }
   if(mainTab==='bonus' && bonusSections().length){
     return `${headerView()}
   ${tabBar()}
@@ -1101,12 +1130,15 @@ function appView(){
 function tabBar(){
   const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   const isBonus = mainTab==='bonus' && bonusSections().length;
-  const t=(s)=>`<button class="tab ${!isBonus&&section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
-  const permNote = isBonus ? 'Příplatky se počítají z naplánovaných směn (ručních i z rytmu).'
+  const isTasks = mainTab==='tasks' && canPlanTasks();
+  const t=(s)=>`<button class="tab ${!isBonus&&!isTasks&&section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
+  const permNote = isTasks ? 'Požadavky na správce — stejné jako v modulu LAMA, ale vlastní seznam pro Plánování.'
+    : isBonus ? 'Příplatky se počítají z naplánovaných směn (ručních i z rytmu).'
     : curPerm()==='all' ? 'Klikem označ řádek člověka, pak v něm tažením označ dny a dole vyber, co v nich má být.'
     : 'Tuto sekci můžete jen prohlížet.';
   const bonusTab = bonusSections().length ? `<button class="tab tab-bonus ${isBonus?'active':''}" data-maintab="bonus">💰 Výpočet bonusů</button>` : '';
-  return `<div class="tabbar">${visible.map(t).join('')}${bonusTab}<span class="tb-note">${permNote}</span></div>`;
+  const tasksTab = canPlanTasks() ? `<button class="tab tab-bonus ${isTasks?'active':''}" data-maintab="tasks">📋 Požadavky na správce</button>` : '';
+  return `<div class="tabbar">${visible.map(t).join('')}${bonusTab}${tasksTab}<span class="tb-note">${permNote}</span></div>`;
 }
 
 /* ==========================================================
@@ -1533,6 +1565,7 @@ function wireApp(){
       section=b.getAttribute('data-section'); mainTab='plan'; sel=null; alignedYear=null; render();
     }));
   document.querySelector('[data-maintab="bonus"]')?.addEventListener('click',()=>{ mainTab='bonus'; sel=null; render(); });
+  document.querySelector('[data-maintab="tasks"]')?.addEventListener('click',()=>{ if(mainTab==='tasks') return; mainTab='tasks'; sel=null; render(); });
   // výpočet bonusů: měsíc a export
   const bshift=dir=>{ bonusMonth+=dir; if(bonusMonth<0){bonusMonth=11;bonusYear--;} else if(bonusMonth>11){bonusMonth=0;bonusYear++;} render(); };
   document.getElementById('bn-prev')?.addEventListener('click',()=>bshift(-1));
