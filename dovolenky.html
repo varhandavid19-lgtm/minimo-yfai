@@ -166,6 +166,10 @@
   .cal td.name{position:sticky;left:0;z-index:3;background:#fff;text-align:left;padding:0 12px;font-weight:600;
     font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 0 #e6ebf2}
   .cal tbody tr:hover td.name{background:#f7f9fc}
+  /* řádek pod myší a řádek, na kterém se pracuje (klik), žlutě s oranžovým proužkem —
+     stejně jako tabulka uživatelů v Nastavení. Barevná políčka (inline barva) zůstanou. */
+  .cal tbody tr[data-prow]:hover td,.cal tbody tr.active td{background-color:#fff1c7}
+  .cal tbody tr[data-prow]:hover td.name,.cal tbody tr.active td.name{background:#fff1c7;box-shadow:inset 4px 0 0 #f6821f,2px 0 0 #e6ebf2}
   .cal td.d{cursor:pointer;user-select:none}
   /* označené dny (tažením) — oranžový rámeček a lehký přeliv přes barvu záznamu */
   .cal td.d.sel{box-shadow:inset 0 0 0 2px #e8590c !important;
@@ -546,6 +550,16 @@ let sel=null;              // označené dny v kalendáři {personId, a, b} (a =
 let selNote='';            // poznámka k nepřítomnosti z lišty výběru
 let selPlan='';            // rytmus vybraný v liště výběru
 let selNoteKey='', selNoteFor=null;   // pro který výběr (a rozsah) je selNote předvyplněná
+let activeRow=null;        // zvýrazněný řádek kalendáře (klik do řádku), jako v Nastavení
+/* Klik do řádku člověka ho zvýrazní, klik kamkoli mimo kalendář (a mimo lištu a okna)
+   zvýraznění zruší. Stav drží activeRow, takže přežije překreslení. */
+document.addEventListener('pointerdown', e=>{
+  if(!e.target.closest) return;
+  const tr=e.target.closest('.cal tbody tr[data-prow]');
+  if(!tr && e.target.closest('.cal-wrap, .selbar, .dlg-wrap')) return;
+  activeRow = tr ? tr.dataset.prow : null;
+  document.querySelectorAll('.cal tbody tr[data-prow]').forEach(r=>r.classList.toggle('active', r.dataset.prow===activeRow));
+}, true);
 let busySel=false;         // ukládá se výběr
 let dragging=false, pendingRender=false;   // během tažení se nepřekresluje (zrušilo by tah)
 let collision=null;        // {list:[...], from, to, onOk} – upozornění na kolizi ve stejném úseku
@@ -1412,7 +1426,7 @@ function calendarView(){
       ? `<td class="name ext edit" data-ext="${p.id}" title="${esc(tip)} — kliknutím upravíš nebo odebereš">${label}</td>`
       : p.ext ? `<td class="name ext" title="${esc(tip)}">${label}</td>`
       : `<td class="name" title="${esc(tip)}">${label}</td>`;
-    return `<tr>${nameCell}${cells}</tr>`;
+    return `<tr data-prow="${p.id}"${activeRow===p.id?' class="active"':''}>${nameCell}${cells}</tr>`;
   };
   // Rozdělení tabulky podle SMĚNY (směnového rytmu platného dnes), ne podle pozice —
   // pozice je za jménem (David, 10/2026). Pořadí skupin jako v nabídce rytmů,
