@@ -636,6 +636,11 @@ Přehled všech 5× proč / A3 z kolekce `problems`.
 - Podbarvení řádků tabulky podle stavu (nový = bílý). Neruš bez vyžádání.
 - Řádek tabulky požadavků (`row-pick`, David, 10/2026): 1. klik ho označí žlutě
   (`pickedReq`), 2. klik na tentýž řádek otevře detail; klik mimo tabulku označení zruší.
+- Hromadné schválení (10/2026): první sloupec tabulky má zaškrtávátko (`aprSel`,
+  akce `apr-selrow`/`apr-selall`/`apr-bulk`/`apr-clear`). Aktivní jen s `P().approve`
+  (Approver, Warehouse Admin, Super Admin), ostatním šedé (disabled). Zaškrtnout lze jen
+  `canApproveRow` (neschválené a nezamítnuté); nad tabulkou pak lišta „Schválit vybrané".
+  Zápis je stejný jako u jednotlivého schválení (`approvedBy/approvedAt/status/hist`).
   Řádek pod myší je žlutý taky (stejně jako tabulka uživatelů v Nastavení).
 - Detail požadavku, záložka **Nákup/příjem**: box „📦 Nákup/příjem“ (req./RFQ/order no., příjem)
   a pod ním box **„🏢 Dodavatel“** (David, 10/2026) — `dodavatel` (TOTÉŽ pole jako v záložce

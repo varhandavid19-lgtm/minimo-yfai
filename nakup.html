@@ -149,6 +149,8 @@
   .mgrbtns{display:flex;gap:10px;align-items:center;padding:0 14px 14px;flex-wrap:wrap}
   .selcol{width:34px;text-align:center;cursor:default}
   .selcol input{width:17px;height:17px;cursor:pointer;margin:0}
+  .selcol input:disabled{cursor:not-allowed;filter:grayscale(1);opacity:.45}
+  .aprbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 12px;background:#e9f7ee;border:1px solid #9fd6b2;border-radius:8px;font-size:13px}
   .recvbox{margin:14px;border:1px solid #cddaf0;border-radius:8px;overflow:hidden}
   .recvh{background:#eef3fb;padding:8px 12px;font-weight:700;font-size:12.5px;color:var(--navy-2);display:flex;align-items:center;gap:10px}
   .recv-editbtn{margin-left:auto;background:#fff;border:1px solid var(--navy-2);color:var(--navy-2);font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:7px;cursor:pointer}
@@ -613,6 +615,8 @@ let qrOpen=false, qr=null;   // stav QR skeneru
 let manage={on:false};                                        // režim „Správa požadavků" (jen skladník/admin)
 let pickedReq=null;                                          // označený řádek tabulky (1. klik), 2. klik ho otevře
 let mgrSel=new Set();                                          // vybrané řádky (_id)
+let aprSel=new Set();                                          // řádky zaškrtnuté k hromadnému schválení (_id)
+const canApproveRow = r => !r.approvedBy && r.status!=='zamítnuto';
 let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''};  // políčka panelu správy
 let supEdit=false;                                            // editace boxu Dodavatel v detailu požadavku
 let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
@@ -925,6 +929,12 @@ function roleNotice(){
 function listView(){
   const rr=visibleRows();
   const allSelected = rr.length>0 && rr.every(r=>mgrSel.has(r._id));   // „vybrat vše" dle aktuálního filtru
+  // hromadné schválení: jen Approver / Warehouse Admin / Super Admin (P().approve), ostatním šedé
+  const canApr=P().approve;
+  rows.forEach(r=>{ if(aprSel.has(r._id)&&!canApproveRow(r)) aprSel.delete(r._id); });   // už schválené (i jinde) vypadnou
+  const aprVis=rr.filter(canApproveRow);
+  const aprAll=aprVis.length>0 && aprVis.every(r=>aprSel.has(r._id));
+  const aprTip=canApr?'Zaškrtni pro hromadné schválení':'Hromadně schvalovat může jen Approver, Warehouse Admin nebo Super Admin';
   // ukazatele (dashboard) se počítají za zvolené období podle data vytvoření
   const inDash = r => (!dashRange.od||(r.created||'')>=dashRange.od) && (!dashRange.do||(r.created||'')<=dashRange.do);
   const dashRows=rows.filter(inDash);
@@ -972,6 +982,7 @@ function listView(){
   ${(manage.on&&P().edit)?mgrPanel():''}
   <div class="panel">
     <h2>Přehled požadavků <span class="right">${rr.length} z ${rows.length} záznamů</span></h2>
+    ${(canApr&&aprSel.size)?`<div class="aprbar"><span>Zaškrtnuto ke schválení: <b>${aprSel.size}</b></span><button class="btn-ok" data-a="apr-bulk">✔ Schválit vybrané (${aprSel.size})</button><button class="btn-ghost" data-a="apr-clear">Zrušit výběr</button></div>`:''}
     <div class="legend">
       <span class="lg-h">Filtr stavu:</span>
       <button class="stchip grp ${(!filters.grp&&!filters.status)?'on':''}" data-a="flt-all" title="Zobrazit všechny">Vše (${rows.length})</button>
@@ -997,6 +1008,7 @@ function listView(){
     <div class="tblwrap" id="tblwrap"><table>
       <thead><tr>
         ${manage.on?`<th class="no-sort selcol" onclick="event.stopPropagation()" title="Vybrat vše (dle filtru)"><input type="checkbox" data-a="mgr-selall" ${allSelected?'checked':''}></th>`:''}
+        <th class="no-sort selcol aprcol" onclick="event.stopPropagation()" title="${canApr?'Zaškrtnout vše ke schválení (dle filtru)':esc(aprTip)}"><input type="checkbox" data-a="apr-selall" ${aprAll?'checked':''} ${(canApr&&aprVis.length)?'':'disabled'}></th>
         ${th('status','Stav')}${th('poradove','Č. požadavku')}${th('created','Vytvořeno')}${th('sklad','Skladové č.')}${th('popis','Popis')}
         ${th('priorita','Priorita')}${th('mnozstvi','Množ.')}${th('cena','Cena / ks')}
         ${th('total','Cena celkem')}${th('celkem','Celkem EUR')}${th('dodavatel','Dodavatel')}${th('vyrobce','Výrobce')}${th('ucet','Účet')}${th('usek','Linka / stroj')}
@@ -1005,6 +1017,7 @@ function listView(){
       </tr>
       <tr class="colf">
         ${manage.on?'<th></th>':''}
+        <th class="aprcol"></th>
         <th data-col="status"><select data-cfsel="status"><option value="">Vše</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${filters.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></th>
         <th data-col="poradove"><input data-cf="poradove" value="${esc(filters.col.poradove)}"></th>
         <th data-col="created"><input data-cf="created" value="${esc(filters.col.created)}"></th>
@@ -1032,6 +1045,7 @@ function listView(){
         const crit=r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status);
         return `<tr class="${crit?'crit':''} ${manage.on&&mgrSel.has(r._id)?'rowsel':''} ${pickedReq===r._id?'picked':''}" style="--row:${ROW_TINT[r.status]||'#fff'};cursor:pointer" data-a="row-pick" data-v="${r._id}" title="Klikni pro označení, dalším klikem otevřeš detail">
           ${manage.on?`<td class="selcol" data-label="Vybrat" onclick="event.stopPropagation()"><input type="checkbox" data-a="mgr-selrow" data-v="${r._id}" ${mgrSel.has(r._id)?'checked':''}></td>`:''}
+          <td class="selcol aprcol" data-label="Schválit" onclick="event.stopPropagation()" title="${canApr&&!canApproveRow(r)?(r.approvedBy?'Už schválil '+esc(r.approvedBy):'Zamítnutý požadavek nelze schválit'):esc(aprTip)}"><input type="checkbox" data-a="apr-selrow" data-v="${r._id}" ${aprSel.has(r._id)?'checked':''} ${(canApr&&canApproveRow(r))?'':'disabled'}></td>
           <td data-col="status" data-label="Stav">${badge(r.status,STATUSES)}</td>
           <td data-col="poradove" data-label="Č. požadavku"><b>${esc(r.poradove||'—')}</b></td>
           <td data-col="created" class="hide-mobile" data-label="Vytvořeno">${esc(dateCz(r.created))}</td>
@@ -1055,7 +1069,7 @@ function listView(){
           <td data-col="approvedBy" class="hide-mobile" data-label="Schválil">${r.approvedBy?`<span class="badge b-green">✔ ${esc(r.approvedBy)}</span><div class="muted" style="font-size:10px">${esc(dateCz(r.approvedAt)||'')}</div>`:'<span class="muted">—</span>'}</td>
           <td data-col="vymaz" class="hide-mobile" data-label="Výmaz řádku"><button class="rowbtn no" data-a="del" data-v="${r._id}" ${r.status==='doručeno'?'disabled title="Doručený požadavek nelze smazat (ochrana proti omylu)"':(P().del?'':'disabled title="Mazat požadavky může jen skladník/admin"')}>Smazat</button></td>
         </tr>`;}).join('')
-      :`<tr><td colspan="${manage.on?23:22}" class="empty">Žádné požadavky neodpovídají filtru.</td></tr>`}
+      :`<tr><td colspan="${manage.on?24:23}" class="empty">Žádné požadavky neodpovídají filtru.</td></tr>`}
       </tbody>
     </table></div>
   </div>`;
@@ -2446,6 +2460,27 @@ async function act(a,v,el,ev){
 
     /* --- Správa požadavků (hromadné doplňování; jen skladník/admin) --- */
     case 'toggle-manage': if(!P().edit)return; manage.on=!manage.on; if(!manage.on) mgrSel.clear(); break;
+    /* --- Hromadné schválení (Approver / Warehouse Admin / Super Admin) --- */
+    case 'apr-selrow': if(!P().approve)return; if(el.checked) aprSel.add(v); else aprSel.delete(v); break;
+    case 'apr-selall':{ if(!P().approve)return; const vis=visibleRows().filter(canApproveRow);
+      if(el.checked) vis.forEach(r=>aprSel.add(r._id)); else vis.forEach(r=>aprSel.delete(r._id)); break; }
+    case 'apr-clear': aprSel.clear(); break;
+    case 'apr-bulk':{
+      if(!P().approve)return;
+      const list=rows.filter(r=>aprSel.has(r._id)&&canApproveRow(r));
+      if(!list.length){ aprSel.clear(); render(); return; }
+      const nos=list.map(r=>r.poradove||'—');
+      if(!await askYes(`Schválit za sebe ${list.length} ${list.length===1?'požadavek':(list.length<5?'požadavky':'požadavků')}: ${nos.slice(0,12).join(', ')}${nos.length>12?' …':''}`,{title:'Hromadné schválení',ok:'✔ Schválit vše'}))return;
+      let ok=0; const bad=[];
+      for(const r of list){
+        const st=['nový','ve schvalování','poptáno'].includes(r.status)?'schváleno':r.status;
+        const hist=(r.hist||[]).concat(`${today()} · ${me.name} · schválil požadavek (hromadně)`);
+        try{ await updateDoc(doc(db,'requests',r._id),{approvedBy:me.name,approvedAt:today(),status:st,hist}); ok++; aprSel.delete(r._id); }
+        catch(e){ bad.push(r.poradove||r._id); }
+      }
+      toast(bad.length?`Schváleno ${ok}, nepovedlo se: ${bad.join(', ')}`:`Schváleno ${ok} požadavků.`, bad.length?'err':'ok');
+      break;
+    }
     case 'mgr-selrow': if(el.checked) mgrSel.add(v); else mgrSel.delete(v); break;
     case 'mgr-selall':{ const vis=visibleRows(); if(el.checked) vis.forEach(r=>mgrSel.add(r._id)); else vis.forEach(r=>mgrSel.delete(r._id)); break; }
     case 'mgr-clear': mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''}; break;
