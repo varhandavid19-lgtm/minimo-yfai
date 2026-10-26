@@ -480,9 +480,14 @@ function rotationCodeFor(personId, ds){
   return plan.map[tok] || tok;
 }
 /* Směna z rytmu pro kalendář a bonusy: na státní svátek rytmus NIC nedosazuje —
-   svátky se plánují jen ručně (David, 10/2026), bez záznamu je den fialový „SV". */
+   svátky se plánují jen ručně (David, 10/2026), bez záznamu je den fialový „SV".
+   VÝJIMKA: týmy H1–H4 (4směnný provoz 24/7) mají svátky jako standardní den — jejich
+   rytmus jede přes svátek dál (David, 10/2026). */
 function rotCodeOn(personId, ds){
-  if(holsOf(+ds.slice(0,4)).get(ds)) return null;
+  if(holsOf(+ds.slice(0,4)).get(ds)){
+    const seg=activeSeg(personId, ds);
+    if(!(seg && /^H\d$/.test(seg.plan||''))) return null;
+  }
   return rotationCodeFor(personId, ds);
 }
 /* Levely (kvůli právům – kdo může měnit koho). */
