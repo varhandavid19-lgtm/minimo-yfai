@@ -1440,13 +1440,20 @@ let psF={status:'',line:'',owner:'',q:''}, psHideClosed=true;
 let moveDraft={date:'',why:''};
 let range='7', loaded=false, busy='', errMsg='';   // '7' | '14' | '30' | 'm0' (tento měsíc) | 'm1' (minulý měsíc)
 let evLoaded='', evMore=false;
-let f={seg:'',group:'',shift:'',reason:'',proc:'',mach:'',q:''};
+let f={seg:'',group:'',shift:'',reason:'',proc:'',mach:'',src:'',q:''};
 /* Řazení tabulky prostojů. `num:true` = při prvním kliknutí od největšího. */
+/* Odkud záznam je. Prostoje ze Symesticu pole `src` nemají — ty jsou nejstarší,
+   proto je prázdná hodnota „symestic". Podle tohohle se dá uklízet. */
+const SRC_LBL = {symestic:'Symestic', g463:'G463 Excel', rpt:'Gclass report', foto:'Fotka'};
+const srcOf = e => String((e&&e.src)||'symestic');
+const srcLbl = e => SRC_LBL[srcOf(e)] || srcOf(e);
+
 const EV_COLS = [
   {k:'date',    t:'Datum',         num:true,  get:e=>String(e.start||e.date||'')},
   {k:'shift',   t:'Sm.',           num:false, get:e=>String(e.shift||'')},
   {k:'seg',     t:'Linka',         num:false, get:e=>String(e.seg||'')},
   {k:'machine', t:'Stroj',         num:false, get:e=>String(e.machine||'')},
+  {k:'src',     t:'Zdroj',         num:false, get:e=>srcLbl(e)},
   {k:'start',   t:'Od',            num:false, get:e=>String(e.start||'').slice(11,19)},
   {k:'end',     t:'Do',            num:false, get:e=>String(e.end||'').slice(11,19)},
   {k:'sec',     t:'Trvání',        num:true,  get:e=>Number(e.sec)||0},
@@ -1457,6 +1464,7 @@ const EV_COLS = [
 let evSort={k:'date', dir:'desc'};
 const newImp = kind => ({kind:kind||'dt', step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null,
                          aoa:null, headers:[], headRow:0, map:{}, month:'', src:'', lines:[], machines:[],
+                         clFrom:'', clTo:'', clProc:'', clSeg:'', clSrc:[], clUnk:false, clWord:'',
                          imgs:[], urls:[], notes:[], ocr:''});
 let imp=newImp('dt');
 let toastMsg=null, toastKind='';
@@ -1750,11 +1758,91 @@ function collectPhoto(){
 }
 const photoBad = r => !r.date || !r.seg || !r.text || !(r.min>0);
 
+/* ==========================================================
+   ÚKLID PROSTOJŮ
+   Mazání ostrých dat — proto VŽDY nejdřív náhled s počty a teprve
+   po opsání slova SMAZAT se maže. Po smazání se denní souhrny
+   přepočítají z toho, co zbylo; den bez záznamů se smaže celý,
+   jinak by v KPI svítila stará čísla.
+   ========================================================== */
+async function cleanFind(){
+  if(!canImport()){ imp.err='Uklízet prostoje smí jen správce.'; render(); return; }
+  imp.err=''; imp.prog='Hledám záznamy…'; render();
+  try{
+    const from=imp.clFrom||'0000-01-01', to=imp.clTo||'9999-12-31';
+    const out=[]; let cursor=null;
+    for(;;){
+      const qs=await getDocs(query(collection(db,'downtimes'),
+        where('date','>=',from), where('date','<=',to),
+        orderBy('date','desc'), ...(cursor?[startAfter(cursor)]:[]), limit(EV_PAGE)));
+      for(const d of qs.docs) out.push(Object.assign({_id:d.id}, d.data()));
+      cursor=qs.docs[qs.docs.length-1];
+      if(qs.docs.length<EV_PAGE) break;
+      if(out.length>=EV_MAX) break;
+      imp.prog='Hledám záznamy… '+out.length.toLocaleString('cs-CZ'); render();
+    }
+    let r=out;
+    if(imp.clProc) r=r.filter(x=>procOfLine(x.seg)===imp.clProc);
+    if(imp.clSeg)  r=r.filter(x=>x.seg===imp.clSeg);
+    if((imp.clSrc||[]).length) r=r.filter(x=>imp.clSrc.includes(srcOf(x)));
+    if(imp.clUnk)  r=r.filter(x=>(x.group||engGroup(x.reason))===UNKNOWN);
+    imp.rows=r; imp.bad=[]; imp.clWord=''; imp.step=2; imp.prog='';
+    if(!r.length) imp.err='Nic takového v prostojích není. Zkus jiné období nebo jiný filtr.';
+  }catch(e){ imp.prog=''; imp.err=ruleHint(e); }
+  render();
+}
+async function runClean(){
+  if(!canImport()){ imp.err='Uklízet prostoje smí jen správce.'; render(); return; }
+  const rows=imp.rows||[];
+  if(!rows.length) return;
+  if(String(imp.clWord||'').trim().toUpperCase()!=='SMAZAT'){
+    imp.err='Pro jistotu napiš do políčka SMAZAT — maže se ostrá databáze a vrátit to nejde.'; render(); return;
+  }
+  const dates=[...new Set(rows.map(r=>r.date))].sort();
+  try{
+    imp.err='';
+    for(let i=0;i<rows.length;i+=400){
+      const b=writeBatch(db);
+      rows.slice(i,i+400).forEach(r=>b.delete(doc(db,'downtimes',r._id)));
+      await b.commit();
+      imp.prog=`Mažu… ${Math.min(i+400,rows.length)} z ${rows.length}`; render();
+    }
+    let smazanoDnu=0;
+    for(let i=0;i<dates.length;i++){
+      const d=dates[i];
+      imp.prog=`Přepočítávám souhrn za ${dayCz(d)} (${i+1} z ${dates.length})…`; render();
+      const qs=await getDocs(query(collection(db,'downtimes'), where('date','==',d)));
+      if(!qs.docs.length){ await deleteDoc(doc(db,'dt_days',d)); smazanoDnu++; }
+      else await setDoc(doc(db,'dt_days',d), Object.assign({date:d, updated:new Date().toISOString()},
+        aggregate(qs.docs.map(x=>x.data()))));
+    }
+    await addDoc(collection(db,'dt_imports'), {kind:'úklid prostojů', file:cleanLabel(),
+      rows:rows.length, bad:0, from:dates[0], to:dates[dates.length-1], days:dates.length,
+      at:new Date().toISOString(), by:me.uid, byName:me.name});
+    imp.done={rows:rows.length, days:dates.length, from:dates[0], to:dates[dates.length-1], skip:smazanoDnu};
+    imp.step=3; imp.prog='';
+    loaded=false; evLoaded=''; mgLoaded=false;
+    await loadDays(true);
+    toast('Smazáno '+rows.length+' prostojů.','ok');
+  }catch(e){ imp.prog=''; imp.err=writeHint(e); }
+  render();
+}
+function cleanLabel(){
+  const p=[];
+  if(imp.clProc) p.push('proces '+procDef(imp.clProc).label);
+  if(imp.clSeg) p.push('linka '+imp.clSeg);
+  if((imp.clSrc||[]).length) p.push('zdroj '+imp.clSrc.map(k=>SRC_LBL[k]||k).join('+'));
+  if(imp.clUnk) p.push('jen nezařazené');
+  if(imp.clFrom||imp.clTo) p.push((imp.clFrom?dateCz(imp.clFrom):'od začátku')+' – '+(imp.clTo?dateCz(imp.clTo):'dosud'));
+  return p.join(', ') || 'všechny prostoje';
+}
+
 /* ===== zápis importu ===== */
 async function runImport(){
   if(imp.kind==='scrap') return runImportScrap();
   if(imp.kind==='tasks') return runImportTasks();
   if(imp.kind==='photo') return runImportPhoto();
+  if(imp.kind==='clean') return runClean();
   return runImportDt();
 }
 /* Zápis prostojů z denního reportu. Jde do stejné kolekce jako Excel import,
@@ -3942,6 +4030,7 @@ function visibleEvents(){
   if(f.proc) r=r.filter(x=>procOfLine(x.seg)===f.proc);
   if(f.seg) r=r.filter(x=>x.seg===f.seg);
   if(f.mach) r=r.filter(x=>(x.machine||'')===f.mach);
+  if(f.src)  r=r.filter(x=>srcOf(x)===f.src);
   if(f.group) r=r.filter(x=>(x.group||'')===f.group);
   if(f.reason) r=r.filter(x=>(x.reason||'')===f.reason);
   if(f.shift) r=r.filter(x=>x.shift===f.shift);
@@ -4344,6 +4433,7 @@ function listView(){
   const grpList=[...new Set(src.map(x=>x.group||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
   const rsnList=[...new Set(src.map(x=>x.reason||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
   const machList=[...new Set(src.map(x=>x.machine||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs',{numeric:true}));
+  const srcList=[...new Set(src.map(srcOf))].sort();
   const sum=r.reduce((s,x)=>s+(x.sec||0),0);
   /* Když jsem sem přišel prokliknutím z KPI, ať je vidět odkud a jak se vrátit. */
   const chips=[
@@ -4352,6 +4442,7 @@ function listView(){
     f.group  ? {t:'Skupina: '+f.group} : null,
     f.reason ? {t:'Důvod: '+f.reason} : null,
     f.mach   ? {t:'Stroj: '+f.mach} : null,
+    f.src    ? {t:'Zdroj: '+(SRC_LBL[f.src]||f.src)} : null,
     f.shift  ? {t:'Směna: '+(SHIFT_LBL[f.shift]||f.shift)} : null
   ].filter(Boolean);
   return scopeBar()+`
@@ -4369,6 +4460,7 @@ function listView(){
       <select id="f-seg"><option value="">Všechny linky</option>${segList.map(s=>`<option ${f.seg===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
       <select id="f-group"><option value="">Všechny skupiny</option>${grpList.map(s=>`<option ${f.group===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
       <select id="f-reason"><option value="">Všechny důvody</option>${rsnList.map(s=>`<option ${f.reason===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      ${srcList.length>1?`<select id="f-src"><option value="">Všechny zdroje</option>${srcList.map(k=>`<option value="${k}" ${f.src===k?'selected':''}>${esc(SRC_LBL[k]||k)}</option>`).join('')}</select>`:''}
       ${machList.length?`<select id="f-mach"><option value="">Všechny stroje</option>${machList.map(m=>`<option ${f.mach===m?'selected':''}>${esc(m)}</option>`).join('')}</select>`:''}
       <select id="f-shift"><option value="">Všechny směny</option>${['R','O','N'].map(k=>`<option value="${k}" ${f.shift===k?'selected':''}>${SHIFT_LBL[k]}</option>`).join('')}</select>
       <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
@@ -4397,13 +4489,14 @@ function listView(){
             <td data-label="Směna">${e.shift||''}</td>
             <td data-label="Linka"><b>${esc(e.seg)}</b></td>
             <td data-label="Stroj" class="nowrap">${e.machine?`<span class="badge b-teal">${esc(e.machine)}</span>`:'<span class="muted">—</span>'}</td>
+            <td data-label="Zdroj" class="nowrap"><span class="badge b-grey">${esc(srcLbl(e))}</span></td>
             <td data-label="Od">${e.daily?'<span class="muted">celý den</span>':String(e.start).slice(11,16)}</td>
             <td data-label="Do">${e.daily?'—':(e.end?String(e.end).slice(11,16):'—')}</td>
             <td data-label="Trvání" class="num"><b>${fmtDur(e.sec)}</b></td>
             <td data-label="Skupina"><span class="badge b-grey">${esc(e.group||'—')}</span></td>
             <td data-label="Důvod" class="desc">${esc(e.reason)}</td>
             <td data-label="Poznámka" class="desc muted">${esc(e.comment||'')}</td>
-          </tr>`).join('') || `<tr><td colspan="10" class="empty">Nic neodpovídá filtru.</td></tr>`}
+          </tr>`).join('') || `<tr><td colspan="11" class="empty">Nic neodpovídá filtru.</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -4434,8 +4527,34 @@ function importView(){
         <button class="kind ${s.kind==='tasks'?'on':''}" data-a="imp-kind" data-v="tasks">
           <span class="i">📋</span><span><b>Akční plán</b><i>úkoly z Excelu ME TASK TRACKER</i></span></button>
         ${canImport()?`<button class="kind ${isScrap?'on':''}" data-a="imp-kind" data-v="scrap">
-          <span class="i">🧾</span><span><b>Scrap</b><i>zmetky v eurech proti tržbám</i></span></button>`:''}
+          <span class="i">🧾</span><span><b>Scrap</b><i>zmetky v eurech proti tržbám</i></span></button>
+        <button class="kind ${s.kind==='clean'?'on':''}" data-a="imp-kind" data-v="clean">
+          <span class="i">🧹</span><span><b>Úklid prostojů</b><i>smazat staré nebo nezařazené záznamy</i></span></button>`:''}
       </div>
+      ${s.kind==='clean'?`
+      <div class="notice warn"><b>Pozor, tohle maže ostrá data.</b> Nejdřív si vyber, co chceš smazat,
+        v dalším kroku uvidíš přesně kolik toho je, a teprve pak se maže. Vrátit to nejde.</div>
+      <div class="pargrid">
+        <div class="f"><label>Od (nepovinné)</label><input id="cl-from" type="date" value="${esc(s.clFrom||'')}"></div>
+        <div class="f"><label>Do (nepovinné)</label><input id="cl-to" type="date" value="${esc(s.clTo||'')}"></div>
+        <div class="f"><label>Proces</label>
+          <select id="cl-proc"><option value="">Všechny procesy</option>${PROCESSES.map(x=>`<option value="${x.k}" ${s.clProc===x.k?'selected':''}>${esc(x.label)}</option>`).join('')}</select></div>
+        <div class="f"><label>Linka</label>
+          <input id="cl-seg" list="cl-lines" value="${esc(s.clSeg||'')}" placeholder="všechny linky">
+          <datalist id="cl-lines">${psLineOpts().map(l=>`<option>${esc(l.label)}</option>`).join('')}</datalist></div>
+      </div>
+      <div class="f" style="margin-top:12px"><label>Zdroj záznamu — nic nezaškrtnuto znamená všechny</label>
+        <div class="chk">${Object.keys(SRC_LBL).map(k=>`<label class="check"><input type="checkbox" data-clsrc="${k}"
+          ${(s.clSrc||[]).includes(k)?'checked':''}> ${esc(SRC_LBL[k])}</label>`).join('')}</div></div>
+      <div style="margin-top:10px"><label class="check"><input type="checkbox" id="cl-unk" ${s.clUnk?'checked':''}>
+        jen <b>nezařazené</b> prostoje (skupina „${esc(UNKNOWN)}")</label></div>
+      <div style="margin-top:14px"><button class="btn-primary" data-a="cl-find">Najít záznamy</button></div>
+      ${s.prog?`<div class="notice" style="margin-top:12px">${esc(s.prog)}</div>`:''}
+      ${s.err?`<div class="notice warn" style="margin-top:12px">${esc(s.err)}</div>`:''}
+      <div class="notice" style="margin-top:12px"><b>Na co se to hodí:</b> když na Gclassu máš staré prostoje
+        ze Symesticu a chceš je nahradit denním reportem, vyber proces <b>G463</b> a zdroj <b>Symestic</b>.
+        Když chceš jen vyčistit nezařazené, zaškrtni to políčko a nech zdroj prázdný.</div>
+      `:`
       <div class="drop" id="drop">
         <div class="big">Přetáhni sem ${isScrap?'Excel se scrapem':(isTasks?'Excel s akčním plánem':(isPhoto?'fotky denního reportu':'report prostojů'))}</div>
         <div style="margin:8px 0">nebo ${isPhoto
@@ -4445,7 +4564,7 @@ function importView(){
         <div style="font-size:12px">${isPhoto
           ? 'Formáty <b>.jpg</b> a <b>.png</b> · klidně víc dnů najednou · fotka se zpracuje v prohlížeči'
           : 'Formáty <b>.xlsx</b> a <b>.csv</b> · soubor se zpracuje přímo v prohlížeči, nikam se neposílá.'}</div>
-      </div>
+      </div>`}
       ${s.prog?`<div class="notice" style="margin-top:12px">${esc(s.prog)}</div>`:''}
       ${s.err?`<div class="notice warn" style="margin-top:12px">${esc(s.err)}</div>`:''}
       ${isScrap?`
@@ -4530,6 +4649,55 @@ function importView(){
       ${s.prog?`<span class="muted">${esc(s.prog)}</span>`:''}
       <span style="margin-left:auto"></span>
       <button class="btn-ok" data-a="imp-run" ${(s.prog||!rows.length)?'disabled':''}>${s.prog?'Importuji…':'Importovat '+rows.length.toLocaleString('cs-CZ')+' řádků'}</button>
+    </div>`;
+  }
+  if(s.step===2 && s.kind==='clean'){
+    const rows=s.rows||[];
+    const tot=rows.reduce((a,r)=>a+(r.sec||0),0);
+    const dates=[...new Set(rows.map(r=>r.date))].sort();
+    const by=(fn)=>{ const o={}; rows.forEach(r=>{const k=fn(r)||'—'; o[k]=o[k]||{sec:0,n:0}; o[k].sec+=r.sec||0; o[k].n++;}); 
+      return Object.entries(o).sort((a,b)=>b[1].sec-a[1].sec); };
+    body=`<div class="body">
+      <div class="notice warn"><b>Tohle se smaže a nejde to vrátit.</b> Projdi si čísla níž a teprve pak potvrď.</div>
+      <div class="cards">
+        <div class="kcard" style="border-left-color:#c0392b"><div class="lbl">Ke smazání</div>
+          <div class="val">${rows.length.toLocaleString('cs-CZ')}</div><div class="note">prostojů, celkem ${fmtDur(tot)}</div></div>
+        <div class="kcard" style="border-left-color:#1b4b8f"><div class="lbl">Období</div>
+          <div class="val" style="font-size:17px;margin-top:8px">${dayCz(dates[0]||'')} – ${dayCz(dates[dates.length-1]||'')}</div>
+          <div class="note">${dates.length} dní se přepočítá</div></div>
+        <div class="kcard" style="border-left-color:#6b7a90"><div class="lbl">Filtr</div>
+          <div class="val" style="font-size:13px;margin-top:8px;line-height:1.4">${esc(cleanLabel())}</div></div>
+      </div>
+      <div class="grid2">
+        <div class="panel"><h2>Po linkách</h2><div class="body">${bars(by(r=>r.seg).slice(0,12)
+          .map(([k,v])=>({label:k, sec:v.sec, cnt:v.n})),'#c0392b')}</div></div>
+        <div class="panel"><h2>Po zdroji a skupině</h2><div class="body">${bars(by(r=>srcLbl(r)+' · '+(r.group||engGroup(r.reason)))
+          .slice(0,12).map(([k,v])=>({label:k, sec:v.sec, cnt:v.n})),'#6b7a90')}</div></div>
+      </div>
+      <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius)">
+        <table><thead><tr><th>Datum</th><th>Linka</th><th>Zdroj</th><th>Trvání</th><th>Skupina</th><th>Důvod</th></tr></thead>
+        <tbody>${rows.slice(0,8).map(e=>`<tr>
+          <td data-label="Datum">${dayCz(e.date)}</td><td data-label="Linka"><b>${esc(e.seg)}</b></td>
+          <td data-label="Zdroj"><span class="badge b-grey">${esc(srcLbl(e))}</span></td>
+          <td data-label="Trvání" class="num">${fmtDur(e.sec)}</td>
+          <td data-label="Skupina">${esc(e.group||engGroup(e.reason))}</td>
+          <td data-label="Důvod" class="desc">${esc(e.reason||'')}</td></tr>`).join('')}
+        ${rows.length>8?`<tr><td colspan="6" class="muted" style="text-align:center">… a dalších ${(rows.length-8).toLocaleString('cs-CZ')} řádků</td></tr>`:''}
+        </tbody></table>
+      </div>
+      ${s.err?`<div class="notice warn" style="margin-top:12px">${esc(s.err)}</div>`:''}
+      <div class="ybox" style="margin-top:14px">
+        <b style="font-size:12.5px">Potvrzení</b>
+        <div class="muted" style="font-size:11.5px;margin:2px 0 7px">Napiš <b>SMAZAT</b> a teprve pak půjde tlačítko zmáčknout.</div>
+        <input id="cl-word" value="${esc(s.clWord||'')}" placeholder="SMAZAT" style="max-width:220px" autocomplete="off">
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn-ghost" data-a="imp-reset">Zpět</button>
+      ${s.prog?`<span class="muted">${esc(s.prog)}</span>`:''}
+      <span style="margin-left:auto"></span>
+      <button class="btn-del" data-a="imp-run" ${(s.prog||String(s.clWord||'').trim().toUpperCase()!=='SMAZAT')?'disabled':''}>
+        ${s.prog?'Mažu…':'Smazat '+rows.length.toLocaleString('cs-CZ')+' prostojů'}</button>
     </div>`;
   }
   if(s.step===2 && s.kind==='photo'){
@@ -4634,7 +4802,7 @@ function importView(){
       </div>
     </div>`;
   }
-  if(s.step===2 && s.kind!=='scrap' && s.kind!=='tasks' && s.kind!=='photo'){
+  if(s.step===2 && s.kind!=='scrap' && s.kind!=='tasks' && s.kind!=='photo' && s.kind!=='clean'){
     const rows=s.rows||[];
     const dates=[...new Set(rows.map(r=>r.date))].sort();
     const segs=[...new Set(rows.map(r=>r.seg))].sort((a,b)=>a.localeCompare(b,'cs'));
@@ -4702,6 +4870,10 @@ function importView(){
         : s.kind==='scrap'
         ? `Uloženo <b>${(d.rows||0).toLocaleString('cs-CZ')}</b> řádků scrapu za ${d.days} ${d.days===1?'měsíc':(d.days<5?'měsíce':'měsíců')}
            (${monthCz(d.from||'')} – ${monthCz(d.to||'')}), celkem ${eur(d.scrapEur||0)}.`
+        : s.kind==='clean'
+        ? `Smazáno <b>${(d.rows||0).toLocaleString('cs-CZ')}</b> prostojů za ${d.days} ${d.days===1?'den':(d.days<5?'dny':'dní')}
+           (${dayCz(d.from||'')} – ${dayCz(d.to||'')}). Denní souhrny jsem přepočítal${
+             d.skip?`, ${d.skip} ${d.skip===1?'den zůstal úplně bez dat a smazal jsem ho':'dní zůstalo bez dat a smazal jsem je'}`:''}.`
         : s.kind==='photo'
         ? `Zapsáno <b>${(d.rows||0)}</b> ${(d.rows===1?'prostoj':(d.rows<5?'prostoje':'prostojů'))} z denního reportu
            za ${d.days} ${d.days===1?'den':(d.days<5?'dny':'dní')} (${dayCz(d.from||'')} – ${dayCz(d.to||'')}).
@@ -4713,14 +4885,14 @@ function importView(){
           : s.kind==='scrap'
           ? `<a class="btn-primary" style="display:inline-block;padding:8px 14px;border-radius:var(--radius);text-decoration:none;font-size:12px;font-weight:600" href="${SCRAP_URL}">Otevřít Quality loss report ↗</a>`
           : `<button class="btn-primary" data-a="tab" data-v="dash">Zobrazit přehled</button>`}
-        <button class="btn-ghost" data-a="imp-reset">${s.kind==='photo'?'Nahrát další report':'Importovat další soubor'}</button>
+        <button class="btn-ghost" data-a="imp-reset">${s.kind==='clean'?'Uklidit ještě něco':(s.kind==='photo'?'Nahrát další report':'Importovat další soubor')}</button>
       </div>
     </div>`;
   }
-  const stepsHtml = `<ul class="steps">${[['1','Vybrat a nahrát'],['2','Kontrola'],['3','Hotovo']].map(([n,t],i)=>{
+  const stepsHtml = `<ul class="steps">${[['1',s.kind==='clean'?'Vybrat, co smazat':'Vybrat a nahrát'],['2','Kontrola'],['3','Hotovo']].map(([n,t],i)=>{
     const idx=i+1; return `<li class="${idx===s.step?'on':''} ${idx<s.step?'done':''}"><b>${idx<s.step?'✓':n}</b>${t}</li>`;}).join('')}</ul>`;
   return stepsHtml + `
-  <div class="panel"><h2>Import — ${s.kind==='scrap'?'scrap':(s.kind==='tasks'?'akční plán':(s.kind==='photo'?'denní report z fotky':(s.src==='g463'?'prostoje z G463':'prostoje')))}<span class="right">krok ${s.step} ze 3</span></h2>${body}</div>
+  <div class="panel"><h2>${s.kind==='clean'?'Úklid prostojů':'Import — '+(s.kind==='scrap'?'scrap':(s.kind==='tasks'?'akční plán':(s.kind==='photo'?'denní report z fotky':(s.src==='rpt'?'denní report Gclassu':(s.src==='g463'?'prostoje z G463':'prostoje')))))}<span class="right">krok ${s.step} ze 3</span></h2>${body}</div>
   <div class="panel">
     <h2>Historie importů</h2>
     <div class="tblwrap"><table>
@@ -4740,8 +4912,8 @@ function importView(){
 function exportCsv(){
   const r=visibleEvents();
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
-  const csv=[line(['Datum','Směna','Linka','Stroj','Začátek','Konec','Trvání (min)','Netto (min)','Skupina','Důvod','Poznámka'])]
-    .concat(r.map(e=>line([e.date,e.shift,e.seg,e.machine||'',String(e.start).slice(11,19),e.end?String(e.end).slice(11,19):'',
+  const csv=[line(['Datum','Směna','Linka','Stroj','Zdroj','Začátek','Konec','Trvání (min)','Netto (min)','Skupina','Důvod','Poznámka'])]
+    .concat(r.map(e=>line([e.date,e.shift,e.seg,e.machine||'',srcLbl(e),String(e.start).slice(11,19),e.end?String(e.end).slice(11,19):'',
       Math.round(e.sec/60),Math.round((e.net||e.sec)/60),e.group,e.reason,e.comment||'']))).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download='prostoje_'+today()+'.csv';
@@ -4850,7 +5022,7 @@ function bind(){
   const q=document.getElementById('f-q');
   if(q) q.oninput=()=>{ f.q=q.value; evShow=300; const p=q.selectionStart; render();
     const n=document.getElementById('f-q'); if(n){ n.focus(); n.setSelectionRange(p,p); } };
-  [['f-seg','seg'],['f-group','group'],['f-shift','shift'],['f-reason','reason'],['f-proc','proc'],['f-mach','mach']].forEach(([id,k])=>{
+  [['f-seg','seg'],['f-group','group'],['f-shift','shift'],['f-reason','reason'],['f-proc','proc'],['f-mach','mach'],['f-src','src']].forEach(([id,k])=>{
     const el=document.getElementById(id); if(el) el.onchange=()=>{ f[k]=el.value; evShow=300; render(); };
   });
 
@@ -4920,6 +5092,22 @@ function bind(){
 
   const fi=document.getElementById('file');
   if(fi) fi.onchange=()=>{ if(fi.files&&fi.files[0]) takeFile(fi.files[0]); };
+  /* úklid prostojů — políčka si pamatují, co do nich napíšeš */
+  for(const [id,k] of [['cl-from','clFrom'],['cl-to','clTo'],['cl-proc','clProc'],['cl-seg','clSeg']]){
+    const el=document.getElementById(id);
+    if(el) el.onchange=()=>{ imp[k]=el.value; render(); };
+  }
+  const clu=document.getElementById('cl-unk');
+  if(clu) clu.onchange=()=>{ imp.clUnk=clu.checked; render(); };
+  document.querySelectorAll('[data-clsrc]').forEach(el=>{
+    el.onchange=()=>{ const k=el.dataset.clsrc;
+      imp.clSrc = el.checked ? [...new Set([...(imp.clSrc||[]), k])] : (imp.clSrc||[]).filter(x=>x!==k);
+      render(); };
+  });
+  const clw=document.getElementById('cl-word');
+  if(clw) clw.oninput=()=>{ imp.clWord=clw.value; const p=clw.selectionStart; render();
+    const n=document.getElementById('cl-word'); if(n){ n.focus(); try{n.setSelectionRange(p,p);}catch(e){} } };
+
   ['imp-cam','imp-img','imp-img2'].forEach(id=>{ const el=document.getElementById(id);
     if(el) el.onchange=()=>{ if(el.files&&el.files.length) takePhotos(el.files); }; });
   const dz=document.getElementById('drop');
@@ -5010,7 +5198,7 @@ async function act(a,v){
     case 'kpi-drill':{
       const i=String(v).indexOf(':'), kind=String(v).slice(0,i), val=String(v).slice(i+1);
       const fromCo = engTab==='co';
-      f={seg:'', group:'', shift:'', reason:'', proc:(fromCo?coProc:dashProc)||'', mach:'', q:''};
+      f={seg:'', group:'', shift:'', reason:'', proc:(fromCo?coProc:dashProc)||'', mach:'', src:'', q:''};
       if(kind==='seg'){ f.seg=val; f.proc=''; }      // konkrétní linka proces nepotřebuje
       else if(kind==='group')  f.group=val;
       else if(kind==='shift')  f.shift=val;
@@ -5023,7 +5211,7 @@ async function act(a,v){
       engTab=drillTab||'dash';
       if(engTab==='co') coProc=drillFrom||''; else dashProc=drillFrom||'';
       break;
-    case 'drill-clear': f={seg:'',group:'',shift:'',reason:'',proc:'',mach:'',q:''}; evShow=300; break;
+    case 'drill-clear': f={seg:'',group:'',shift:'',reason:'',proc:'',mach:'',src:'',q:''}; evShow=300; break;
     /* Klik na sloupec: nový sloupec začne od největšího (u textu od A),
        další klik na ten samý pořadí otočí. */
     case 'ev-sort':{
@@ -5101,6 +5289,7 @@ async function act(a,v){
       collectPhoto();
       imp.rows=(imp.rows||[]).filter((_,i)=>i!==Number(v));
       break;
+    case 'cl-find': await cleanFind(); return;
     case 'imp-kind':
       (imp.urls||[]).forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(e){} });
       imp=newImp(v==='scrap' && !canImport() ? 'dt' : v); break;

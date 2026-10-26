@@ -187,6 +187,17 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   - Součet položek se porovná se sloupcem „Prostoje celkem (min)"; nesoulad
     se vypíše v kroku Kontrola. Id je `datum_linka_stroj+popis`, takže
     opakovaný import nic nezdvojí.
+- **Odkud záznam je.** Pole `src`: `g463` (Excel z G463), `rpt` (Reporty.xlsm),
+  `foto` (fotkový import). Prostoje ze Symesticu `src` NEMAJÍ — prázdná hodnota
+  se čte jako `symestic` (`srcOf`). Je vidět ve sloupci Zdroj v Prostojích,
+  jde podle něj filtrovat a uklízet.
+- **Úklid prostojů** (`imp.kind==='clean'`, dlaždice 🧹 v Importu, jen správce).
+  Maže OSTRÁ data, proto: nejdřív se hledá podle filtru (období, proces, linka,
+  zdroj, jen nezařazené), v kroku 2 se ukážou počty, minuty a rozpad po linkách
+  i zdrojích, a tlačítko se odemkne teprve po opsání slova **SMAZAT**.
+  Po smazání se denní souhrny přepočítají z toho, co zbylo; den, který zůstal
+  bez záznamů, se smaže celý — jinak by v KPI svítila stará čísla.
+  **Nikdy nemaž bez náhledu a bez potvrzení.**
 - **Prostoje po strojích.** `machine` se ukládá do denního souhrnu dvakrát:
   `segs[x].m` (po lince) a `machines` (za celý závod). Na to se dívá panel
   **„Prostoje po strojích"** v KPI, filtr **Stroj** a sloupec Stroj v Prostojích
