@@ -87,7 +87,8 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   Nevracej horní formuláře.
   **Řádky kalendáře jsou seskupené podle SMĚNY** (směnového rytmu platného dnes,
   `planOf` v `calendarView`), ne podle pozice; pořadí jako `ROT_GROUPS`, dole „Bez
-  směnového rytmu". Pozice je šedě za jménem. Do sekcí (Engineering/Maintenance/
+  směnového rytmu". Pozice je šedě za jménem; uvnitř skupiny jsou lidé seřazení
+  podle pozice (pořadí jako v `SECTIONS`), pak podle jména (`byPos`). Do sekcí (Engineering/Maintenance/
   Toolsetters) se lidé dál řadí podle pozice.
   **Poznámka ke dni** (nezávislá na směně i nepřítomnosti): řádek Poznámka v liště
   + „💾 Uložit poznámku" (`saveDayNote`) → v dokumentu jména v `people` pole

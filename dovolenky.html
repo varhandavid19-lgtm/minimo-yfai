@@ -1407,9 +1407,13 @@ function calendarView(){
   const planOf = p => { const s=activeSeg(p.id, today()); return (s && s.plan && ROT_PLANS[s.plan]) ? s.plan : ''; };
   const groupsByPlan={};
   people.forEach(p=>{ const k=planOf(p); (groupsByPlan[k]||(groupsByPlan[k]=[])).push(p); });
+  // uvnitř skupiny po úsecích/pozicích (pořadí jako v SECTIONS), pak podle jména
+  const secPos=(SECTIONS.find(s=>s.key===section)||{}).positions||[];
+  const posRank = p => { const i=secPos.indexOf((p.positions||[]).find(x=>secPos.includes(x))); return i<0?999:i; };
+  const byPos = (a,b) => posRank(a)-posRank(b) || bySurname(a,b);
   const rowsHtml=[];
   planOrder.concat(['']).forEach(k=>{
-    const grp=(groupsByPlan[k]||[]).sort(bySurname);
+    const grp=(groupsByPlan[k]||[]).sort(byPos);
     if(!grp.length) return;
     const title = k ? ROT_PLANS[k].label : 'Bez směnového rytmu';
     rowsHtml.push(`<tr class="grp"><td class="name grp-name" title="${esc(title)}">${esc(title)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
