@@ -41,6 +41,10 @@
   .tab{background:#fff;color:var(--navy-1);border:1.5px solid #c8d6e8;border-radius:9px;
     font-size:14px;font-weight:700;padding:11px 20px;box-shadow:0 1px 2px rgba(15,47,95,.06)}
   .tab:hover{background:var(--teal-bg);border-color:var(--teal);color:var(--teal-dark)}
+  /* přetahování úkolu: záložky se nabídnou jako cíl, ta pod myší se rozsvítí */
+  body.dragging-task .tab:not(.on){border-style:dashed;border-color:var(--teal)}
+  .tab.drop{background:#fdf3e2 !important;border-color:#e8590c !important;border-style:solid !important;transform:scale(1.04)}
+  tbody tr[draggable="true"]{cursor:grab}
   .tab.on{background:var(--teal);color:#fff;border-color:var(--teal-dark);box-shadow:0 2px 6px rgba(13,115,119,.35)}
   .tab .tcount{display:inline-block;min-width:20px;padding:1px 6px;margin-left:4px;border-radius:10px;
     background:#eef3fb;color:var(--navy-2);font-size:11px;font-weight:800}
@@ -447,6 +451,18 @@ async function save(){
   }catch(e){ oMsg='Uložení selhalo. '+writeHint(e); }
   render();
 }
+/* Přesun úkolu do jiné záložky (přetažením řádku na záložku). Stejný zápis do historie
+   jako přes pole Záložka v okně úkolu. */
+async function moveTask(id, list){
+  const t=items.find(x=>x._id===id); if(!t || !canWrite()) return;
+  if(!LISTS.some(l=>l.k===list) || listOf(t)===list) return;
+  const hist=(t.hist||[]).concat(`${today()} · ${me.name} · přesunuto: ${listLabel(listOf(t))} → ${listLabel(list)}`);
+  try{
+    await updateDoc(doc(db,'lama',id), {list, hist});
+    t.list=list; t.hist=hist;
+    toast(`Úkol ${t.no} přesunut do záložky ${listLabel(list)}.`,'ok');
+  }catch(e){ toast('Přesun se nepovedl. '+writeHint(e),'err'); }
+}
 async function removeItem(id){
   const t=items.find(x=>x._id===id); if(!t) return;
   if(!canDelete()) return;
@@ -605,7 +621,7 @@ function listView(){
       </tr></thead>
       <tbody>${rows.map(t=>{
         const lt=isLate(t), nf=(t.files||[]).length;
-        return `<tr class="clickable ${lt?'late':''} ${isDone(t)?'closed':''}" data-a="open" data-v="${t._id}">
+        return `<tr class="clickable ${lt?'late':''} ${isDone(t)?'closed':''}"${canWrite()?' draggable="true" title="Přetažením na záložku nahoře úkol přesuneš"':''} data-a="open" data-v="${t._id}">
           <td data-label="Č."><b>${esc(t.no)}</b>${nf?` <span class="clip" title="Přílohy">📎${nf}</span>`:''}</td>
           <td data-label="Zadáno" class="nowrap">${dateCz(t.createdOn)}</td>
           <td data-label="Zadal">${esc(t.createdBy||'')}</td>
@@ -813,6 +829,20 @@ function bind(){
     catch(err){ loginBusy=false; loginErr=loginErrMsg(err.code); render(); }
   };
   const lo=document.getElementById('btn-logout'); if(lo) lo.onclick=()=>signOut(auth);
+  /* přetažení řádku úkolu na záložku nahoře = přesun do té záložky */
+  document.querySelectorAll('tr[draggable="true"]').forEach(tr=>{
+    tr.ondragstart=e=>{ e.dataTransfer.setData('text/lama-id', tr.dataset.v); e.dataTransfer.effectAllowed='move';
+      document.body.classList.add('dragging-task'); };
+    tr.ondragend=()=>{ document.body.classList.remove('dragging-task');
+      document.querySelectorAll('.tab.drop').forEach(t=>t.classList.remove('drop')); };
+  });
+  document.querySelectorAll('.tab[data-a="list"]').forEach(tab=>{
+    const ok=e=>e.dataTransfer && [...e.dataTransfer.types].includes('text/lama-id') && tab.dataset.v!==curList;
+    tab.ondragover=e=>{ if(ok(e)){ e.preventDefault(); e.dataTransfer.dropEffect='move'; tab.classList.add('drop'); } };
+    tab.ondragleave=()=>tab.classList.remove('drop');
+    tab.ondrop=e=>{ e.preventDefault(); tab.classList.remove('drop'); document.body.classList.remove('dragging-task');
+      const id=e.dataTransfer.getData('text/lama-id'); if(id) moveTask(id, tab.dataset.v); };
+  });
   document.querySelectorAll('[data-a]').forEach(el=>{
     el.onclick=ev=>{ ev.stopPropagation(); act(el.dataset.a, el.dataset.v); };
   });

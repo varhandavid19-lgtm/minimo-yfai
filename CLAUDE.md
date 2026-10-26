@@ -426,8 +426,9 @@ v minimu vlastní účet a sám zapisuje stav a vyjádření.
   je společný pro celý modul. Čísla jdou z jednoho čítače `meta/lamacfg.seq`
   přes všechny záložky — pravidla Firestore dovolí měnit jen `seq`, nezakládej
   čítač po záložkách bez úpravy pravidel.
-  Úkol jde **přesunout do jiné záložky** polem Záložka v okně úkolu (`lm-list`);
-  do historie se zapíše „přesunuto: A → B".
+  Úkol jde **přesunout do jiné záložky** přetažením řádku myší na záložku nahoře
+  (`moveTask`, HTML5 drag & drop, jen kdo smí zapisovat) nebo polem Záložka v okně
+  úkolu (`lm-list`, pro telefon); do historie se zapíše „přesunuto: A → B".
 - **E-mailové notifikace** (David, 10/2026): správce v okně **✉️ Notifikace**
   nastaví pro každou záložku adresy a co se posílá → `meta/lamacfg.notify =
   {agency:{to, newTask, remind, overdue}, …}`. Posílá `functions/index.js`:
