@@ -421,9 +421,10 @@ const sectionShifts = key => (SECTION_SHIFTS[key]||[]).map(k=>SHIFT_BY[k]).filte
    nocí, pátek je volno — proto je v cyklu N už na neděli předchozího týdne. */
 const ROT_PLANS = {
   'SAL':   {label:'Salaried (cca 7:00–15:30)',       anchor:'2026-01-05', cycle:'DDDDDVV', map:{D:'SAL'}},
-  '3SM-R': {label:'Start ranní (R→O→N)',             anchor:'2026-01-05', cycle:'RRRRRVVOOOOOVNNNNNVVV', map:{R:'R',O:'O',N:'N'}},
-  '3SM-O': {label:'Start odpolední (O→N→R)',         anchor:'2026-01-05', cycle:'OOOOOVNNNNNVVVRRRRRVV', map:{R:'R',O:'O',N:'N'}},
-  '3SM-N': {label:'Start noční (N→R→O)',             anchor:'2026-01-05', cycle:'NNNNVVVRRRRRVVOOOOOVN', map:{R:'R',O:'O',N:'N'}},
+  /* pořadí týdnů R→N→O / O→R→N / N→O→R (David, 10/2026); týden před nočním končí nedělní N */
+  '3SM-R': {label:'Start ranní (R→N→O)',             anchor:'2026-01-05', cycle:'RRRRRVNNNNNVVVOOOOOVV', map:{R:'R',O:'O',N:'N'}},
+  '3SM-O': {label:'Start odpolední (O→R→N)',         anchor:'2026-01-05', cycle:'OOOOOVVRRRRRVNNNNNVVV', map:{R:'R',O:'O',N:'N'}},
+  '3SM-N': {label:'Start noční (N→O→R)',             anchor:'2026-01-05', cycle:'NNNNVVVOOOOOVVRRRRRVN', map:{R:'R',O:'O',N:'N'}},
   'H1':    {label:'Tým H1',                          anchor:'2026-01-01', cycle:'VDDDVVNNVVVDDVVNNNVVDDVVVNNV', map:{D:'D12',N:'N12'}},
   'H2':    {label:'Tým H2',                          anchor:'2026-01-01', cycle:'DVVVNNVVDDDVVNNVVVDDVVNNNVVD', map:{D:'D12',N:'N12'}},
   'H3':    {label:'Tým H3',                          anchor:'2026-01-01', cycle:'VNNNVVDDVVVNNVVDDDVVNNVVVDDV', map:{D:'D12',N:'N12'}},
@@ -809,7 +810,7 @@ function findCollisions(person, from, to){
 
 /* ---- Rotace (automatické rozplánování celého roku) — v okně jména ---- */
 /* Kde začne cyklus nově nastaveného rytmu: týdenní rytmy začínají první směnou
-   z popisu (O→N→R začne odpolední) v pondělí tohoto týdne — o víkendu až příští
+   z popisu (O→R→N začne odpolední) v pondělí tohoto týdne — o víkendu až příští
    pondělí. Týmy H1–H4 kopírují skutečný rozpis týmů, ty mají pevnou kotvu plánu. */
 function rotAnchor(planKey, from){
   if(/^H\d$/.test(planKey)) return null;
