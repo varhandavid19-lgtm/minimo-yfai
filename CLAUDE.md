@@ -90,7 +90,7 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   nic nedosazuje (`rotCodeOn` místo `rotationCodeFor` v kalendáři, bonusech i náhledu
   dne); svátek bez ručního záznamu je celý fialový s „SV".
   **Výjimka: týmy H1–H4** (4směnný provoz 24/7) mají svátky jako standardní den — jejich rytmus
-  jede přes svátek dál (`rotCodeOn` testuje plán `/^Hd$/`), na volný den rytmu je svátek „SV".
+  jede přes svátek dál (`rotCodeOn` testuje plán `/^H\d$/`), na volný den rytmu je svátek „SV".
   **Řádky kalendáře jsou seskupené podle SMĚNY** (směnového rytmu platného dnes,
   `planOf` v `calendarView`), ne podle pozice; pořadí jako `ROT_GROUPS`, dole „Bez
   směnového rytmu". Pozice je šedě za jménem; uvnitř skupiny jsou lidé seřazení
