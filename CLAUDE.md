@@ -128,6 +128,10 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   jen tyhle malé dokumenty, ne jednotlivé prostoje — jinak by aplikace prožrala
   bezplatný limit čtení ve Firestore. Souhrn se po importu vždy přepočítá z databáze.
 - kolekce `dt_imports` — historie importů (kdo, kdy, jaký soubor, kolik řádků)
+- **Pozor na prázdné názvy polí.** Firestore odmítne zápis dokumentu, který má
+  pole s prázdným jménem („Document fields must not be empty"). Denní reporty
+  (G463, Gclass) nemají směnu, takže v `aggregate()` je neznámá směna VŽDY `'?'`,
+  nikdy `''`. Kdykoli skládáš klíč z dat, dej mu náhradní hodnotu.
 - kolekce `scrap` a `sc_months` — zmetky v eurech proti tržbám (projekt × linka)
   a jejich měsíční souhrny
 - kolekce `problems` a `actions` — problem solving (5× Proč, kořenová příčina,

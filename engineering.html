@@ -879,16 +879,19 @@ function aggregate(list){
     d.sec+=sec; d.net+=net; d.cnt++;
     const grp=e.group||engGroup(e.reason);
     const sk=slug(e.seg), gk=slug(grp), rk=slug(e.reason);
+    /* Denní reporty (G463, Gclass) nemají směnu. Prázdný klíč Firestore ODMÍTNE
+       („Document fields must not be empty"), takže neznámá směna je vždy '?'. */
+    const shk = e.shift || '?';
     d.segs[sk]    = d.segs[sk]    || {label:e.seg,sec:0,net:0,cnt:0,co:{sec:0,cnt:0},g:{},r:{},sh:{},m:{}};
     d.groups[gk]  = d.groups[gk]  || {label:grp,sec:0,cnt:0};
     d.reasons[rk] = d.reasons[rk] || {label:e.reason,sec:0,cnt:0};
-    d.shifts[e.shift] = d.shifts[e.shift] || {sec:0,cnt:0};
+    d.shifts[shk] = d.shifts[shk] || {sec:0,cnt:0};
     const sg=d.segs[sk];
     sg.sec+=sec; sg.net+=net; sg.cnt++;
     /* Rozpad i po lince — jinak by se KPI nedalo filtrovat po procesech. */
     bump(sg.g, gk, grp, sec);
     bump(sg.r, rk, e.reason, sec);
-    bump(sg.sh, e.shift||'?', e.shift||'?', sec);
+    bump(sg.sh, shk, shk, sec);
     /* Stroj z poznámky (PERS03, COAT01…) — bez něj by nešlo sledovat prostoje po strojích. */
     if(e.machine){ bump(sg.m, slug(e.machine), e.machine, sec);
                    bump(d.machines, slug(e.machine), e.machine, sec); }
@@ -897,7 +900,7 @@ function aggregate(list){
       sg.co.sec+=sec; sg.co.cnt+=cn; d.co.sec+=sec; d.co.cnt+=cn; }
     d.groups[gk].sec+=sec; d.groups[gk].cnt++;
     d.reasons[rk].sec+=sec; d.reasons[rk].cnt++;
-    d.shifts[e.shift].sec+=sec; d.shifts[e.shift].cnt++;
+    d.shifts[shk].sec+=sec; d.shifts[shk].cnt++;
   }
   return d;
 }
