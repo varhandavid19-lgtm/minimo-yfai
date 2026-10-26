@@ -85,6 +85,9 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   Tlačítko **„Vymazat plánování"** v okně jména (`clearPlanning`, David, 10/2026) smaže
   od dneška dál rytmus I ručně zadané směny; minulost, nepřítomnosti a poznámky zůstanou.
   Nevracej horní formuláře.
+  **Státní svátky se plánují jen ručně** (David, 10/2026): směnový rytmus na svátek
+  nic nedosazuje (`rotCodeOn` místo `rotationCodeFor` v kalendáři, bonusech i náhledu
+  dne); svátek bez ručního záznamu je celý fialový s „SV".
   **Řádky kalendáře jsou seskupené podle SMĚNY** (směnového rytmu platného dnes,
   `planOf` v `calendarView`), ne podle pozice; pořadí jako `ROT_GROUPS`, dole „Bez
   směnového rytmu". Pozice je šedě za jménem; uvnitř skupiny jsou lidé seřazení
