@@ -53,6 +53,11 @@ Cloud Functions pro e-mailové notifikace, GitHub Pages ji ignoruje.
   node-v24.22.1-win-x64`, Node 26 s Firebase CLI přes proxy NEFUNGUJE) a
   `firebase deploy --only functions`. Firemní síť jde přes Zscaler — v terminálu
   nastavit `HTTPS_PROXY`/`HTTP_PROXY=http://185.46.212.88:10792`.
+- Jde to i z počítače Dell (uživatel 1705, 10/2026): běžný Node 24.19 + `npm install -g firebase-tools`,
+  spouští se `C:\Users\1705\AppData\Roaming\npm\firebase.cmd deploy --only functions` ze složky
+  repozitáře. **Proxy nastavuj JEN ve firemní síti** — mimo ni spojení přes proxy vyprší
+  a `firebase login --reauth` skončí „Failed to make request to auth.firebase.tools".
+  Instalaci a přihlášení musí udělat uživatel ve svém terminálu (Claude běží izolovaně).
 - Region `europe-west1` (databáze je `eur3`).
 - E-maily odcházejí přes schránku na Seznamu (`smtp.seznam.cz:465`). Adresa a heslo
   jsou v Secret Manageru jako `SMTP_USER` a `SMTP_PASS` — NIKDY je nedávej do kódu.
