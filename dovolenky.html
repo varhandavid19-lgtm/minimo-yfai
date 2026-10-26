@@ -1109,6 +1109,11 @@ function appView(){
   ${tabBar()}
   <main class="tasks-main"></main>`;   // obsah je v #tasks-host (syncTasksFrame), mimo překreslování
   }
+  if(mainTab==='ot' && otSections().length){
+    return `${headerView()}
+  ${tabBar()}
+  <main>${overtimeView()}</main>`;
+  }
   if(mainTab==='bonus' && bonusSections().length){
     return `${headerView()}
   ${tabBar()}
@@ -1131,14 +1136,17 @@ function tabBar(){
   const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   const isBonus = mainTab==='bonus' && bonusSections().length;
   const isTasks = mainTab==='tasks' && canPlanTasks();
-  const t=(s)=>`<button class="tab ${!isBonus&&!isTasks&&section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
-  const permNote = isTasks ? 'Požadavky na správce — stejné jako v modulu LAMA, ale vlastní seznam pro Plánování.'
+  const isOt = mainTab==='ot' && otSections().length;
+  const t=(s)=>`<button class="tab ${!isBonus&&!isTasks&&!isOt&&section===s.key?'active':''}" data-section="${s.key}">${esc(s.label)}</button>`;
+  const permNote = isOt ? 'Přesčasy = ručně zadané směny navíc proti směnovému rytmu (a prodloužení 8h na 12h).'
+    : isTasks ? 'Požadavky na správce — stejné jako v modulu LAMA, ale vlastní seznam pro Plánování.'
     : isBonus ? 'Příplatky se počítají z naplánovaných směn (ručních i z rytmu).'
     : curPerm()==='all' ? 'Klikem označ řádek člověka, pak v něm tažením označ dny a dole vyber, co v nich má být.'
     : 'Tuto sekci můžete jen prohlížet.';
   const bonusTab = bonusSections().length ? `<button class="tab tab-bonus ${isBonus?'active':''}" data-maintab="bonus">💰 Výpočet bonusů</button>` : '';
+  const otTab = otSections().length ? `<button class="tab tab-bonus ${isOt?'active':''}" data-maintab="ot">⏱ Přesčasy</button>` : '';
   const tasksTab = canPlanTasks() ? `<button class="tab tab-bonus ${isTasks?'active':''}" data-maintab="tasks">📋 Požadavky na správce</button>` : '';
-  return `<div class="tabbar">${visible.map(t).join('')}${bonusTab}${tasksTab}<span class="tb-note">${permNote}</span></div>`;
+  return `<div class="tabbar">${visible.map(t).join('')}${bonusTab}${otTab}${tasksTab}<span class="tb-note">${permNote}</span></div>`;
 }
 
 /* ==========================================================
@@ -1240,6 +1248,77 @@ function exportBonusCsv(){
     .concat(rows.map(r=>line([`${MONTHS[bonusMonth]} ${bonusYear}`,r.sec,r.pos,r.name,r.shifts,r.n12,r.nWe,r.b12,r.bWe,r.total,r.days.join(', ')]))).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download=`bonusy_${bonusYear}-${String(bonusMonth+1).padStart(2,'0')}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+/* ==========================================================
+   ⏱ PŘESČASY (David, 10/2026) — za měsíc z RUČNĚ zadaných směn proti směnovému rytmu:
+   - ruční směna na den, kdy má člověk podle rytmu volno (rotCodeOn = nic; i státní svátek,
+     kromě týmů H1–H4) → přesčas = celá směna (8 nebo 12 h),
+   - ruční 12h směna na den, kdy má podle rytmu 8h směnu → přesčas 4 h,
+   - jinak (výměna stejně dlouhé směny) nic. Celodenní nepřítomnost směnu ruší.
+   Kdo nemá směnový rytmus, se nepočítá (není s čím porovnat). Měsíc sdílí s bonusy.
+   Vidí kdo má v nějaké sekci „Zapisovat všechny", pro lidi z těch sekcí.
+   ========================================================== */
+const SHIFT_HOURS = {R:8, O:8, N:8, DEN:8, SAL:8, D12:12, O12:12, N12:12};
+const shiftH = c => SHIFT_HOURS[c] || 0;
+const otSections = () => SECTIONS.filter(s=>secPerm(s.key)==='all');
+function overtimeRows(y, m){
+  const from=iso(y,m,1), to=iso(y,m,new Date(y,m+1,0).getDate());
+  const abs=absenceMap(from,to), sm=shiftMap(from,to);
+  const rows=[];
+  otSections().forEach(sec=>{
+    const secPos=sec.positions;
+    allUsers.filter(u=>inSection(u,sec.key)).sort(bySurname).forEach(p=>{
+      const r={sec:sec.label, pos:(p.positions||[]).find(x=>secPos.includes(x))||'', name:p.name,
+        rhythm:false, extra:0, ext:0, hours:0, days:[]};
+      eachDay(from,to,ds=>{
+        const seg=activeSeg(p.id, ds);
+        if(seg && seg.plan) r.rhythm=true; else return;          // bez rytmu ten den → nepočítá se
+        const a=(abs[p.id]||{})[ds];
+        if(a && a.days!==0.5) return;                            // celý den nepřítomen
+        const man=(sm[p.id]||{})[ds]; if(!man) return;           // jen ručně zadané směny
+        const rc=rotCodeOn(p.id, ds);
+        if(!rc){ const h=shiftH(man.shift); r.extra++; r.hours+=h; r.days.push(`${dCz(ds)} ${man.shift} navíc (+${h} h)`); }
+        else if(shiftH(man.shift)===12 && shiftH(rc)===8){ r.ext++; r.hours+=4; r.days.push(`${dCz(ds)} ${rc}→${man.shift} (+4 h)`); }
+      });
+      rows.push(r);
+    });
+  });
+  return rows;
+}
+function overtimeView(){
+  const rows=overtimeRows(bonusYear, bonusMonth);
+  const sum=k=>rows.reduce((a,r)=>a+r[k],0);
+  const body=rows.length ? rows.map(r=>`<tr class="${r.hours?'':'zero'}" title="${esc(r.days.join('\n')||(r.rhythm?'Bez přesčasů':'Nemá směnový rytmus — nepočítá se'))}">
+      <td>${esc(r.sec)}</td><td>${esc(r.pos)}</td><td class="nm">${esc(r.name)}</td>
+      ${r.rhythm ? `<td class="num">${r.extra||'—'}</td><td class="num">${r.ext||'—'}</td><td class="num"><b>${r.hours?r.hours+' h':'—'}</b></td>`
+        : `<td colspan="3" class="num" style="color:var(--muted)">bez směnového rytmu</td>`}</tr>`).join('')
+    : `<tr><td colspan="6" class="tempty">V sekcích zatím nejsou žádní lidé.</td></tr>`;
+  return `<div class="calbar">
+      <button class="nav" id="bn-prev" title="Předchozí měsíc">‹</button>
+      <div class="yr">${MONTHS[bonusMonth]} ${bonusYear}</div>
+      <button class="nav" id="bn-next" title="Další měsíc">›</button>
+      <button class="btn-ghost" id="bn-today">Tento měsíc</button>
+      <button class="btn-ghost" id="ot-export">⭳ Export CSV</button>
+      <span class="hint">ručně zadaná směna na den volna podle rytmu = celá směna · ruční 12h místo 8h z rytmu = +4 h · lidé bez rytmu se nepočítají · najetím na řádek uvidíš dny</span>
+    </div>
+    <div class="panel"><div class="tblwrap"><table class="ptable bonus">
+      <thead><tr><th>Sekce</th><th>Úsek</th><th>Jméno</th><th class="num">Směn navíc</th><th class="num">Prodloužení 8h→12h</th>
+        <th class="num">Přesčas celkem</th></tr></thead>
+      <tbody>${body}</tbody>
+      ${rows.length?`<tfoot><tr><td colspan="3"><b>Celkem</b></td><td class="num">${sum('extra')}</td><td class="num">${sum('ext')}</td>
+        <td class="num"><b>${sum('hours')} h</b></td></tr></tfoot>`:''}
+    </table></div></div>`;
+}
+function exportOvertimeCsv(){
+  const rows=overtimeRows(bonusYear, bonusMonth);
+  const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
+  const csv=[line(['Měsíc','Sekce','Úsek','Jméno','Směn navíc','Prodloužení 8h→12h','Přesčas (h)','Dny'])]
+    .concat(rows.map(r=>line([`${MONTHS[bonusMonth]} ${bonusYear}`,r.sec,r.pos,r.name,
+      r.rhythm?r.extra:'',r.rhythm?r.ext:'',r.rhythm?r.hours:'bez rytmu',r.days.join(', ')]))).join('\n');
+  const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url; a.download=`prescasy_${bonusYear}-${String(bonusMonth+1).padStart(2,'0')}.csv`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 
@@ -1566,6 +1645,8 @@ function wireApp(){
       section=b.getAttribute('data-section'); mainTab='plan'; sel=null; alignedYear=null; render();
     }));
   document.querySelector('[data-maintab="bonus"]')?.addEventListener('click',()=>{ mainTab='bonus'; sel=null; render(); });
+  document.querySelector('[data-maintab="ot"]')?.addEventListener('click',()=>{ mainTab='ot'; sel=null; render(); });
+  document.getElementById('ot-export')?.addEventListener('click',exportOvertimeCsv);
   document.querySelector('[data-maintab="tasks"]')?.addEventListener('click',()=>{ if(mainTab==='tasks') return; mainTab='tasks'; sel=null; render(); });
   // výpočet bonusů: měsíc a export
   const bshift=dir=>{ bonusMonth+=dir; if(bonusMonth<0){bonusMonth=11;bonusYear--;} else if(bonusMonth>11){bonusMonth=0;bonusYear++;} render(); };

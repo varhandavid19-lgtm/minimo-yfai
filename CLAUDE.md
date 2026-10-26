@@ -131,6 +131,12 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   **Týmy H1–H4 dostávají bonus JEN za směnu NAD rytmus** (David, 10/2026): ručně zadanou
   směnu na den, kdy mají podle rytmu volno (12h +200, sobota/neděle +1000). Směny z rytmu
   (i víkendové) a ruční výměna směny v den, kdy tým stejně pracuje, bonus nemají.
+  Záložka **⏱ Přesčasy** (`mainTab='ot'`, `overtimeRows`, David, 10/2026): za měsíc z RUČNĚ zadaných
+  směn proti rytmu — ruční směna na den volna podle rytmu (`rotCodeOn` = nic, tedy i státní svátek
+  kromě týmů H) = celá směna (`SHIFT_HOURS`: 8h směny 8, D12/O12/N12 12), ruční 12h místo 8h z rytmu
+  = +4 h, výměna stejně dlouhé směny = 0, celodenní nepřítomnost směnu ruší. Lidé bez rytmu se
+  nepočítají („bez směnového rytmu"). Vidí kdo má v sekci „Zapisovat všechny" (`otSections`),
+  měsíc sdílí s bonusy (`bonusYear/bonusMonth`).
   Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
   v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky
   a šipky posouvají po měsících (`calMonth`), v roce po letech.
