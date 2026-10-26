@@ -171,6 +171,22 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   se místo času ukáže „celý den"). Id je `datum_linka_kód`, takže opakovaný import
   nic nezdvojí. Počet přestaveb se bere z řádku „CO – Počet změn" do pole `coN`,
   jinak by changeover KPI počítalo jednu přestavbu za den.
+- **Třetí formát: Reporty.xlsm — denní report Gclassu.** Jedna záložka = jedna
+  linka, sloupce `Datum`, `Plán (ks)`, `Vyrobeno (ks)`, `Prostoje celkem (min)`,
+  `Detail prostojů`. Pozná se sám podle hlavičky (`rptSheets`), čte ho `rptParse`.
+  - Z KAŽDÉ položky „- popis (20 min)" vznikne jeden prostoj na celý den
+    (`daily:true`, `src:'rpt'`). Položka s „(0 min)" se nezapisuje.
+  - **Kód stroje se vytáhne z poznámky do pole `machine`** (`RPT_MACH`:
+    PERS01, COAT01, PRESS…, STA…, OP…). Bez toho by nešlo sledovat prostoje
+    po strojích — linka zůstává v `seg`, stroj je samostatný rozměr.
+  - Součet položek se porovná se sloupcem „Prostoje celkem (min)"; nesoulad
+    se vypíše v kroku Kontrola. Id je `datum_linka_stroj+popis`, takže
+    opakovaný import nic nezdvojí.
+- **Prostoje po strojích.** `machine` se ukládá do denního souhrnu dvakrát:
+  `segs[x].m` (po lince) a `machines` (za celý závod). Na to se dívá panel
+  **„Prostoje po strojích"** v KPI, filtr **Stroj** a sloupec Stroj v Prostojích
+  a v obou exportech CSV. Při přepnutí na „jen technické" se panel schová —
+  denní souhrn nemá rozpad strojů po skupinách důvodů, stejně jako u směn.
 - **Třetí formát: denní report výroby z Gclassu jako OBRÁZEK.** Chodí vyfocený,
   ne jako Excel. Volba „📷 Denní report z fotky" v Importu (`imp.kind==='photo'`).
   - Čtečka textu (Tesseract) se stahuje z CDN až při použití, stejně jako SheetJS.
@@ -185,8 +201,10 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   - Linka se páruje na linku, která už v datech je (`photoLine`, porovnání bez
     mezer a diakritiky) — jinak by vznikla druhá linka s jiným názvem a KPI by
     se rozdvojilo. „Prefix LHEOL" tak trefí „Prefix LH EOL".
-  - Skupina důvodu se hádá z českého textu (`PHOTO_GROUPS`) a jde přepnout
-    rozbalovátkem. Příznak přestavby (`photoIsCo`) se předškrtne jen u
+  - Skupina důvodu se hádá z českého textu (`PHOTO_GROUPS` — sdílené s importem
+    Reporty.xlsm) a jde přepnout rozbalovátkem. Pravidla se berou SHORA DOLŮ:
+    „čekání na seřizovače" musí být dřív než obecné „seřiz", jinak by z čekání
+    na člověka byla přestavba. Nové formulace přidávej do toho seznamu. Příznak přestavby (`photoIsCo`) se předškrtne jen u
     jednoznačných případů (changeover, výměna nástroje/formy/typu) — obyčejná
     „výměna teflonu" je oprava a nafoukla by changeover KPI.
   - Zapisuje se do `downtimes` s `src:'foto'`, `daily:true` a pevným id

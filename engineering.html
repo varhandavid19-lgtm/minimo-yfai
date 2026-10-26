@@ -752,6 +752,71 @@ const G463_CATS = {
   'zmetky':             'Kvalita'
 };
 const g463Group = kat => G463_CATS[String(kat||'').trim().toLowerCase()] || UNKNOWN;
+/* ==========================================================
+   REPORTY.XLSM — denní report Gclassu, jedna záložka = jedna linka
+   Sloupce: Datum, Plán (ks), Vyrobeno (ks), Prostoje celkem (min),
+   Detail prostojů (víc řádků „- popis STROJ (N min)").
+   Z KAŽDÉ POLOŽKY vznikne jeden prostoj a kód stroje (PERS03, COAT01…)
+   se z poznámky vytáhne do pole `machine` — jinak by se prostoje
+   po strojích nedaly sledovat.
+   ========================================================== */
+const RPT_ITEM = /^[-–—•]?\s*(.+?)\s*\(\s*(\d{1,4})\s*min\s*\)\s*$/i;
+const RPT_MACH = /\b((?:PERS|COAT|PRESS|STA|OP)\s?\d{1,3})\b/i;
+function rptSheets(wb, XLSX){
+  const out=[];
+  for(const name of (wb.SheetNames||[])){
+    const a=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null,blankrows:false});
+    const h=(a[0]||[]).map(x=>String(x??'').toLowerCase().trim());
+    if(h[0]==='datum' && h.some(x=>x.startsWith('detail prostoj'))) out.push(name);
+  }
+  return out;
+}
+function rptParse(wb, XLSX){
+  const sheets=rptSheets(wb, XLSX);
+  if(!sheets.length) return {ok:false, err:'V sešitu není žádná záložka se sloupci „Datum" a „Detail prostojů".'};
+  const out=[], bad=[], lines=new Set(), machines=new Set();
+  for(const seg of sheets){
+    const a=XLSX.utils.sheet_to_json(wb.Sheets[seg],{header:1,raw:true,defval:null,blankrows:false});
+    const h=(a[0]||[]).map(x=>String(x??'').toLowerCase().trim());
+    const ciTotal=h.findIndex(x=>x.startsWith('prostoje celkem'));
+    const ciDetail=h.findIndex(x=>x.startsWith('detail prostoj'));
+    for(let i=1;i<a.length;i++){
+      const r=a[i]||[];
+      const dv=r[0];
+      if(dv==null || dv==='') continue;
+      const t = typeof dv==='number' ? fromSerial(dv) : engTime(dv);
+      if(!t){ bad.push(i+1); continue; }
+      const date=t.date;
+      const detail=String(ciDetail>=0 ? (r[ciDetail]??'') : '');
+      const total=ciTotal>=0 ? Number(r[ciTotal]) : NaN;
+      let sum=0, n=0;
+      for(const raw of detail.split(/\r?\n/)){
+        const ln=raw.replace(/\s+/g,' ').trim();
+        if(!ln) continue;
+        const m=ln.match(RPT_ITEM);
+        if(!m){ bad.push(i+1); continue; }
+        const text=m[1].trim(), min=Number(m[2]);
+        const mm=text.match(RPT_MACH);
+        const machine = mm ? mm[1].toUpperCase().replace(/\s+/g,'') : '';
+        const reason = (mm ? text.replace(RPT_MACH,'').replace(/\s+/g,' ').trim().replace(/[\s,\-–—]+$/,'') : text) || text;
+        if(machine) machines.add(machine);
+        sum+=min; n++;
+        if(!(min>0)) continue;                    // „(0 min)" není prostoj
+        const sec=Math.round(min*60);
+        out.push({seg, machine, reason, group:photoGroup(reason), co:photoIsCo(reason),
+          start:date+'T00:00:00', end:'', date, shift:'',
+          sec, net:sec, comment:'', daily:true, src:'rpt',
+          _id:`${date}_${slug(seg)}_${slug((machine?machine+' ':'')+reason).slice(0,46)}`});
+      }
+      /* kontrola proti sloupci „Prostoje celkem (min)" */
+      if(isFinite(total) && n && sum!==total) bad.push(i+1);
+      lines.add(seg);
+    }
+  }
+  if(!out.length) return {ok:false, err:'V sešitu nejsou žádné položky prostojů ve tvaru „popis (20 min)".'};
+  return {ok:true, rows:out, bad:[...new Set(bad)], lines:[...lines], machines:[...machines].sort()};
+}
+
 /* Poznáme soubor podle toho, že má záložky „Line - …". */
 const g463Sheets = wb => (wb.SheetNames||[]).filter(n=>/^\s*line\b/i.test(String(n)));
 function g463Parse(wb, XLSX){
@@ -807,14 +872,14 @@ function g463Parse(wb, XLSX){
 
 /* Denní souhrn — počítá se vždy z toho, co je v databázi */
 function aggregate(list){
-  const d={sec:0,net:0,cnt:0,segs:{},groups:{},reasons:{},shifts:{},co:{sec:0,cnt:0}};
+  const d={sec:0,net:0,cnt:0,segs:{},groups:{},reasons:{},shifts:{},machines:{},co:{sec:0,cnt:0}};
   const bump=(o,k,label,sec)=>{ const x=o[k]||(o[k]={label,sec:0,cnt:0}); x.sec+=sec; x.cnt++; };
   for(const e of list){
     const sec=Number(e.sec)||0, net=Number(e.net)||sec;
     d.sec+=sec; d.net+=net; d.cnt++;
     const grp=e.group||engGroup(e.reason);
     const sk=slug(e.seg), gk=slug(grp), rk=slug(e.reason);
-    d.segs[sk]    = d.segs[sk]    || {label:e.seg,sec:0,net:0,cnt:0,co:{sec:0,cnt:0},g:{},r:{},sh:{}};
+    d.segs[sk]    = d.segs[sk]    || {label:e.seg,sec:0,net:0,cnt:0,co:{sec:0,cnt:0},g:{},r:{},sh:{},m:{}};
     d.groups[gk]  = d.groups[gk]  || {label:grp,sec:0,cnt:0};
     d.reasons[rk] = d.reasons[rk] || {label:e.reason,sec:0,cnt:0};
     d.shifts[e.shift] = d.shifts[e.shift] || {sec:0,cnt:0};
@@ -824,6 +889,9 @@ function aggregate(list){
     bump(sg.g, gk, grp, sec);
     bump(sg.r, rk, e.reason, sec);
     bump(sg.sh, e.shift||'?', e.shift||'?', sec);
+    /* Stroj z poznámky (PERS03, COAT01…) — bez něj by nešlo sledovat prostoje po strojích. */
+    if(e.machine){ bump(sg.m, slug(e.machine), e.machine, sec);
+                   bump(d.machines, slug(e.machine), e.machine, sec); }
     /* G463 report nese skutečný počet přestaveb za den v poli coN */
     if(e.co){ const cn=Number(e.coN)>0?Number(e.coN):1;
       sg.co.sec+=sec; sg.co.cnt+=cn; d.co.sec+=sec; d.co.cnt+=cn; }
@@ -1369,12 +1437,13 @@ let psF={status:'',line:'',owner:'',q:''}, psHideClosed=true;
 let moveDraft={date:'',why:''};
 let range='7', loaded=false, busy='', errMsg='';   // '7' | '14' | '30' | 'm0' (tento měsíc) | 'm1' (minulý měsíc)
 let evLoaded='', evMore=false;
-let f={seg:'',group:'',shift:'',reason:'',proc:'',q:''};
+let f={seg:'',group:'',shift:'',reason:'',proc:'',mach:'',q:''};
 /* Řazení tabulky prostojů. `num:true` = při prvním kliknutí od největšího. */
 const EV_COLS = [
   {k:'date',    t:'Datum',         num:true,  get:e=>String(e.start||e.date||'')},
   {k:'shift',   t:'Sm.',           num:false, get:e=>String(e.shift||'')},
-  {k:'seg',     t:'Linka / stroj', num:false, get:e=>String(e.seg||'')},
+  {k:'seg',     t:'Linka',         num:false, get:e=>String(e.seg||'')},
+  {k:'machine', t:'Stroj',         num:false, get:e=>String(e.machine||'')},
   {k:'start',   t:'Od',            num:false, get:e=>String(e.start||'').slice(11,19)},
   {k:'end',     t:'Do',            num:false, get:e=>String(e.end||'').slice(11,19)},
   {k:'sec',     t:'Trvání',        num:true,  get:e=>Number(e.sec)||0},
@@ -1384,7 +1453,7 @@ const EV_COLS = [
 ];
 let evSort={k:'date', dir:'desc'};
 const newImp = kind => ({kind:kind||'dt', step:1, name:'', rows:null, bad:[], err:'', prog:'', done:null,
-                         aoa:null, headers:[], headRow:0, map:{}, month:'', src:'', lines:[],
+                         aoa:null, headers:[], headRow:0, map:{}, month:'', src:'', lines:[], machines:[],
                          imgs:[], urls:[], notes:[], ocr:''});
 let imp=newImp('dt');
 let toastMsg=null, toastKind='';
@@ -1572,11 +1641,13 @@ async function takeFile(file){
       /* Formát se pozná sám: sešit se záložkami „Line - …" je report z G463,
          všechno ostatní se čte jako report Downtimes ze Symesticu. */
       const isG463 = wb && g463Sheets(wb).length>0;
-      const res = isG463 ? g463Parse(wb, XLSX) : engParse(aoa);
+      const isRpt  = !isG463 && wb && rptSheets(wb, XLSX).length>0;
+      const res = isG463 ? g463Parse(wb, XLSX) : (isRpt ? rptParse(wb, XLSX) : engParse(aoa));
       if(!res.ok){ imp.prog=''; imp.err=res.err; render(); return; }
       if(!res.rows.length){ imp.prog=''; imp.err='V souboru nejsou žádné prostoje ke zpracování.'; render(); return; }
-      imp.src = isG463 ? 'g463' : 'symestic';
+      imp.src = isG463 ? 'g463' : (isRpt ? 'rpt' : 'symestic');
       imp.lines = res.lines || [];
+      imp.machines = res.machines || [];
       imp.rows=res.rows; imp.bad=res.bad; imp.step=2; imp.prog='';
     }
   }catch(e){ imp.prog=''; imp.err=String((e&&e.message)||e); }
@@ -1854,7 +1925,7 @@ async function runImportDt(){
 /* Souhrn za vybrané období. Když je vybraný proces, sečte se jen z jeho linek —
    proto import ukládá rozpad důvodů i po lince (pole `g`, `r`, `sh` u každé linky). */
 function totals(proc, only){
-  const t={sec:0,net:0,cnt:0,segs:{},groups:{},reasons:{},shifts:{},co:{sec:0,cnt:0},noSplit:0,noShift:0};
+  const t={sec:0,net:0,cnt:0,segs:{},groups:{},reasons:{},shifts:{},machines:{},co:{sec:0,cnt:0},noSplit:0,noShift:0};
   /* `only` = seznam skupin důvodů, které se mají počítat (např. TECH_GROUPS).
      Když je zadaný, počítá se VŽDY z rozpadu po lince (pole `g` a `r` v denním
      souhrnu) — jinak by nešlo odfiltrovat logistiku a výrobní problémy. */
@@ -1864,7 +1935,7 @@ function totals(proc, only){
     if(!proc && !keep){
       t.sec+=d.sec||0; t.net+=d.net||0; t.cnt+=d.cnt||0;
       t.co.sec+=(d.co&&d.co.sec)||0; t.co.cnt+=(d.co&&d.co.cnt)||0;
-      for(const key of ['segs','groups','reasons']){
+      for(const key of ['segs','groups','reasons','machines']){
         for(const [k,v] of Object.entries(d[key]||{})){
           const o=t[key][k]||(t[key][k]={label:v.label||k,sec:0,net:0,cnt:0});
           o.sec+=v.sec||0; o.net+=v.net||0; o.cnt+=v.cnt||0;
@@ -1903,6 +1974,7 @@ function totals(proc, only){
       if(!keep || keep.has('Přestavba a seřízení')){
         t.co.sec+=(v.co&&v.co.sec)||0; t.co.cnt+=(v.co&&v.co.cnt)||0;
       }
+      for(const [k,mc] of Object.entries(v.m||{})) if(!keep) add(t.machines,k,mc.label,mc.sec,mc.cnt);
       for(const [k,sh] of Object.entries(v.sh||{})){
         /* Denní souhrn nemá rozpad směn po skupinách důvodů — při filtru ho tedy
            nedokážeme spočítat a graf směn se radši neukáže, než aby lhal. */
@@ -1991,14 +2063,24 @@ function loadOcr(){
 }
 /* Skupinu prostoje poznáme z českého textu. Co nepoznáme, zůstane
    „Nezařazeno" a v kontrole se to přepne rozbalovátkem. */
+/* Skupinu prostoje poznáme z českého textu poznámky. Používá to fotkový import
+   i denní report Gclassu (Reporty.xlsm). Pravidla se berou SHORA DOLŮ, takže
+   „čekání na seřizovače" musí být dřív než obecné „seřiz" — jinak by z čekání
+   na člověka byla přestavba. Co se nepozná, zůstane „Nezařazeno" a dá se
+   přepnout v Prostojích. Když vám přibude nová formulace, přidej ji sem. */
 const PHOTO_GROUPS = [
-  [/porucha|zaseknut|zasekl|chyba\s+komunikac|nefunguj|havár|vypadl|prask|rozbit|závad|spadl|kolize|alarm|robot/i, 'Porucha stroje'],
-  [/výměn|seříz|serid|nastaven|čištěn|cisten|přestavb|změna\s+verze|changeover|trysk|teflon|forma|nástroj/i, 'Přestavba a seřízení'],
-  [/vzduch|energi|elektr|tlak|vod[ay]|chlaz|technick|kompresor|výpadek\s+proud/i, 'Technický prostoj'],
-  [/materiál|material|díl[ůy]|chybí\s+díl|logistik|palet|obal|balen|dodávk/i, 'Materiál a logistika'],
-  [/kvalit|zmetk|neshod|reklamac|vada\s+dílu/i, 'Kvalita'],
-  [/personál|operátor|přestávk|školen|chybí\s+lid|obsluh/i, 'Lidé a přestávky'],
-  [/plán|organizac|čekání|nebyl[ao]?\s+co/i, 'Organizace výroby']
+  /* čekání se řadí podle toho, NA CO se čeká */
+  [/čekání[^.]*\b(materiál|material|díl|logistik|palet|obal)/i, 'Materiál a logistika'],
+  [/čekání[^.]*\b(seřizovač|serizovac|údržb|udrzb|technik|operátor|mistr|obsluh)/i, 'Lidé a přestávky'],
+  /* výměna opotřebeného dílu je oprava, ne přestavba */
+  [/výměn[^.]*\b(senzor|čidl|cidl|motor|řemen|remen|pojistk|ventil|hadic|ložisk|loziskl|topn)/i, 'Porucha stroje'],
+  [/porucha|zaseknut|zasekl|chyba\s*komunikac|nefunk|nefunguj|havár|vypadl|prask|rozbit|závad|zavad|spadl|kolize|alarm|robot|mechanik|problém|problem/i, 'Porucha stroje'],
+  [/výměn|vymen|seříz|seriz|serid|nastaven|čištěn|cisten|čistit|přestavb|prestavb|změna\s*verze|zmena\s*verze|changeover|trysk|teflon|form[ay]|nástroj|nastroj|slider|leister|vysekáva|vysekava|pin\b|pinů|pinu/i, 'Přestavba a seřízení'],
+  [/vzduch|energi|elektr|tlak|vod[ay]|chlaz|technick|kompresor|výpadek\s*proud|temperač|temperac/i, 'Technický prostoj'],
+  [/materiál|material|díl[ůy]|chybí\s*díl|logistik|palet|obal|balen|dodávk/i, 'Materiál a logistika'],
+  [/kvalit|zmetk|neshod|reklamac|vada\s*dílu|měřen|meren/i, 'Kvalita'],
+  [/personál|operátor|přestávk|školen|chybí\s*lid|obsluh|směn/i, 'Lidé a přestávky'],
+  [/plán|organizac|nebyl[ao]?\s*co|čekání|cekani/i, 'Organizace výroby']
 ];
 function photoGroup(text){
   const t=String(text||'');
@@ -3830,6 +3912,20 @@ function dashView(){
     </div>
   </div>
 
+  ${(function(){
+    const ms=top(t.machines,12).map(x=>Object.assign({},x,{drill:'mach:'+x.label}));
+    if(scope==='tech') return `<div class="panel"><h2>Prostoje po strojích</h2>
+      <div class="body"><div class="notice">Rozpad po strojích umí denní souhrn jen za všechny prostoje dohromady.
+        Přepni nahoře na <b>Všechny prostoje</b>, nebo si stroj vyfiltruj v záložce <b>Prostoje</b>.</div></div></div>`;
+    if(!ms.length) return '';
+    return `<div class="panel">
+      <h2>Prostoje po strojích<span class="right">${proc?esc(pd.label)+' · ':''}stroj z poznámky v reportu</span></h2>
+      <div class="body">${bars(ms,'#6b46c1')}
+        <div class="drillhint">Kódy jako PERS03 nebo COAT01 se berou z poznámek v denním reportu Gclassu.
+          Klikni na stroj a uvidíš jeho jednotlivé prostoje.</div></div>
+    </div>`;
+  })()}
+
   <div class="panel">
     <h2>TOP 10 důvodů prostoje<span class="right">konkrétní kódy ze Symesticu</span></h2>
     <div class="body">${bars(top(t.reasons,10).map(x=>Object.assign({},x,{drill:'reason:'+x.label})),'#41506b')}</div>
@@ -3842,10 +3938,11 @@ function visibleEvents(){
   if(scope==='tech') r=r.filter(isTech);
   if(f.proc) r=r.filter(x=>procOfLine(x.seg)===f.proc);
   if(f.seg) r=r.filter(x=>x.seg===f.seg);
+  if(f.mach) r=r.filter(x=>(x.machine||'')===f.mach);
   if(f.group) r=r.filter(x=>(x.group||'')===f.group);
   if(f.reason) r=r.filter(x=>(x.reason||'')===f.reason);
   if(f.shift) r=r.filter(x=>x.shift===f.shift);
-  if(f.q){ const q=f.q.toLowerCase(); r=r.filter(x=>[x.seg,x.reason,x.comment].join(' ').toLowerCase().includes(q)); }
+  if(f.q){ const q=f.q.toLowerCase(); r=r.filter(x=>[x.seg,x.machine,x.reason,x.comment].join(' ').toLowerCase().includes(q)); }
   const col=EV_COLS.find(c=>c.k===evSort.k) || EV_COLS[0];
   const sign=evSort.dir==='desc'?-1:1;
   return r.sort((a,b)=>{
@@ -4213,8 +4310,8 @@ function parExportDetail(){
   const items=parItems(), it=items[par.sel]; if(!it) return;
   const rows=it.items.slice().sort((x,y)=>(Number(y.sec)||0)-(Number(x.sec)||0));
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
-  const csv=[line(['Datum','Směna','Linka','Od','Do','Trvání (min)','Skupina','Důvod','Poznámka'])]
-    .concat(rows.map(e=>line([e.date,e.shift,e.seg,String(e.start).slice(11,19),
+  const csv=[line(['Datum','Směna','Linka','Stroj','Od','Do','Trvání (min)','Skupina','Důvod','Poznámka'])]
+    .concat(rows.map(e=>line([e.date,e.shift,e.seg,e.machine||'',String(e.start).slice(11,19),
       e.end?String(e.end).slice(11,19):'',Math.round((e.sec||0)/60),
       e.group||engGroup(e.reason),e.reason,e.comment]))).join('\n');
   const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
@@ -4243,6 +4340,7 @@ function listView(){
   const src=scope==='tech'?events.filter(isTech):events;
   const grpList=[...new Set(src.map(x=>x.group||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
   const rsnList=[...new Set(src.map(x=>x.reason||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs'));
+  const machList=[...new Set(src.map(x=>x.machine||''))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'cs',{numeric:true}));
   const sum=r.reduce((s,x)=>s+(x.sec||0),0);
   /* Když jsem sem přišel prokliknutím z KPI, ať je vidět odkud a jak se vrátit. */
   const chips=[
@@ -4250,6 +4348,7 @@ function listView(){
     f.seg    ? {t:'Linka: '+f.seg} : null,
     f.group  ? {t:'Skupina: '+f.group} : null,
     f.reason ? {t:'Důvod: '+f.reason} : null,
+    f.mach   ? {t:'Stroj: '+f.mach} : null,
     f.shift  ? {t:'Směna: '+(SHIFT_LBL[f.shift]||f.shift)} : null
   ].filter(Boolean);
   return scopeBar()+`
@@ -4267,6 +4366,7 @@ function listView(){
       <select id="f-seg"><option value="">Všechny linky</option>${segList.map(s=>`<option ${f.seg===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
       <select id="f-group"><option value="">Všechny skupiny</option>${grpList.map(s=>`<option ${f.group===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
       <select id="f-reason"><option value="">Všechny důvody</option>${rsnList.map(s=>`<option ${f.reason===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      ${machList.length?`<select id="f-mach"><option value="">Všechny stroje</option>${machList.map(m=>`<option ${f.mach===m?'selected':''}>${esc(m)}</option>`).join('')}</select>`:''}
       <select id="f-shift"><option value="">Všechny směny</option>${['R','O','N'].map(k=>`<option value="${k}" ${f.shift===k?'selected':''}>${SHIFT_LBL[k]}</option>`).join('')}</select>
       <button class="btn-ghost" data-a="export">⭳ Export CSV</button>
     </div>
@@ -4293,13 +4393,14 @@ function listView(){
             <td data-label="Datum">${dayCz(e.date)}</td>
             <td data-label="Směna">${e.shift||''}</td>
             <td data-label="Linka"><b>${esc(e.seg)}</b></td>
+            <td data-label="Stroj" class="nowrap">${e.machine?`<span class="badge b-teal">${esc(e.machine)}</span>`:'<span class="muted">—</span>'}</td>
             <td data-label="Od">${e.daily?'<span class="muted">celý den</span>':String(e.start).slice(11,16)}</td>
             <td data-label="Do">${e.daily?'—':(e.end?String(e.end).slice(11,16):'—')}</td>
             <td data-label="Trvání" class="num"><b>${fmtDur(e.sec)}</b></td>
             <td data-label="Skupina"><span class="badge b-grey">${esc(e.group||'—')}</span></td>
             <td data-label="Důvod" class="desc">${esc(e.reason)}</td>
             <td data-label="Poznámka" class="desc muted">${esc(e.comment||'')}</td>
-          </tr>`).join('') || `<tr><td colspan="9" class="empty">Nic neodpovídá filtru.</td></tr>`}
+          </tr>`).join('') || `<tr><td colspan="10" class="empty">Nic neodpovídá filtru.</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -4535,14 +4636,24 @@ function importView(){
     const dates=[...new Set(rows.map(r=>r.date))].sort();
     const segs=[...new Set(rows.map(r=>r.seg))].sort((a,b)=>a.localeCompare(b,'cs'));
     const unk=rows.filter(r=>r.group===UNKNOWN).length;
+    const hasMach=rows.some(r=>r.machine);
     const tot=rows.reduce((a,r)=>a+r.sec,0);
     body=`<div class="body">
       <div class="file"><span class="nm">${esc(s.name)}</span>
-        <span class="sz">${s.src==='g463'?'report z G463':'report ze Symesticu'} · ${rows.length.toLocaleString('cs-CZ')} záznamů · ${dates.length} dní · ${segs.length} linek</span>
+        <span class="sz">${s.src==='g463'?'report z G463':(s.src==='rpt'?'denní report Gclassu':'report ze Symesticu')} · ${rows.length.toLocaleString('cs-CZ')} záznamů · ${dates.length} dní · ${segs.length} linek</span>
         <button class="btn-ghost" style="margin-left:auto" data-a="imp-reset">Vybrat jiný soubor</button></div>
       ${s.src==='g463'?`<div class="notice">Rozpoznal jsem <b>report z G463</b> (záložky „Line – …"). Tenhle report nedává
         jednotlivé prostoje s časem od–do, ale součet minut za den a důvod, takže z každé buňky vznikne jeden záznam
         na den, linku a důvod. Linky v souboru: <b>${segs.map(x=>esc(x)).join(', ')}</b>.</div>`:''}
+      ${s.src==='rpt'?`<div class="notice">Rozpoznal jsem <b>denní report Gclassu</b> (jedna záložka = jedna linka,
+        sloupec „Detail prostojů"). Z každé položky „popis (20 min)" vznikne jeden prostoj za celý den.
+        ${(s.machines||[]).length
+          ? `Z poznámek jsem vytáhl stroje: <b>${(s.machines||[]).map(x=>esc(x)).join(', ')}</b> — půjdou filtrovat
+             v Prostojích a uvidíš je v KPI v grafu „Prostoje po strojích".`
+          : 'Žádný kód stroje (PERS03, COAT01…) jsem v poznámkách nenašel.'}</div>`:''}
+      ${s.src==='rpt'&&s.bad.length?`<div class="notice warn">U ${s.bad.length} ${s.bad.length===1?'řádku':'řádků'}
+        nesedí součet položek proti sloupci „Prostoje celkem (min)", nebo se položka nedala přečíst.
+        Zapíšou se jen čitelné položky — radši si ty dny po importu zkontroluj.</div>`:''}
       <div class="cards">
         <div class="kcard" style="border-left-color:#1f9254"><div class="lbl">Načteno</div>
           <div class="val">${rows.length.toLocaleString('cs-CZ')}</div><div class="note">prostojů, celkem ${fmtDur(tot)}</div></div>
@@ -4555,17 +4666,20 @@ function importView(){
       </div>
       ${s.err?`<div class="notice warn">${esc(s.err)}</div>`:''}
       <div class="tblwrap" style="border:1px solid var(--line);border-radius:var(--radius)">
-        <table><thead><tr><th>Datum</th><th>Sm.</th><th>Linka</th><th>Od</th><th>Trvání</th><th>Skupina</th><th>Důvod</th></tr></thead>
+        <table><thead><tr><th>Datum</th><th>Sm.</th><th>Linka</th>${hasMach?'<th>Stroj</th>':''}<th>Od</th><th>Trvání</th><th>Skupina</th><th>Důvod</th></tr></thead>
         <tbody>${rows.slice(0,8).map(e=>`<tr>
           <td data-label="Datum">${dayCz(e.date)}</td><td data-label="Směna">${e.shift}</td>
-          <td data-label="Linka"><b>${esc(e.seg)}</b></td><td data-label="Od">${e.daily?'celý den':e.start.slice(11,16)}</td>
+          <td data-label="Linka"><b>${esc(e.seg)}</b></td>
+          ${hasMach?`<td data-label="Stroj">${e.machine?`<span class="badge b-teal">${esc(e.machine)}</span>`:'<span class="muted">—</span>'}</td>`:''}
+          <td data-label="Od">${e.daily?'celý den':e.start.slice(11,16)}</td>
           <td data-label="Trvání" class="num">${fmtDur(e.sec)}</td>
           <td data-label="Skupina"><span class="badge b-grey">${esc(e.group)}</span></td>
           <td data-label="Důvod" class="desc">${esc(e.reason)}</td></tr>`).join('')}
-        ${rows.length>8?`<tr><td colspan="7" class="muted" style="text-align:center">… a dalších ${(rows.length-8).toLocaleString('cs-CZ')} řádků</td></tr>`:''}
+        ${rows.length>8?`<tr><td colspan="${hasMach?8:7}" class="muted" style="text-align:center">… a dalších ${(rows.length-8).toLocaleString('cs-CZ')} řádků</td></tr>`:''}
         </tbody></table>
       </div>
-      <div class="notice" style="margin-top:12px">Linky v souboru: ${segs.map(x=>esc(x)).join(' · ')}</div>
+      <div class="notice" style="margin-top:12px">Linky v souboru: ${segs.map(x=>esc(x)).join(' · ')}${
+        hasMach?` &nbsp;·&nbsp; stroje: ${[...new Set(rows.map(r=>r.machine).filter(Boolean))].sort().map(x=>esc(x)).join(' · ')}`:''}</div>
     </div>
     <div class="foot">
       <button class="btn-ghost" data-a="imp-reset">Zpět</button>
@@ -4623,8 +4737,8 @@ function importView(){
 function exportCsv(){
   const r=visibleEvents();
   const line=a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';');
-  const csv=[line(['Datum','Směna','Linka','Začátek','Konec','Trvání (min)','Netto (min)','Skupina','Důvod','Poznámka'])]
-    .concat(r.map(e=>line([e.date,e.shift,e.seg,String(e.start).slice(11,19),e.end?String(e.end).slice(11,19):'',
+  const csv=[line(['Datum','Směna','Linka','Stroj','Začátek','Konec','Trvání (min)','Netto (min)','Skupina','Důvod','Poznámka'])]
+    .concat(r.map(e=>line([e.date,e.shift,e.seg,e.machine||'',String(e.start).slice(11,19),e.end?String(e.end).slice(11,19):'',
       Math.round(e.sec/60),Math.round((e.net||e.sec)/60),e.group,e.reason,e.comment||'']))).join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download='prostoje_'+today()+'.csv';
@@ -4733,7 +4847,7 @@ function bind(){
   const q=document.getElementById('f-q');
   if(q) q.oninput=()=>{ f.q=q.value; evShow=300; const p=q.selectionStart; render();
     const n=document.getElementById('f-q'); if(n){ n.focus(); n.setSelectionRange(p,p); } };
-  [['f-seg','seg'],['f-group','group'],['f-shift','shift'],['f-reason','reason'],['f-proc','proc']].forEach(([id,k])=>{
+  [['f-seg','seg'],['f-group','group'],['f-shift','shift'],['f-reason','reason'],['f-proc','proc'],['f-mach','mach']].forEach(([id,k])=>{
     const el=document.getElementById(id); if(el) el.onchange=()=>{ f[k]=el.value; evShow=300; render(); };
   });
 
@@ -4893,11 +5007,12 @@ async function act(a,v){
     case 'kpi-drill':{
       const i=String(v).indexOf(':'), kind=String(v).slice(0,i), val=String(v).slice(i+1);
       const fromCo = engTab==='co';
-      f={seg:'', group:'', shift:'', reason:'', proc:(fromCo?coProc:dashProc)||'', q:''};
+      f={seg:'', group:'', shift:'', reason:'', proc:(fromCo?coProc:dashProc)||'', mach:'', q:''};
       if(kind==='seg'){ f.seg=val; f.proc=''; }      // konkrétní linka proces nepotřebuje
       else if(kind==='group')  f.group=val;
       else if(kind==='shift')  f.shift=val;
       else if(kind==='reason') f.reason=val;
+      else if(kind==='mach')   f.mach=val;
       drillFrom=(fromCo?coProc:dashProc)||''; drillTab=fromCo?'co':'dash';
       evShow=300; engTab='list'; loadEvents();
       break; }
@@ -4905,7 +5020,7 @@ async function act(a,v){
       engTab=drillTab||'dash';
       if(engTab==='co') coProc=drillFrom||''; else dashProc=drillFrom||'';
       break;
-    case 'drill-clear': f={seg:'',group:'',shift:'',reason:'',proc:'',q:''}; evShow=300; break;
+    case 'drill-clear': f={seg:'',group:'',shift:'',reason:'',proc:'',mach:'',q:''}; evShow=300; break;
     /* Klik na sloupec: nový sloupec začne od největšího (u textu od A),
        další klik na ten samý pořadí otočí. */
     case 'ev-sort':{
