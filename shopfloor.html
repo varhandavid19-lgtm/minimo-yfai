@@ -286,6 +286,64 @@ const PHOTO_Q = 0.72;              // kvalita JPEG — typicky pětinová veliko
 
 /* ===== drobné pomůcky ===== */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const T = s=>(window.T?window.T(s):s);
+if(window.registerI18N) window.registerI18N({
+  'Shopfloor walk — nálezy z obchůzky':'Shopfloor walk — findings from the walk',
+  '🚶 Obchůzka':'🚶 Walk','📋 Akční plán':'📋 Action plan','Obchůzka':'Walk','Obchůzek':'Walks',
+  'Nález':'Finding','Nález ':'Finding ','nález':'finding','nálezy':'findings','nálezů':'findings',
+  'Nový nález':'New finding','+ Nový nález':'+ New finding','Nový nález z obchůzky':'New walk finding',
+  'Nový nález z obchůzky':'New walk finding','Nález z obchůzky':'Walk finding','Akční plán ze shopfloor walku':'Action plan from the shopfloor walk',
+  '📷 &nbsp;Nový nález z obchůzky':'📷 &nbsp;New walk finding',
+  'Na telefonu zapisuješ nálezy, na počítači je pak čteš v akčním plánu.':'On a phone you record findings, on a computer you then read them in the action plan.',
+  'Plán ukazuje všechny nálezy — po termínu nahoře, hotové dospod.':'The plan shows all findings — overdue at the top, done at the bottom.',
+  '↻ Načíst znovu':'↻ Reload','Načíst znovu':'Reload','↻ Načíst znovu':'↻ Reload',
+  /* filtry */
+  'Vše':'All','30 dní':'30 days','Posledních 7 dní':'Last 7 days','Všechny oblasti':'All areas',
+  'Všechny stavy':'All statuses','Všichni owneři':'All owners','skrýt hotové':'hide done',
+  'Otevřené nálezy':'Open findings','uzavřené nálezy':'closed findings','Uzavřeno':'Closed',
+  'Po termínu':'Overdue','všechno v termínu':'all on time','Hledat v nálezu, opatření, ownerovi…':'Search in finding, action, owner…',
+  'Nic neodpovídá filtru.':'Nothing matches the filter.','Za tohle období tu nic není':'There is nothing for this period',
+  'Jakmile někdo na obchůzce něco zapíše, uvidíš to tady.':'Once someone records something on a walk, you will see it here.',
+  'Načítám nálezy z obchůzek…':'Loading walk findings…','Načítám…':'Loading…','Připojuji se k Firebase.':'Connecting to Firebase.',
+  /* oblasti */
+  'Místo':'Place','Konkrétní místo':'Specific place','Zázemí a okolí':'Facilities and surroundings',
+  'Údržba a dílna':'Maintenance and workshop','Ostatní':'Other','Datum obchůzky':'Walk date',
+  'např. u lisu IMM07, regál B3':'e.g. at press IMM07, rack B3',
+  /* formulář nálezu */
+  '1 · Co jsme našli':'1 · What we found','2 · Co se s tím udělá':'2 · What will be done',
+  '4 · Termín':'4 · Deadline','Opatření':'Action','Opatření a podle čeho poznáme, že je hotovo':'Action and how we know it is done',
+  'Popiš nález tak, jak ho uvidí ten, kdo ho bude řešit':'Describe the finding as the person who will handle it will see it',
+  'Napiš, co jsi na obchůzce našel.':'Write what you found on the walk.','Cokoli dalšího k nálezu':'Anything else about the finding',
+  'Poznámka':'Note','Fotky z obchůzky':'Walk photos','Fotka nahrána.':'Photo uploaded.','Nahrávám fotky…':'Uploading photos…',
+  '— může jich být víc':'— there can be several','Číslo se přidělí po uložení.':'The number is assigned after saving.',
+  'Č.':'No.','Otevřít':'Open','Uložit':'Save','Uložit nález':'Save finding','Zavřít':'Close','Smazat nález':'Delete finding',
+  'Vyber aspoň jednoho ownera — kdo to má vyřešit.':'Select at least one owner — who should resolve it.',
+  'Nikdo takový tu není. Lidi se přidávají v Nastavení minima.':'There is no such person. People are added in minimo Settings.',
+  'Začni psát jméno…':'Start typing a name…','Přidat dalšího — začni psát jméno':'Add another — start typing a name',
+  /* termín / posun */
+  'Termín':'Deadline','Termín původní':'Original deadline','Platný termín':'Valid deadline','Nový termín':'New deadline',
+  'Posun termínu':'Deadline change','Posunout termín':'Change deadline','Důvod posunu':'Reason for change',
+  'Proč se termín posouvá':'Why the deadline is changing','Posunů':'Changes','řádek po termínu':'row overdue',
+  'Termín jde posunout jen s důvodem — každý posun zůstane v historii.':'The deadline can only be changed with a reason — every change stays in the history.',
+  'Nález nejdřív ulož, teprve pak jde posouvat termín.':'Save the finding first, only then can the deadline be changed.',
+  'K posunu termínu napiš důvod.':'Write a reason for changing the deadline.','Vyber nový termín.':'Select a new deadline.',
+  'Vyplň termín.':'Fill in the deadline.','Změny se zapíšou do historie.':'Changes are written to the history.',
+  'nález uzavřen':'finding closed','řeš hned':'resolve now',
+  /* přístup / jen čtení */
+  'jen čtení':'read-only','Máš přístup jen na čtení.':'You have read-only access.',
+  'Do Shopfloor walku máš přístup jen na čtení — nálezy vidíš, ale nezakládáš.':'You have read-only access to the Shopfloor walk — you can see findings but not create them.',
+  'Do Shopfloor walku nemáš přístup — přecházím na hlavní stránku…':'You do not have access to the Shopfloor walk — going to the home page…',
+  /* barvy polí v legendě */
+  'bílé — vyplňuješ ty':'white — you fill in','žluté — až při posunu termínu':'yellow — only when changing the deadline',
+  'šedé — dopočítá se samo':'grey — calculated automatically','žluté':'yellow',
+  /* stavy / výsledky */
+  'Ukládám…':'Saving…','Uloženo.':'Saved.','Neznámá chyba':'Unknown error',
+  /* toasty – prefixy */
+  'Nenahrálo se: ':'Upload failed: ',' se nenahrála: ':' was not uploaded: ',
+  'Smazání selhalo. ':'Deletion failed. ','Uložení selhalo. ':'Saving failed. ',
+  'Uložení fotek selhalo. ':'Saving photos failed. ','Posun se neuložil. ':'The change was not saved. ',
+  ' fotek nahráno.':' photos uploaded.',' uložen.':' saved.'
+});
 const pad2 = n => String(n).padStart(2,'0');
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
 const dateCz = s => { if(!s) return ''; const p=String(s).slice(0,10).split('-');
@@ -327,7 +385,13 @@ let walkRange='7';                      // 0 = dnes, 7 = týden, '' = vše
 let f={area:'',owner:'',status:'',q:''};
 let hideClosed=true, toastMsg=null, toastKind='';
 const appEl=document.getElementById('app');
-function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t);
+function i18nToast(m){
+  if(!window.T||!window.minimoLang||window.minimoLang()!=='en'||typeof m!=='string') return m;
+  const full=window.T(m); if(full!==m) return full;
+  for(const sep of [': ','. ']){ const i=m.indexOf(sep); if(i>0){ const p=m.slice(0,i+sep.length); const tp=window.T(p); if(tp!==p) return tp+m.slice(i+sep.length); } }
+  return m;
+}
+function toast(m,k=''){ m=i18nToast(m); toastMsg=m; toastKind=k; render(); clearTimeout(toast._t);
   toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
 
 /* ===== přihlášení a profil ===== */
@@ -807,8 +871,8 @@ function exportCsv(){
    Vykreslení a ovládání
    ========================================================== */
 function render(){
-  if(!me){ appEl.innerHTML=loginView(); bind(); return; }
-  if(!canEnter()){ appEl.innerHTML=shell(noAccessView()); bind(); return; }
+  if(!me){ appEl.innerHTML=loginView(); bind(); window.i18nApply&&window.i18nApply(appEl); return; }
+  if(!canEnter()){ appEl.innerHTML=shell(noAccessView()); bind(); window.i18nApply&&window.i18nApply(appEl); return; }
   const inner = tab==='walk' ? walkView() : planView();
   appEl.innerHTML = shell(`
     <div class="tabs">
@@ -827,6 +891,7 @@ function render(){
     + (open?itemModal():'')
     + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
   bind();
+  window.i18nApply&&window.i18nApply(appEl);
 }
 /* Kdo do modulu nesmí, skončí na hlavní stránce s moduly, kam smí. */
 function noAccessView(){

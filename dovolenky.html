@@ -591,6 +591,71 @@ let calScrollL=0, calScrollT=0;
 
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const T = s=>(window.T?window.T(s):s);
+if(window.registerI18N) window.registerI18N({
+  'Plánování směn a přítomnosti':'Shift and attendance planning',
+  'Plánování směn a přítomnosti — YFAI':'Shift and attendance planning — YFAI',
+  'Aplikace je určená vedoucím pracovníkům.':'The app is intended for managers.',
+  'Účet vám zakládá správce.':'Your account is created by the administrator.',
+  'Přihlásit se':'Sign in','Přihlašuji…':'Signing in…','Připojuji se k Firebase.':'Connecting to Firebase.',
+  'Načítám…':'Loading…','Ukládám…':'Saving…','Uloženo.':'Saved.','Uložit':'Save','Zavřít':'Close','Zrušit':'Cancel',
+  /* navigace kalendáře */
+  'Měsíc':'Month','Tento měsíc':'This month','Další měsíc':'Next month','Předchozí měsíc':'Previous month',
+  'Další rok':'Next year','Předchozí rok':'Previous year','Víkend':'Weekend',' (víkend)':' (weekend)',
+  'Posouvejte kalendář do stran ↔ · ':'Scroll the calendar sideways ↔ · ',
+  'kliknutím na políčko zobrazíte detail':'click a cell to show the detail',
+  'Zrušit výběr (Esc)':'Clear selection (Esc)','🗑 Vymazat vybrané dny':'🗑 Delete selected days',
+  /* měsíce zkratky */
+  'úno':'Feb','bře':'Mar','kvě':'May','čvn':'Jun','čvc':'Jul','zář':'Sep','říj':'Oct',
+  /* sekce / lidé */
+  'Úsek':'Section','Úsek (pozice)':'Section (position)','Vyber úsek (pozici).':'Select a section (position).',
+  'Jméno':'Name','Jméno a příjmení':'Full name','Zaměstnanec':'Employee','Kancelář':'Office','Denní (Po–Pá)':'Day (Mon–Fri)',
+  'V sekcích zatím nejsou žádní lidé.':'There are no people in the sections yet.',
+  'zatím nejsou žádní lidé.':'no people yet.','Napiš jméno.':'Enter a name.',
+  '👤 + Přidat jméno':'👤 + Add name','Úprava jména v plánu':'Edit name in the plan','Přidat jméno do plánování':'Add a name to the plan',
+  'Odebrat osobu z plánování':'Remove person from the plan','Vymazat plánování':'Clear the plan',
+  'Jména může přidávat jen ten, kdo smí v sekci zapisovat všechny.':'Only someone allowed to record everyone in the section can add names.',
+  'Jde jen o řádek v plánu — s účty v minimu to nijak nesouvisí.':'It is only a row in the plan — it has nothing to do with minimo accounts.',
+  'Tuto sekci můžete jen prohlížet.':'You can only view this section.','Tady můžeš plán jen prohlížet.':'Here you can only view the plan.',
+  'Do Plánování směn nemáš přístup — přecházím na hlavní stránku…':'You do not have access to Shift planning — going to the home page…',
+  /* nepřítomnost / dovolená */
+  'Dovolená':'Vacation','Nepřítomnost':'Absence','Nepřítomnost:':'Absence:','½ dne dovolené':'½ day of vacation',
+  'Na tento den tu není naplánovaná směna ani nepřítomnost.':'There is no shift or absence planned for this day.',
+  'Opravdu chceš dovolenou přesto potvrdit?':'Do you really want to confirm the vacation anyway?',
+  'Potvrdit i přesto':'Confirm anyway','⚠️ Kolize dovolené':'⚠️ Vacation conflict',
+  'V tomto termínu už má dovolenou jiný pracovník ze stejného úseku:':'Another worker from the same section already has vacation on this date:',
+  'Poznámka':'Note','📝 Poznámka:':'📝 Note:','poznámka ke dni (uloží se i s nepřítomností)':'note for the day (saved together with the absence)',
+  'Uložit poznámku k označeným dnům (prázdná poznámku smaže)':'Save a note for the selected days (empty deletes the note)',
+  '💾 Uložit poznámku':'💾 Save note',
+  /* směny / rytmus */
+  'Směna':'Shift','Směn':'Shifts','Směny:':'Shifts:','Směn navíc':'Extra shifts','Rozplánovat od dneška':'Plan from today',
+  '🔁 Směnový rytmus na celý rok':'🔁 Shift rhythm for the whole year','🔁 Směnový rytmus na celý rok':'🔁 Shift rhythm for the whole year',
+  'Bez směnového rytmu — přesčasy se nepočítají':'No shift rhythm — overtime is not counted','bez směnového rytmu':'no shift rhythm',
+  'Rytmus nejde nastavit do minulosti — označ jako první den dnešek nebo později.':'The rhythm cannot be set in the past — mark today or later as the first day.',
+  '1směnný provoz (8h)':'1-shift operation (8h)','2směnný provoz (8h, ranní/odpolední)':'2-shift operation (8h, morning/afternoon)',
+  '3směnný provoz (8h, týdenní rotace)':'3-shift operation (8h, weekly rotation)','4směnný provoz (12h, 24/7 – dle týmu)':'4-shift operation (12h, 24/7 – per team)',
+  'Pevná 12h směna':'Fixed 12h shift','Prodloužení 8h→12h':'Extension 8h→12h',
+  'Ranní (6:00–14:00)':'Morning (6:00–14:00)','Ranní 12h (6:00–18:00)':'Morning 12h (6:00–18:00)',
+  'Odpolední 12h (14:00–2:00)':'Afternoon 12h (14:00–2:00)','Noční 12h (18:00–6:00)':'Night 12h (18:00–6:00)',
+  'Start ranní (R/O)':'Start morning (M/A)','Start odpolední (O/R)':'Start afternoon (A/M)',
+  'Start ranní (R→N→O)':'Start morning (M→N→A)','Start odpolední (O→R→N)':'Start afternoon (A→M→N)','Start noční (N→O→R)':'Start night (N→A→M)',
+  'Toolsetter – start ranní':'Toolsetter – start morning','Toolsetter – start odpolední':'Toolsetter – start afternoon','Toolsetter – start noční':'Toolsetter – start night',
+  /* přesčasy / bonusy */
+  '⏱ Přesčasy':'⏱ Overtime','Přesčas celkem':'Total overtime','💰 Výpočet bonusů':'💰 Bonus calculation',
+  'Příplatek 12h':'12h bonus','Příplatek víkend':'Weekend bonus','Víkendových':'Weekend','ručních 12h':'manual 12h',
+  'Příplatky se počítají z naplánovaných směn (ručních i z rytmu).':'Bonuses are calculated from planned shifts (manual and from the rhythm).',
+  'hodiny přesčasu po měsících a součet za rok · počítá se stejně jako za měsíc':'overtime hours by month and the year total · calculated the same as for a month',
+  'měsíc (jen pro letošní rok)':'month (only for this year)',
+  '📋 Požadavky na správce':'📋 Requests to the administrator',
+  /* svátky (státní) */
+  'Svátek (státní)':'Public holiday','Státní svátek:':'Public holiday:','Svátek:':'Holiday:',
+  'Nový rok':'New Year','Velký pátek':'Good Friday','Velikonoční pondělí':'Easter Monday','Svátek práce':'Labour Day',
+  'Den vítězství':'Victory Day','Cyril a Metoděj':'Cyril and Methodius','Den české státnosti':'Czech Statehood Day',
+  'Vznik ČSR':'Czechoslovak Statehood Day','Štědrý den':'Christmas Eve','1. svátek vánoční':'Christmas Day',
+  '2. svátek vánoční':'St. Stephen’s Day',
+  /* toasty */
+  'Nepodařilo se uložit: ':'Could not save: ',' přidán do plánování.':' added to the plan.'
+});
 /* Příjmení = část e-mailu za tečkou (jan.novak@… → „novak"); bez tečky se vezme
    poslední slovo jména. Podle něj se řadí lidé v tabulce i v seznamech. */
 const surname = n => {const p=String(n||'').trim().split(/\s+/);return p[p.length-1]||'';};
@@ -601,7 +666,13 @@ const bySurname = (a,b)=> surnameKey(a).localeCompare(surnameKey(b),'cs') || Str
 function today(){const d=new Date();return iso(d.getFullYear(),d.getMonth(),d.getDate());}
 function iso(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 const dCz = ds => {const[y,m,d]=ds.split('-');return `${+d}. ${+m}. ${y}`;};
-function toast(m,k=''){toastMsg=m;toastKind=k;render();clearTimeout(toast._t);toast._t=setTimeout(()=>{toastMsg=null;render();},3200);}
+function i18nToast(m){
+  if(!window.T||!window.minimoLang||window.minimoLang()!=='en'||typeof m!=='string') return m;
+  const full=window.T(m); if(full!==m) return full;
+  for(const sep of [': ','. ']){ const i=m.indexOf(sep); if(i>0){ const p=m.slice(0,i+sep.length); const tp=window.T(p); if(tp!==p) return tp+m.slice(i+sep.length); } }
+  return m;
+}
+function toast(m,k=''){m=i18nToast(m);toastMsg=m;toastKind=k;render();clearTimeout(toast._t);toast._t=setTimeout(()=>{toastMsg=null;render();},3200);}
 
 /* Velikonoční neděle (Meeus/Jones/Butcher) – pro Velký pátek a Velikonoční pondělí. */
 function easterSunday(y){
@@ -1047,7 +1118,7 @@ function renderInner(){
   if(dragging){ pendingRender=true; return; }
   const c=document.querySelector('.cal-wrap');
   if(c){ calScrollL=c.scrollLeft; calScrollT=c.scrollTop; }
-  if(!me){ appEl.innerHTML=loginView(); wireLogin(); return; }
+  if(!me){ appEl.innerHTML=loginView(); wireLogin(); window.i18nApply&&window.i18nApply(appEl); return; }
   // sekce, které přihlášený vidí (bez těch se stavem „Skryté")
   const visible = SECTIONS.filter(s=>secPerm(s.key)!=='none');
   if(visible.length && !visible.some(s=>s.key===section)) section=visible[0].key;
@@ -1055,6 +1126,7 @@ function renderInner(){
   people = allUsers.filter(u=>inSection(u,section)).sort(bySurname);
   appEl.innerHTML = appView();
   wireApp();
+  window.i18nApply&&window.i18nApply(appEl);
   alignCalendar();
   positionTodayBand();
   renderToast();
