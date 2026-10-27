@@ -620,6 +620,22 @@ if(window.registerI18N) window.registerI18N({
   'Do Plánování směn nemáš přístup — přecházím na hlavní stránku…':'You do not have access to Shift planning — going to the home page…',
   /* nepřítomnost / dovolená */
   'Dovolená':'Vacation','Nepřítomnost':'Absence','Nepřítomnost:':'Absence:','½ dne dovolené':'½ day of vacation',
+  /* typy nepřítomnosti (legenda) */
+  'Náhradní volno':'Time off in lieu','Nemoc':'Sick leave','Lékař':'Doctor','Neplacené volno':'Unpaid leave','Služební cesta':'Business trip',
+  /* názvy směn a časy (legenda / výběr) */
+  'Ranní':'Morning','Odpolední':'Afternoon','Noční':'Night','Ranní 12h':'Morning 12h','Odpolední 12h':'Afternoon 12h',
+  'Noční 12h':'Night 12h','Denní':'Day','Po–Pá':'Mon–Fri','cca 7:00–15:30':'approx. 7:00–15:30',
+  /* kalendářní lišta */
+  'Rok':'Year','Dnes':'Today','Přidat člověka, který nemá účet v minimu':'Add a person who has no minimo account',
+  /* nápovědy */
+  'Klikem označ řádek člověka, pak v něm tažením označ dny a dole vyber, co v nich má být.':'Click a person’s row, then drag to mark days and choose below what they should be.',
+  'Přesčasy = ručně zadané směny navíc proti směnovému rytmu (a prodloužení 8h na 12h).':'Overtime = manually added shifts beyond the shift rhythm (and 8h-to-12h extensions).',
+  'Požadavky na správce — stejné jako v modulu LAMA, ale vlastní seznam pro Plánování.':'Requests to the administrator — same as in the LAMA module, but a separate list for Planning.',
+  '1. klik označí řádek, pak v něm tažením označ dny (na mobilu ťukni na první a pak na poslední den)':'First click selects the row, then drag to mark days (on mobile tap the first and then the last day)',
+  'Shift+klik rozšíří výběr · Esc výběr zruší · směny z rytmu Vymazat neumí — přepiš je nebo rytmus ukonči':'Shift+click extends the selection · Esc clears it · rhythm shifts cannot be cleared — overwrite them or end the rhythm',
+  /* prázdná sekce */
+  'V sekci':'In section','Přidej je tlačítkem':'Add them with the button','nad kalendářem.':'above the calendar.',
+  'Lidi do plánu přidává ten, kdo má v sekci právo zapisovat.':'People are added to the plan by someone with write permission in the section.',
   'Na tento den tu není naplánovaná směna ani nepřítomnost.':'There is no shift or absence planned for this day.',
   'Opravdu chceš dovolenou přesto potvrdit?':'Do you really want to confirm the vacation anyway?',
   'Potvrdit i přesto':'Confirm anyway','⚠️ Kolize dovolené':'⚠️ Vacation conflict',
@@ -1497,7 +1513,7 @@ function selBarView(){
       <input type="text" id="sb-note" value="${esc(selNote)}" placeholder="poznámka ke dni (uloží se i s nepřítomností)">
       <button class="sb-btn" id="sb-savenote" ${busySel?'disabled':''} title="Uložit poznámku k označeným dnům (prázdná poznámku smaže)">💾 Uložit poznámku</button></div>
     ${sh.length?`<div class="sb-row"><span class="sb-lbl">Směna</span>
-      ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?s.name:(s.k+' · '+s.name), s.name+(s.hours?' ('+s.hours+')':''))).join('')}</div>`:''}
+      ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?T(s.name):(s.k+' · '+T(s.name)), T(s.name)+(s.hours?' ('+T(s.hours)+')':''))).join('')}</div>`:''}
     ${rotRowView(p, from)}
     <div class="sb-row"><span class="sb-lbl"></span>
       <button class="sb-btn sb-clear" id="sb-clear" ${busySel?'disabled':''}>🗑 Vymazat vybrané dny</button>
@@ -1509,7 +1525,7 @@ function legendView(){
   const items = TYPES.map(t=>`<span class="item"><span class="sw" style="background:${t.fill}"></span>${esc(t.k)}</span>`).join('')
     + `<span class="item"><span class="sw" style="background:${HOLIDAY_FILL}"></span>Svátek (státní)</span>`
     + `<span class="item"><span class="sw" style="background:#eef1f5"></span>Víkend</span>`;
-  const shItems = SHIFTS.map(s=>`<span class="item"><span class="sw" style="background:${s.fill}"></span>${s.noLabel?esc(s.name):(esc(s.k)+' · '+esc(s.name))}${s.hours?(' ('+esc(s.hours)+')'):''}</span>`).join('');
+  const shItems = SHIFTS.map(s=>`<span class="item"><span class="sw" style="background:${s.fill}"></span>${s.noLabel?esc(T(s.name)):(esc(s.k)+' · '+esc(T(s.name)))}${s.hours?(' ('+esc(T(s.hours))+')'):''}</span>`).join('');
   return `<div class="legend"><span class="lg-h">Nepřítomnost:</span>${items}</div>
     <div class="legend"><span class="lg-h">Směny:</span>${shItems}</div>`;
 }
@@ -1522,9 +1538,9 @@ function calBar(){
     <button class="nav" id="yr-next" title="${calView==='month'?'Další měsíc':'Další rok'}">›</button>
     <button class="btn-ghost" id="go-today">Dnes</button>
     ${canEditAll()?'<button class="btn-ghost" id="add-name" title="Přidat člověka, který nemá účet v minimu">👤 + Přidat jméno</button>':''}
-    <span class="hint">${calView==='month'?'':'Posouvejte kalendář do stran ↔ · '}${canEditAll()
-      ? '1. klik označí řádek, pak v něm tažením označ dny (na mobilu ťukni na první a pak na poslední den)'
-      : 'kliknutím na políčko zobrazíte detail'}</span>
+    <span class="hint">${calView==='month'?'':T('Posouvejte kalendář do stran ↔ · ')}${canEditAll()
+      ? T('1. klik označí řádek, pak v něm tažením označ dny (na mobilu ťukni na první a pak na poslední den)')
+      : T('kliknutím na políčko zobrazíte detail')}</span>
   </div>`;
 }
 
