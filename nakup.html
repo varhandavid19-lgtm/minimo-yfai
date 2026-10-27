@@ -637,6 +637,156 @@ let colHide={}, colW={}, colPanel=false;
 
 /* ---------- pomocné ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const T = s=>(window.T?window.T(s):s);
+if(window.registerI18N) window.registerI18N({
+  /* stavy a priority (systémové popisky) */
+  'nový':'new','poptáno':'inquired','schváleno':'approved','ve schvalování':'in approval',
+  'odesláno':'sent','doručeno':'delivered','zamítnuto':'rejected',
+  'PO ve schvalování':'PO in approval','PO odesláno':'PO sent',
+  'nízká':'low','běžná':'normal','vysoká':'high','kritická':'critical',
+  'Kritická priorita':'Critical priority',
+  /* role */
+  'Zadavatel':'Requester','Skladník':'Warehouse','Schvalovatel':'Approver','Administrátor':'Administrator',
+  '– požadavky vidíte, ale nemůžete je zakládat ani upravovat.':'– you can see requests but cannot create or edit them.',
+  'Mění stav požadavku, doplňuje datum dodání, účet a ostatní údaje.':'Changes request status, fills delivery date, account and other data.',
+  'Schvaluje nebo zamítá požadavky. Stačí schválení jednoho z nich.':'Approves or rejects requests. A single approval is enough.',
+  'Plná práva — data, uživatelé, účty i nastavení povinných polí.':'Full rights — data, users, accounts and required-field settings.',
+  'Úrovně oprávnění':'Permission levels',
+  /* záhlaví sloupců tabulky */
+  'Stav':'Status','Č. požadavku':'Request no.','Vytvořeno':'Created','Skladové č.':'Stock no.',
+  'Popis':'Description','Priorita':'Priority','Množ.':'Qty','Cena / ks':'Price / pc',
+  'Cena celkem':'Total price','Celkem EUR':'Total EUR','Dodavatel':'Supplier','Výrobce':'Manufacturer',
+  'Účet':'Account','Linka / stroj':'Line / machine','Dodání':'Delivery','Objednávka':'Order',
+  'Přijato':'Received','MIN/MAX':'MIN/MAX','Odkaz':'Link','Zadal':'Created by','Schválil':'Approved by',
+  'Výmaz řádku':'Delete row',
+  /* pole formuláře */
+  'Stav schvalování':'Approval status','Skladové číslo':'Stock number','Množství':'Quantity',
+  'CostCenter':'CostCenter','Úsek':'Section','Stroj / pod-úsek':'Machine / sub-section',
+  'Datum dodání':'Delivery date','MIN skladem':'MIN in stock','MAX skladem':'MAX in stock',
+  'URL odkaz':'URL link','Poznámka':'Note','Měna':'Currency','Jméno':'Name','Útvar':'Department',
+  'Firemní e-mail':'Company e-mail','Počáteční heslo':'Initial password','Číslo dodavatele':'Supplier number',
+  'IČO/DIČ':'Reg. no./VAT','Komentář':'Comment','Komentář skladu':'Warehouse comment',
+  'Objednávka QAD':'QAD order','Datum přijetí':'Receipt date','Přijímané množství':'Quantity received',
+  'Přijaté množství':'Quantity received','Req.č.':'Req. no.','Dodací list/servisní výkaz':'Delivery note/service report',
+  'Pořadové číslo':'Sequence number','Přepočet na EUR':'Conversion to EUR','Důvod objednání':'Reason for order',
+  'Druh požadavku':'Request type','E-mail o naskladnění':'Stocking e-mail','Poznámka (Remark 1)':'Note (Remark 1)',
+  'proč to objednáváme':'why we are ordering it',
+  /* dlaždice / navigace / nadpisy */
+  'Nákupní požadavky':'Purchase requests','Nákupní požadavky — YFAI minimo':'Purchase requests — YFAI minimo',
+  'Přehled požadavků':'Request overview','Historie požadavku':'Request history',
+  'Uživatelé a role':'Users and roles','Nákladové účty':'Cost accounts',
+  'Mazání účtů a reset zapomenutého hesla':'Deleting accounts and resetting a forgotten password',
+  'Interní objednávkový systém':'Internal ordering system','Nákup/příjem':'Purchase/receipt',
+  'Nákup':'Purchase','Příjem':'Receipt','Požadavek':'Request','Požadavky':'Requests',
+  'Mé požadavky':'My requests','Nový požadavek':'New request',
+  /* filtry */
+  'Vše':'All','Tento měsíc':'This month','Všechny linky':'All lines','Všechny priority':'All priorities',
+  'Všechny účty':'All accounts','nevyřízené':'open','Jen doplnění skladu':'Stock replenishment only',
+  'Jen nákupní požadavky':'Purchase requests only','Doplnění i požadavky':'Replenishment and requests',
+  'Doplnění skladu':'Stock replenishment','Ukazatele za období:':'Indicators for the period:',
+  'Zrušit filtry':'Clear filters','Zrušit výběr':'Clear selection',
+  /* tlačítka a akce */
+  '+ Nový požadavek':'+ New request','+ Import požadavků':'+ Import requests','+ Přidat řádek':'+ Add row',
+  'Přidat':'Add','Přidat linku':'Add line','Přidat stroj':'Add machine','Přidat uživatele':'Add user',
+  'Založit uživatele':'Create user','Uložit dodavatele':'Save supplier','Uložit kurzy':'Save rates',
+  'Uložit nákup/příjem':'Save purchase/receipt','Použít na vybrané':'Apply to selected',
+  'Přijmout kompletně':'Receive completely','Zavřít':'Close','Zavřít správu':'Close management',
+  'Zrušit':'Cancel','Vyčistit':'Clear','Vyprázdnit záhlaví':'Empty header','Stáhnout':'Download',
+  'Schválit':'Approve','Zamítnout':'Reject','✔ Schválit za sebe':'✔ Approve as me','✕ Zamítnout':'✕ Reject',
+  '⚙ Správa požadavků':'⚙ Manage requests','🧩 Nastavení sloupců':'🧩 Column settings',
+  'Zobrazit vše / auto šířka':'Show all / auto width','📧 Otevřít e-mail':'📧 Open e-mail',
+  '📷 Naskenuj QR / čárový kód':'📷 Scan QR / barcode',
+  '📥 Import podlimitních položek z Maxima':'📥 Import of below-limit items from Maxima',
+  '📄 Přetáhni sem nabídku':'📄 Drag the quotation here',
+  '📄 Zobrazit text přečtený z PDF (na zkopírování popisů)':'📄 Show text read from the PDF (to copy descriptions)',
+  '👁️ Tento modul máte':'👁️ You have this module','jen pro čtení':'read-only',
+  /* možnosti selectů */
+  '— vyber účet —':'— select account —','— nepovinné —':'— optional —','— neměnit —':'— keep —',
+  '— nevyplňovat —':'— leave blank —','— celá linka (bez stroje) —':'— whole line (no machine) —',
+  'bez strojů':'no machines','popis účtu':'account description','číslo účtu':'account number',
+  'číslo cost centra':'cost centre number','nejdřív vyber linku':'select a line first',
+  'linka nemá stroje':'line has no machines','strojů':'machines',
+  /* importní průvodce / nabídky */
+  '1️⃣ Nabídka':'1️⃣ Quotation','2️⃣ Hromadné doplnění':'2️⃣ Bulk fill','3️⃣ Řádky':'3️⃣ Rows',
+  'Nabídka':'Quotation','Dodací list':'Delivery note','Ostatní':'Other','Povinné':'Required',
+  'Povinná pole':'Required fields','Vybráno k založení:':'Selected to create:',
+  'Zaškrtnuto ke schválení:':'Checked for approval:','Založí se':'Will be created',
+  'každý řádek = jeden nákupní požadavek':'each row = one purchase request',
+  'z jedné nabídky založíš víc požadavků najednou':'create several requests at once from one quotation',
+  'nepovinné — řádky můžeš vyplnit i ručně':'optional — you can also fill rows manually',
+  'Vyplň jen políčka, která chceš změnit —':'Fill in only the fields you want to change —',
+  'Prázdná políčka se nepřepisují — doplní se jen to, co tu vyplníš.':'Empty fields are not overwritten — only what you fill in here is added.',
+  'vyplň, co mají položky společné, zaškrtni řádky a klikni Doplnit':'fill in what the items have in common, tick rows and click Fill',
+  'PDF nebo foto/sken přečte':'reads a PDF or photo/scan',
+  'Vyplň ručně, nebo klikni na 📷 u':'Fill in manually, or click 📷 at',
+  'a naskenuj štítek dílu. Pokud položka skladové číslo nemá, zaškrtni':'and scan the part label. If the item has no stock number, tick',
+  'Založit jako novou skladovou položku?':'Create as a new stock item?',
+  'skladového čísla':'stock number','přetažením souboru':'by dragging a file',
+  '· připne se ke všem založeným požadavkům jako příloha „Nabídka"':'· will be attached to all created requests as the "Quotation" attachment',
+  'ℹ️ Přílohy se nahrají do úložiště':'ℹ️ Attachments are uploaded to storage',
+  'do dlaždice. Max 5 MB.':'to the tile. Max 5 MB.',
+  'Přetáhni sem soubor nebo „+ soubor".':'Drag a file here or "+ file".',
+  'až po uložení požadavku':'only after the request is saved','přidělí se po uložení':'assigned after saving',
+  'Žádné soubory.':'No files.',' nahrávám…':' uploading…','— nahrávám…':'— uploading…',
+  /* historie / prázdné stavy / poznámky */
+  'Zatím žádné záznamy v historii.':'No history records yet.','Zatím žádný stroj.':'No machines yet.',
+  'Žádné požadavky neodpovídají filtru.':'No requests match the filter.',
+  'Nastavení i uživatelé jsou uložení ve Firebase a platí pro celý tým.':'Settings and users are stored in Firebase and apply to the whole team.',
+  'Založí přihlášení i profil rovnou z aplikace':'Creates the login and profile directly from the app',
+  'založí přihlášení i profil rovnou z aplikace':'creates the login and profile directly from the app',
+  'se dělá ve Firebase → Authentication (z aplikace to nejde).':'is done in Firebase → Authentication (not possible from the app).',
+  'Požadavek je jen ke čtení. Změnu domluv se skladem.':'The request is read-only. Arrange any change with the warehouse.',
+  'Načteno':'Loaded','Načítám…':'Loading…','(systémové)':'(system)',
+  'možná duplicita':'possible duplicate','jsou povinná.':'are required.','musí být vyplněná.':'must be filled in.',
+  'brání uložení, pokud jsou prázdná':'prevents saving if empty','prázdná se ignorují':'empty ones are ignored',
+  'nenašel žádné položky':'found no items','pečlivě překontroluj':'check carefully',
+  'překontroluj množství a ceny':'check quantities and prices','odškrtnuté':'unchecked',
+  'zatím neschváleno':'not approved yet','MAX musí být ≥ MIN':'MAX must be ≥ MIN',
+  'Odkaz musí začínat http:// nebo https://':'The link must start with http:// or https://',
+  'Jen pro požadavky založené od 26. 10. 2026':'Only for requests created from 26 Oct 2026',
+  'Vybrané požadavky (od 26. 10. 2026) toto pole nemají':'Selected requests (from 26 Oct 2026) do not have this field',
+  /* dialogy */
+  'Potvrzení':'Confirmation','Potvrdit':'Confirm','Odeslat':'Send','Informace':'Information','Rozumím':'I understand',
+  'Naskladněno — poslat upozornění?':'Stocked — send a notification?',
+  'Čtu nabídku…':'Reading the quotation…','🧠 Nabídku čte AI… chvilku strpení.':'🧠 AI is reading the quotation… please wait.',
+  /* splash */
+  'Připojuji se k Firebase…':'Connecting to Firebase…','Načítám požadavky…':'Loading requests…',
+  'Chyba':'Error','Zkusit znovu':'Try again',
+  /* toasty – celé */
+  'Na hromadné úpravy nemáš právo.':'You are not allowed to make bulk edits.',
+  'Nejdřív zaškrtni aspoň jeden požadavek.':'Tick at least one request first.',
+  'Vyplň aspoň jedno políčko, které se má změnit.':'Fill in at least one field to change.',
+  'Načteno z QR kódu.':'Loaded from QR code.',
+  'Naskladněno. E-mail nemám komu poslat (chybí adresa).':'Stocked. There is no one to e-mail (address missing).',
+  'Na přidání přílohy nemáš právo.':'You are not allowed to add an attachment.',
+  'Příloha nahrána.':'Attachment uploaded.','Příloha smazána.':'Attachment deleted.',
+  'Nejdřív přidej aspoň jeden řádek.':'Add at least one row first.','Načítám Excel…':'Loading Excel…',
+  'V souboru nejsou žádné položky k importu.':'There are no items to import in the file.',
+  'Nepodařilo se načíst soubor.':'The file could not be loaded.',
+  'Tento modul máte jen pro čtení.':'You have this module as read-only.',
+  'Nejdřív zaškrtni řádky, do kterých se to má doplnit.':'First tick the rows to fill in.',
+  'V záhlaví není co doplnit — nejdřív něco vyplň.':'Nothing in the header to fill — fill something in first.',
+  'Změny uloženy.':'Changes saved.','Doručený požadavek nelze smazat.':'A delivered request cannot be deleted.',
+  'Požadavek smazán.':'Request deleted.','Nákup/příjem uložen.':'Purchase/receipt saved.',
+  'QR čtečka se nenačetla — zkontroluj internet a zkus to znovu.':'The QR reader did not load — check your internet and try again.',
+  'Na smazání přílohy nemáš právo.':'You are not allowed to delete an attachment.',
+  'Linka už existuje.':'The line already exists.','Stroj už v úseku je.':'The machine is already in the section.',
+  'Vyplň číslo účtu.':'Fill in the account number.','Účet už existuje.':'The account already exists.',
+  'Vyplň číslo cost centra.':'Fill in the cost centre number.','Cost centrum už existuje.':'The cost centre already exists.',
+  'Kurzy uloženy.':'Rates saved.','Vyplň jméno, e-mail i počáteční heslo.':'Fill in name, e-mail and initial password.',
+  'Heslo musí mít aspoň 6 znaků.':'The password must be at least 6 characters.',
+  /* toasty – prefixy (před ": ") */
+  'Nastavení se neuložilo: ':'Settings were not saved: ','Uložení selhalo: ':'Saving failed: ',
+  'Nabídku se nepodařilo nahrát: ':'The quotation could not be uploaded: ','Smazání selhalo: ':'Deletion failed: ',
+  'Schválení selhalo: ':'Approval failed: ','Zamítnutí selhalo: ':'Rejection failed: ',
+  'Nešlo smazat: ':'Could not delete: ','Založení selhalo: ':'Creation failed: ',
+  'Import hotový: ':'Import finished: ','AI čtení nabídky selhalo: ':'AI reading of the quotation failed: ',
+  'Kameru se nepodařilo spustit: ':'The camera could not be started: ',
+  /* různé */
+  'neznámá chyba':'unknown error','aspoň 6 znaků':'at least 6 characters','položek':'items','položku':'item','položky':'items',
+  'Kameru se nepodařilo spustit.':'The camera could not be started.',
+  'Čtečka se nenačetla — zkontroluj připojení k internetu a zkus to znovu.':'The reader did not load — check your internet connection and try again.'
+});
 const num = (v,d=2)=>(isFinite(v)?Number(v):0).toLocaleString('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
 const badge = (v,defs)=>{const d=defs.find(x=>x.k===v);const txt=(d&&d.label)?d.label:v;return `<span class="badge ${d?d.cls:'b-grey'}">${esc(txt||'—')}</span>`;};
 const total = r => (Number(r.cena)||0)*(Number(r.mnozstvi)||0);
@@ -794,11 +944,11 @@ async function createUserAccount(email,password){
    ========================================================== */
 function render(){
   const app=document.getElementById('app');
-  if(!authReady){ app.innerHTML=splash('Připojuji se k Firebase…'); return; }
-  if(fatalErr){ app.innerHTML=splash(fatalErr,true); bind(); return; }
-  if(!me){ app.innerHTML=loginView()+dlgView()+`<div id="toast-node">${toastView()}</div>`; bind(); return; }
-  if(nakupBlocked()){ app.innerHTML=noAccessView(); bind(); return; }
-  if(!dataReady){ app.innerHTML=splash('Načítám požadavky…'); return; }
+  if(!authReady){ app.innerHTML=splash('Připojuji se k Firebase…'); window.i18nApply&&window.i18nApply(app); return; }
+  if(fatalErr){ app.innerHTML=splash(fatalErr,true); bind(); window.i18nApply&&window.i18nApply(app); return; }
+  if(!me){ app.innerHTML=loginView()+dlgView()+`<div id="toast-node">${toastView()}</div>`; bind(); window.i18nApply&&window.i18nApply(app); return; }
+  if(nakupBlocked()){ app.innerHTML=noAccessView(); bind(); window.i18nApply&&window.i18nApply(app); return; }
+  if(!dataReady){ app.innerHTML=splash('Načítám požadavky…'); window.i18nApply&&window.i18nApply(app); return; }
   saveView();   // zapamatuj si tvoje filtry jen v tomto prohlížeči
   // zapamatuj pozici scrollu, ať po otevření/zavření detailu seznam nepřeskočí nahoru
   const _pw=document.getElementById('tblwrap'); const _sTbl=_pw?_pw.scrollTop:null; const _sWin=window.scrollY;
@@ -806,6 +956,7 @@ function render(){
   const _pr=document.getElementById('ireq-tblwrap'); const _sIrq=_pr?_pr.scrollTop:null;
   app.innerHTML = shell()+dlgView()+(qrOpen?qrScanView():'')+`<div id="toast-node">${toastView()}</div>`;
   bind();
+  window.i18nApply&&window.i18nApply(app);
   const _nw=document.getElementById('tblwrap'); if(_nw&&_sTbl!=null) _nw.scrollTop=_sTbl;
   const _ni=document.getElementById('imp-tblwrap'); if(_ni&&_sImp!=null) _ni.scrollTop=_sImp;
   const _nr=document.getElementById('ireq-tblwrap'); if(_nr&&_sIrq!=null) _nr.scrollTop=_sIrq;
@@ -1492,7 +1643,14 @@ function applyScan(text){
   render();
   toast('Načteno z QR kódu.','ok');
 }
+function i18nToast(m){
+  if(!window.T||!window.minimoLang||window.minimoLang()!=='en'||typeof m!=='string') return m;
+  const full=window.T(m); if(full!==m) return full;
+  const i=m.indexOf(': '); if(i>0){ const p=m.slice(0,i+2); const tp=window.T(p); if(tp!==p) return tp+m.slice(i+2); }
+  return m;
+}
 function toast(msg,kind=''){
+  msg=i18nToast(msg);
   toastMsg=msg;toastKind=kind;clearTimeout(toast._t);
   const host=document.getElementById('app');
   if(host){let n=document.getElementById('toast-node');if(!n){n=document.createElement('div');n.id='toast-node';host.appendChild(n);}n.innerHTML=`<div class="toast ${kind}">${esc(msg)}</div>`;}
