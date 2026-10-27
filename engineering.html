@@ -1470,6 +1470,10 @@ let imp=newImp('dt');
 let toastMsg=null, toastKind='';
 
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* Číslo podle českých zvyklostí. POZOR: tahle funkce se jednou omylem smazala
+   při zavádění překladů a celý Engineering pak padal na „num is not defined" —
+   přestalo překreslování, takže nešly ani záložky. Nemaž ji. */
+const num = (v,d=1)=>(isFinite(v)?Number(v):0).toLocaleString('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
 const T = s=>(window.T?window.T(s):s);
 if(window.registerI18N) window.registerI18N({
   'Engineering — řízení výkonu':'Engineering — performance management',
@@ -1883,8 +1887,15 @@ const photoBad = r => !r.date || !r.seg || !r.text || !(r.min>0);
    přepočítají z toho, co zbylo; den bez záznamů se smaže celý,
    jinak by v KPI svítila stará čísla.
    ========================================================== */
+const cleanHasFilter = () => !!(imp.clFrom || imp.clTo || imp.clProc || imp.clSeg
+  || (imp.clSrc||[]).length || imp.clUnk);
 async function cleanFind(){
   if(!canImport()){ imp.err='Uklízet prostoje smí jen správce.'; render(); return; }
+  if(!cleanHasFilter()){
+    imp.err='Nemáš vybraný ani jeden filtr — takhle by se smazaly úplně všechny prostoje ze všech linek. '
+      +'Vyber aspoň období, proces, linku, zdroj nebo „jen nezařazené".';
+    render(); return;
+  }
   imp.err=''; imp.prog='Hledám záznamy…'; render();
   try{
     const from=imp.clFrom||'0000-01-01', to=imp.clTo||'9999-12-31';
@@ -1913,9 +1924,10 @@ async function runClean(){
   if(!canImport()){ imp.err='Uklízet prostoje smí jen správce.'; render(); return; }
   const rows=imp.rows||[];
   if(!rows.length) return;
-  if(String(imp.clWord||'').trim().toUpperCase()!=='SMAZAT'){
-    imp.err='Pro jistotu napiš do políčka SMAZAT — maže se ostrá databáze a vrátit to nejde.'; render(); return;
+  if(String(imp.clWord||'').replace(/\s/g,'') !== String(rows.length)){
+    imp.err='Do políčka opiš přesný počet '+rows.length+' — ať je jisté, že víš, kolik toho mažeš.'; render(); return;
   }
+  if(!cleanHasFilter()){ imp.err='Bez filtru se mazat nedá.'; render(); return; }
   const dates=[...new Set(rows.map(r=>r.date))].sort();
   try{
     imp.err='';
@@ -4777,6 +4789,15 @@ function importView(){
       return Object.entries(o).sort((a,b)=>b[1].sec-a[1].sec); };
     body=`<div class="body">
       <div class="notice warn"><b>Tohle se smaže a nejde to vrátit.</b> Projdi si čísla níž a teprve pak potvrď.</div>
+      ${(function(){
+        const procs=[...new Set(rows.map(r=>procOfLine(r.seg)))];
+        const lines=[...new Set(rows.map(r=>r.seg))];
+        return procs.length>1 || lines.length>6
+          ? `<div class="notice warn">Výběr sahá přes <b>${lines.length} linek</b> a <b>${procs.length} procesů</b>
+             (${procs.map(k=>esc(procDef(k).label)).join(', ')}). Jestli jsi chtěl uklidit jen jeden proces,
+             vrať se zpátky a vyber ho — jinak přijdeš i o data odjinud.</div>`
+          : '';
+      })()}
       <div class="cards">
         <div class="kcard" style="border-left-color:#c0392b"><div class="lbl">Ke smazání</div>
           <div class="val">${rows.length.toLocaleString('cs-CZ')}</div><div class="note">prostojů, celkem ${fmtDur(tot)}</div></div>
@@ -4806,15 +4827,16 @@ function importView(){
       ${s.err?`<div class="notice warn" style="margin-top:12px">${esc(s.err)}</div>`:''}
       <div class="ybox" style="margin-top:14px">
         <b style="font-size:12.5px">Potvrzení</b>
-        <div class="muted" style="font-size:11.5px;margin:2px 0 7px">Napiš <b>SMAZAT</b> a teprve pak půjde tlačítko zmáčknout.</div>
-        <input id="cl-word" value="${esc(s.clWord||'')}" placeholder="SMAZAT" style="max-width:220px" autocomplete="off">
+        <div class="muted" style="font-size:11.5px;margin:2px 0 7px">Opiš sem počet <b>${rows.length.toLocaleString('cs-CZ')}</b>,
+          teprve pak půjde tlačítko zmáčknout. Je to schválně otravné — mazání nejde vrátit.</div>
+        <input id="cl-word" value="${esc(s.clWord||'')}" placeholder="${rows.length}" style="max-width:220px" autocomplete="off" inputmode="numeric">
       </div>
     </div>
     <div class="foot">
       <button class="btn-ghost" data-a="imp-reset">Zpět</button>
       ${s.prog?`<span class="muted">${esc(s.prog)}</span>`:''}
       <span style="margin-left:auto"></span>
-      <button class="btn-del" data-a="imp-run" ${(s.prog||String(s.clWord||'').trim().toUpperCase()!=='SMAZAT')?'disabled':''}>
+      <button class="btn-del" data-a="imp-run" ${(s.prog||String(s.clWord||'').replace(/\s/g,'')!==String(rows.length))?'disabled':''}>
         ${s.prog?'Mažu…':'Smazat '+rows.length.toLocaleString('cs-CZ')+' prostojů'}</button>
     </div>`;
   }
@@ -5017,10 +5039,13 @@ function importView(){
       <thead><tr><th>Kdy</th><th>Co</th><th>Kdo</th><th>Soubor</th><th>Řádků</th><th>Období</th></tr></thead>
       <tbody>${history.map(h=>`<tr>
         <td data-label="Kdy">${esc(String(h.at||'').slice(0,16).replace('T',' '))}</td>
-        <td data-label="Co"><span class="badge ${h.kind==='scrap'?'b-red':'b-teal'}">${h.kind==='scrap'?'scrap':'prostoje'}</span></td>
+        <td data-label="Co"><span class="badge ${h.kind==='úklid prostojů'?'b-red':(h.kind==='scrap'?'b-amber':'b-teal')}">${
+          esc(h.kind||'prostoje')}</span></td>
         <td data-label="Kdo">${esc(h.byName||'')}</td>
         <td data-label="Soubor" class="desc">${esc(h.file||'')}</td>
-        <td data-label="Řádků" class="num">${(h.rows||0).toLocaleString('cs-CZ')}</td>
+        <td data-label="Řádků" class="num">${h.kind==='úklid prostojů'
+          ? `<b style="color:var(--red)">−${(h.rows||0).toLocaleString('cs-CZ')}</b>`
+          : (h.rows||0).toLocaleString('cs-CZ')}</td>
         <td data-label="Období">${h.kind==='scrap'?monthCz(h.from||'')+' – '+monthCz(h.to||''):dayCz(h.from||'')+' – '+dayCz(h.to||'')}</td>
       </tr>`).join('') || `<tr><td colspan="6" class="empty">Zatím žádný import.</td></tr>`}
       </tbody></table></div>

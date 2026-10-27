@@ -703,6 +703,29 @@ permissions" napíše česky, jaké pozice u přihlášeného aplikace vidí, a 
 poradí: pozici má → nejsou publikovaná pravidla Firestore; pozici nemá → ať mu ji
 přidají v Nastavení. Nevracej se k vypisování `e.message`.
 
+## Než něco pushneš — kontrola, že nic nechybí
+Jedna stránka = jeden `<script type="module">`, takže jediná chybějící pomocná
+funkce shodí celé překreslení. Projeví se to zákeřně: stránka se tváří prázdně
+a **přestanou fungovat záložky**, protože `bind()` se k navěšení kliknutí
+nedostane. Přesně tohle se stalo, když zavádění překladů omylem smazalo `num()`
+v Engineeringu — s prázdnou databází to projde, protože `emptyView()` skončí
+dřív, a chyba vyleze až nad ostrými daty.
+
+Po každé větší úpravě (hlavně po hromadných záměnách napříč soubory) spusť:
+
+```
+for f in *.html; do node -e "
+const fs=require('fs');const s=fs.readFileSync('$f','utf8');
+const m=/<script type=\"module\">([\s\S]*?)<\/script>/.exec(s); if(!m) process.exit(0);
+const js=m[1];
+const chybi=['num','esc','toast','T','fmtDur','slug','pct','dateCz','dayCz']
+  .filter(n=>new RegExp('\\\\b'+n+'\\\\s*\\\\(').test(js)
+         && !new RegExp('(const|let|var|function)\\\\s+'+n+'\\\\b').test(js));
+if(chybi.length) console.log('$f CHYBÍ:', chybi.join(', '));"; done
+```
+
+A hlavně: **otestuj stránku s daty, ne jen s prázdnou databází.**
+
 ## Pracovní postup
 - **Změny commituj rovnou do `main` a pushni.** Nezakládej pull request a nenech
   mě nic mergovat — web se z `main` sám vystaví za 1–2 minuty. PR dělej jen tehdy,
