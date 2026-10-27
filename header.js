@@ -23,6 +23,37 @@
   // Kreslená hlava lamy z pohledu mírně z boku — ikona modulu Úkoly pro LAMA AGENCY (stejná je v index.html).
   var LLAMA = '<svg viewBox="0 0 64 64" width="1.2em" height="1.2em" style="vertical-align:-.25em;flex:none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lama"><g stroke="#5a3b22" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M41 25c4-6 7-14 5-20-5 4-8 11-9 18z" fill="#f3e3c7"/><path d="M20 28C14 21 11 10 14 4c6 5 9 14 10 22z" fill="#f3e3c7"/><path d="M42 20c2-4 3-8 3-11-2 3-4 7-4.5 10z" fill="#eba9a2" stroke="none"/><path d="M17.5 22c-2-5-3-10-2-13 2 4 4 9 4.5 13z" fill="#eba9a2" stroke="none"/><path d="M19 27c0-7 6-12 14-12s11 4 11 10v12c0 10-5 20-12 20s-13-8-13-19z" fill="#f3e3c7"/><path d="M21 23c-2-6 3-10 7-8 1-5 8-5 9 0 4-2 8 2 7 8-6 3-17 3-23 0z" fill="#fff8ec"/><path d="M29 45c0-5 4-8 9-8s9 3 9 8-4 9-9 9-9-4-9-9z" fill="#fff8ec" stroke-width="1.6"/><path d="M37.5 43Q40 44.6 42.6 42.8M40.2 44.2v3M36.5 49.5q3.5 2.4 6.6-.5" fill="none" stroke-width="1.6"/></g><ellipse cx="27.5" cy="32" rx="2.7" ry="3.3" fill="#2b1d12"/><ellipse cx="40.3" cy="31.6" rx="2.1" ry="3" fill="#2b1d12"/><circle cx="28.4" cy="30.9" r=".9" fill="#fff"/><circle cx="40.9" cy="30.6" r=".7" fill="#fff"/><circle cx="24" cy="39.5" r="2.7" fill="#f0a3a0" opacity=".55"/><circle cx="44.3" cy="38.3" r="1.6" fill="#f0a3a0" opacity=".45"/></svg>';
 
+  /* ===== Překlady (CZ/EN) – sdílené pro všechny moduly =====
+     T('český text') vrátí anglicky, když je zvolená EN; jinak vrátí češtinu.
+     Chybějící překlad = zůstane česky (nic se nerozbije). Moduly si svoje texty
+     přidávají přes window.registerI18N({...}). PŘEKLÁDAJÍ SE JEN SYSTÉMOVÉ POPISKY,
+     ne data (ta se do T() nedávají). */
+  var I18N = {};
+  function lang(){ try{ return localStorage.getItem('minimo-lang') || 'cs'; }catch(e){ return 'cs'; } }
+  function tr(cs){ if(lang()!=='en') return cs; var e = I18N[cs]; return (e===undefined ? cs : e); }
+  window.registerI18N = function(m){ if(!m) return; for(var k in m){ if(Object.prototype.hasOwnProperty.call(m,k)) I18N[k]=m[k]; } };
+  window.minimoLang = lang;
+  window.T = tr;
+  /* Základní slovník: menu, hlavička a běžná slova napříč moduly. */
+  window.registerI18N({
+    'Přepnout modul':'Switch module',
+    'Hlavní stránka':'Home',
+    'Nákupní požadavky':'Purchase requests',
+    'Plánování směn':'Shift planning',
+    'Plánování směn a přítomnosti':'Shift & attendance planning',
+    'Externí opravy':'External repairs',
+    'Engineering':'Engineering',
+    'Shopfloor walk':'Shopfloor walk',
+    'Úkoly pro LAMA AGENCY':'LAMA AGENCY tasks',
+    'Nastavení':'Settings',
+    'Odhlásit':'Log out',
+    'Moduly':'Modules',
+    'Menu modulů':'Modules menu',
+    'týden':'week',
+    '🖥️ Zobrazit jako na počítači':'🖥️ Desktop view',
+    '📱 Přepnout na mobilní zobrazení':'📱 Mobile view'
+  });
+
   window.uheaderHTML = function(o){
     o = o || {};
     function link(href, ico, label, key){
@@ -35,7 +66,7 @@
     function opravyLink(){
       var who = String(o.email||o.user||'').trim().toLowerCase();
       if(OPRAVY_OWNERS.indexOf(who)<0) return '';
-      return '<a class="'+(o.cur==='opravy'?'cur':'')+'" href="opravy.html">🛠️ Externí opravy</a>';
+      return '<a class="'+(o.cur==='opravy'?'cur':'')+'" href="opravy.html">🛠️ '+tr('Externí opravy')+'</a>';
     }
     // Engineering vidí správci (podle e-mailu) a lidé s pozicí PE nebo PE coordinator.
     // Pozice se předávají v o.positions — stejný seznam je i v pravidlech Firestore.
@@ -46,7 +77,7 @@
       var ok = OPRAVY_OWNERS.indexOf(who)>=0;
       for(var i=0;i<pos.length && !ok;i++) if(ENG_POSITIONS.indexOf(String(pos[i]).trim())>=0) ok=true;
       if(!ok) return '';
-      return '<a class="'+(o.cur==='engineering'?'cur':'')+'" href="engineering.html">🏭 Engineering</a>';
+      return '<a class="'+(o.cur==='engineering'?'cur':'')+'" href="engineering.html">🏭 '+tr('Engineering')+'</a>';
     }
     // Shopfloor walk: výchozí přístup mají správci a PE koordinátoři. Ruční nastavení
     // u uživatele (o.mods.shopfloor = none/read/write) má vždy přednost.
@@ -64,7 +95,7 @@
         for(var i=0;i<pos.length && !ok;i++) if(SFW_POSITIONS.indexOf(String(pos[i]).trim())>=0) ok=true;
       }
       if(!ok) return '';
-      return '<a class="'+(o.cur==='shopfloor'?'cur':'')+'" href="shopfloor.html">🚶 Shopfloor walk</a>';
+      return '<a class="'+(o.cur==='shopfloor'?'cur':'')+'" href="shopfloor.html">🚶 '+tr('Shopfloor walk')+'</a>';
     }
     // Úkoly pro LAMA AGENCY: výchozí přístup mají jen správci. Komukoli dalšímu
     // (třeba teamleaderovi agentury) ho David nastaví v Nastavení (o.mods.lama).
@@ -75,33 +106,33 @@
       var ok = (set==='read' || set==='write')
         || OPRAVY_OWNERS.indexOf(String(o.email||o.user||'').trim().toLowerCase())>=0;
       if(!ok) return '';
-      return '<a class="'+(o.cur==='lama'?'cur':'')+'" href="lama.html">'+LLAMA+' Úkoly pro LAMA AGENCY</a>';
+      return '<a class="'+(o.cur==='lama'?'cur':'')+'" href="lama.html">'+LLAMA+' '+tr('Úkoly pro LAMA AGENCY')+'</a>';
     }
     return '<header class="uhdr">'
       + '<div class="uh-menuwrap">'
-        + '<button class="uh-menu" id="mm-btn" aria-label="Menu modulů" title="Moduly">☰</button>'
+        + '<button class="uh-menu" id="mm-btn" aria-label="'+tr('Menu modulů')+'" title="'+tr('Moduly')+'">☰</button>'
         + '<nav class="mm-panel" id="mm-panel" hidden>'
-          + '<div class="mm-h">Přepnout modul</div>'
-          + link('index.html','🏠','Hlavní stránka','portal')
-          + link('nakup.html','🛒','Nákupní požadavky','nakup')
-          + link('dovolenky.html','🗓️','Plánování směn','dovolenky')
+          + '<div class="mm-h">'+tr('Přepnout modul')+'</div>'
+          + link('index.html','🏠',tr('Hlavní stránka'),'portal')
+          + link('nakup.html','🛒',tr('Nákupní požadavky'),'nakup')
+          + link('dovolenky.html','🗓️',tr('Plánování směn'),'dovolenky')
           + opravyLink()
           + engineeringLink()
           + shopfloorLink()
           + lamaLink()
-          + link('nastaveni.html','⚙️','Nastavení','nastaveni')
+          + link('nastaveni.html','⚙️',tr('Nastavení'),'nastaveni')
           + '<div class="mm-sep"></div>'
-          + '<button class="mm-view">🖥️ Zobrazit jako na počítači</button>'
+          + '<button class="mm-view">'+tr('🖥️ Zobrazit jako na počítači')+'</button>'
         + '</nav>'
       + '</div>'
       + '<div class="uh-brand">'+LOGO+'</div>'
-      + '<div class="uh-title"><b>minimo · YFAI</b><span>'+(o.module||'')+'</span></div>'
+      + '<div class="uh-title"><b>minimo · YFAI</b><span>'+tr(o.module||'')+'</span></div>'
       + '<div class="uh-right">'
         + '<div class="uh-clock" id="uh-clock"><div class="t">--:--:--</div><div class="d">—</div></div>'
         + '<div class="uh-user"><div class="n">'+(o.user||'')+'</div><div class="l">'+(o.level||'')+'</div></div>'
         + '<div class="uh-lang"><button data-lang="cs" title="Čeština">'+CZ+'</button>'
           + '<button data-lang="en" title="English">'+GB+'</button></div>'
-        + '<button class="uh-logout" '+(o.logoutAttr||'id="btn-logout"')+'>Odhlásit</button>'
+        + '<button class="uh-logout" '+(o.logoutAttr||'id="btn-logout"')+'>'+tr('Odhlásit')+'</button>'
       + '</div>'
     + '</header>';
   };
@@ -112,7 +143,7 @@
     var v = localStorage.getItem('minimo-view') || 'auto';
     if(vp) vp.setAttribute('content', v==='desktop' ? 'width=1200' : 'width=device-width, initial-scale=1');
     document.querySelectorAll('.mm-view').forEach(function(b){
-      b.textContent = (v==='desktop') ? '📱 Přepnout na mobilní zobrazení' : '🖥️ Zobrazit jako na počítači';
+      b.textContent = tr((v==='desktop') ? '📱 Přepnout na mobilní zobrazení' : '🖥️ Zobrazit jako na počítači');
     });
   }
   function applyLang(){
@@ -133,8 +164,8 @@
     var d = new Date(), p = function(n){ return (n<10?'0':'')+n; };
     var t = el.querySelector('.t'), dd = el.querySelector('.d');
     if(t) t.textContent = p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
-    if(dd) dd.textContent = d.toLocaleDateString('cs-CZ',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})
-      + ' · týden ' + isoWeek(d);
+    if(dd) dd.textContent = d.toLocaleDateString(lang()==='en'?'en-GB':'cs-CZ',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})
+      + ' · ' + tr('týden') + ' ' + isoWeek(d);
   }
   function refresh(){ tick(); applyLang(); }
   setInterval(refresh, 1000);
@@ -145,7 +176,7 @@
     var panel = document.getElementById('mm-panel');
     if(e.target.closest('#mm-btn')){ e.stopPropagation(); if(panel){ applyView(); panel.hidden = !panel.hidden; } return; }
     var lb = e.target.closest('.uh-lang button');
-    if(lb){ localStorage.setItem('minimo-lang', lb.getAttribute('data-lang')); applyLang(); return; }
+    if(lb){ localStorage.setItem('minimo-lang', lb.getAttribute('data-lang')); location.reload(); return; }
     if(e.target.closest('.mm-view')){
       var cur = localStorage.getItem('minimo-view') || 'auto';
       localStorage.setItem('minimo-view', cur==='desktop' ? 'auto' : 'desktop'); applyView(); return;

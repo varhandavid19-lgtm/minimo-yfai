@@ -156,6 +156,31 @@ const MODULES = [
 let me=null, myLevel='basic', myModules={}, myPositions=[], loginBusy=false, loginErr='';
 const appEl=document.getElementById('app');
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* Překlady hlavní stránky (systémové popisky). T(cs) vrátí EN při zvolené angličtině. */
+const T = s => (window.T ? window.T(s) : s);
+if(window.registerI18N) window.registerI18N({
+  'Firemní portál aplikací':'Company app portal',
+  'Heslo':'Password',
+  'Přihlašuji…':'Signing in…',
+  'Přihlásit se':'Sign in',
+  'Jeden účet platí pro všechny moduly.<br>Účet vám zakládá správce.':'One account works across all modules.<br>Your account is created by an admin.',
+  'Vyberte aplikaci':'Choose an app',
+  'Přihlášení platí pro všechny moduly současně.':'One sign-in works across all modules.',
+  'Otevřít →':'Open →',
+  'Připravujeme':'Coming soon',
+  'Údržba':'Maintenance',
+  'Reklamace':'Complaints',
+  'Evidence a schvalování nákupních požadavků ve výrobě.':'Recording and approval of purchase requests in production.',
+  'Dovolené, nepřítomnosti a plánování směn po sekcích.':'Holidays, absences and shift planning by section.',
+  'Požadavky na opravu dílů externí firmou.':'Requests to repair parts at an external company.',
+  'Prostoje na linkách, KPI a import reportu ze Symesticu.':'Line downtimes, KPIs and report import from Symestic.',
+  'Nálezy z obchůzky po výrobě — vyfoť, přiřaď ownera, hlídej termín.':'Findings from the shopfloor walk — take a photo, assign an owner, track the deadline.',
+  'Úkoly pro agenturu — zadání, termín, stav a vyjádření jejich teamleadera.':'Tasks for the agency — assignment, deadline, status and their team leader\'s response.',
+  'Hlášení a evidence oprav a údržby strojů. Připravujeme.':'Reporting and tracking of machine repairs and maintenance. Coming soon.',
+  'Evidence reklamací a neshod kvality. Připravujeme.':'Tracking of complaints and quality non-conformities. Coming soon.',
+  'Správa uživatelů, práv a modulů.':'Managing users, permissions and modules.',
+  'Do modulu {m} nemáš přístup — vyber si z modulů níže. Přístup ti může přidat správce v Nastavení.':'You don\'t have access to the {m} module — choose from the modules below. An admin can grant you access in Settings.'
+});
 
 onAuthStateChanged(auth, async (user)=>{
   loginBusy=false;
@@ -177,12 +202,12 @@ function loginView(){
   return `<div class="login-wrap"><form class="login" id="loginForm">
     <div class="brand">${logoSvg()}</div>
     <h2>minimo · YFAI</h2>
-    <p class="s">Firemní portál aplikací</p>
+    <p class="s">${T('Firemní portál aplikací')}</p>
     ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
     <div class="f"><label>E-mail</label><input type="email" id="li-email" autocomplete="username" required></div>
-    <div class="f"><label>Heslo</label><input type="password" id="li-pass" autocomplete="current-password" required></div>
-    <button type="submit" ${loginBusy?'disabled':''}>${loginBusy?'Přihlašuji…':'Přihlásit se'}</button>
-    <div class="hint">Jeden účet platí pro všechny moduly.<br>Účet vám zakládá správce.</div>
+    <div class="f"><label>${T('Heslo')}</label><input type="password" id="li-pass" autocomplete="current-password" required></div>
+    <button type="submit" ${loginBusy?'disabled':''}>${loginBusy?T('Přihlašuji…'):T('Přihlásit se')}</button>
+    <div class="hint">${T('Jeden účet platí pro všechny moduly.<br>Účet vám zakládá správce.')}</div>
   </form></div>`;
 }
 
@@ -224,23 +249,22 @@ function appView(){
     : (!m.key || resolveModule(myModules,myLevel,m.key)!=='none')).map(m=> m.active
     ? `<a class="tile active" href="${m.href}">
          <span class="ico">${m.ico}</span>
-         <span class="nm">${esc(m.nm)}</span>
-         <span class="ds">${esc(m.ds)}</span>
-         <span class="go">Otevřít →</span>
+         <span class="nm">${esc(T(m.nm))}</span>
+         <span class="ds">${esc(T(m.ds))}</span>
+         <span class="go">${T('Otevřít →')}</span>
        </a>`
     : `<div class="tile soon">
          <span class="ico">${m.ico}</span>
-         <span class="nm">${esc(m.nm)}</span>
-         <span class="ds">${esc(m.ds)}</span>
-         <span class="badge">Připravujeme</span>
+         <span class="nm">${esc(T(m.nm))}</span>
+         <span class="ds">${esc(T(m.ds))}</span>
+         <span class="badge">${T('Připravujeme')}</span>
        </div>`).join('');
   const LEVEL_LABEL={basic:'Basic',warehouse:'Warehouse',approver:'Approver',wadmin:'Warehouse Admin',superadmin:'Super Admin'};
   const uh = window.uheaderHTML ? window.uheaderHTML({module:'Hlavní stránka',cur:'portal',user:esc(me.email),level:LEVEL_LABEL[myLevel]||'',logoutAttr:'id="btn-logout"',modules:allowedMods(myModules,myLevel),positions:myPositions,mods:myModules,email:esc(me.email)}) : '';
   return `${uh}
   <main>
-    ${NOACCESS_NAME?`<div class="noacc">Do modulu <b>${esc(NOACCESS_NAME)}</b> nemáš přístup — vyber si z modulů níže.
-      Přístup ti může přidat správce v Nastavení.</div>`:''}
-    <div class="intro"><h2>Vyberte aplikaci</h2><p>Přihlášení platí pro všechny moduly současně.</p></div>
+    ${NOACCESS_NAME?`<div class="noacc">${T('Do modulu {m} nemáš přístup — vyber si z modulů níže. Přístup ti může přidat správce v Nastavení.').replace('{m}','<b>'+esc(NOACCESS_NAME)+'</b>')}</div>`:''}
+    <div class="intro"><h2>${T('Vyberte aplikaci')}</h2><p>${T('Přihlášení platí pro všechny moduly současně.')}</p></div>
     <div class="tiles">${tiles}</div>
   </main>`;
 }
