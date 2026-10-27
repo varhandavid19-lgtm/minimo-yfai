@@ -45,6 +45,7 @@
     'Engineering':'Engineering',
     'Shopfloor walk':'Shopfloor walk',
     'Úkoly pro LAMA AGENCY':'LAMA AGENCY tasks',
+    'Spotřeba energií':'Energy consumption',
     'Nastavení':'Settings',
     'Odhlásit':'Log out',
     'Moduly':'Modules',
@@ -163,6 +164,17 @@
       if(!ok) return '';
       return '<a class="'+(o.cur==='lama'?'cur':'')+'" href="lama.html">'+LLAMA+' '+tr('Úkoly pro LAMA AGENCY')+'</a>';
     }
+    // Spotřeba energií: výchozí přístup mají jen správci. Komukoli dalšímu
+    // ho David nastaví v Nastavení (o.mods.energie = none/read/write).
+    // Stejná logika je v index.html, energie.html, nastaveni.html a v pravidlech Firestore.
+    function energieLink(){
+      var set = (o.mods || {}).energie;
+      if(set==='none') return '';
+      var ok = (set==='read' || set==='write')
+        || OPRAVY_OWNERS.indexOf(String(o.email||o.user||'').trim().toLowerCase())>=0;
+      if(!ok) return '';
+      return '<a class="'+(o.cur==='energie'?'cur':'')+'" href="energie.html">⚡ '+tr('Spotřeba energií')+'</a>';
+    }
     return '<header class="uhdr">'
       + '<div class="uh-menuwrap">'
         + '<button class="uh-menu" id="mm-btn" aria-label="'+tr('Menu modulů')+'" title="'+tr('Moduly')+'">☰</button>'
@@ -175,6 +187,7 @@
           + engineeringLink()
           + shopfloorLink()
           + lamaLink()
+          + energieLink()
           + link('nastaveni.html','⚙️',tr('Nastavení'),'nastaveni')
           + '<div class="mm-sep"></div>'
           + '<button class="mm-view">'+tr('🖥️ Zobrazit jako na počítači')+'</button>'

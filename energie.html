@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%20100%20100%27%3E%3Crect%20width=%27100%27%20height=%27100%27%20rx=%2722%27%20fill=%27%231b4b8f%27/%3E%3Ctext%20x=%2750%27%20y=%2776%27%20font-size=%2774%27%20font-family=%27Arial,sans-serif%27%20font-weight=%27bold%27%20fill=%27white%27%20text-anchor=%27middle%27%3Em%3C/text%3E%3C/svg%3E">
+<title>Spotřeba energií — YFAI minimo</title>
+<link rel="stylesheet" href="header.css">
+<style>
+  :root{--navy-1:#0f2f5f;--navy-2:#1b4b8f;--bg:#f4f6f9;--card:#fff;--line:#dde4ec;--text:#16233a;--muted:#6b7a90;
+    --green:#1f9254;--red:#c0392b;--amber:#b7791f;--blue:#2563a8;--radius:6px;
+    --el:#2563a8;--el-bg:#e9f1fb;--gas:#b7791f;--gas-bg:#fbf3e4}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:13px}
+  button{font-family:inherit;font-size:12px;cursor:pointer;border-radius:var(--radius);border:1px solid transparent;padding:7px 12px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input,select,textarea{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:var(--radius);background:#fff;color:var(--text);width:100%}
+  textarea{resize:vertical}
+  input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{outline:2px solid #2a5ea3;outline-offset:1px}
+  main{padding:14px 16px 48px;max-width:1120px;margin:0 auto}
+  a{color:inherit}
+  .btn-primary{background:var(--navy-2);color:#fff}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:#41506b}
+  .btn-ok{background:var(--green);color:#fff;font-weight:700}
+  .btn-el{background:var(--el);color:#fff;font-weight:700}
+  .btn-gas{background:var(--gas);color:#fff;font-weight:700}
+  .btn-del{background:#fff;border:1px solid #e3b7b1;color:var(--red);font-weight:600}
+  .muted{color:var(--muted)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+
+  .notice{background:#eef4fc;border:1px solid #cfe0f5;color:#274a74;border-radius:8px;padding:10px 13px;margin-bottom:12px;font-size:12.5px}
+  .notice.warn{background:#fdf3e2;border-color:#f2dfb8;color:#7a5410}
+  .notice.err{background:#fdecea;border-color:#f5cfca;color:#8a2a20}
+
+  .panel{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:14px}
+  .panel>h2{background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;margin:0;padding:11px 15px;
+    font-size:14px;display:flex;align-items:center;gap:10px}
+  .panel>h2 .right{margin-left:auto;font-weight:500;font-size:11px;opacity:.9}
+  .panel .body{padding:14px}
+  .empty{padding:26px;text-align:center;color:var(--muted)}
+
+  .dashbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .dashbar .dl{font-size:12px;color:var(--muted);font-weight:600}
+  .dashbar select{width:auto;min-width:160px}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:16px}
+  .kcard{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy-2);border-radius:var(--radius);padding:12px 14px}
+  .kcard.el{border-left-color:var(--el)}
+  .kcard.gas{border-left-color:var(--gas)}
+  .kcard .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
+  .kcard .val{font-size:24px;font-weight:800;margin:4px 0 1px}
+  .kcard .unit{font-size:14px;font-weight:600;color:var(--muted)}
+  .kcard .note{font-size:11px;color:var(--muted)}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  th{background:#f7f9fc;color:#41506b;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+  tbody tr:hover{background:#f4f8ff}
+  td.el{background:var(--el-bg)}
+  td.gas{background:var(--gas-bg)}
+
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.charts{grid-template-columns:1fr}}
+  .chart{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px}
+  .chart h3{margin:0 0 8px;font-size:13px;color:var(--navy-1);display:flex;align-items:center;gap:7px}
+  .chart .sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .chart svg{width:100%;height:auto;display:block}
+
+  .imp-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .filebtn{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:var(--radius);
+    font-weight:700;color:#fff;cursor:pointer}
+  .filebtn input{display:none}
+  .filebtn.el{background:var(--el)} .filebtn.gas{background:var(--gas)}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(15,31,59,.45);display:flex;align-items:flex-start;
+    justify-content:center;padding:28px 14px;z-index:50;overflow:auto}
+  .modal{background:#fff;border-radius:10px;width:100%;max-width:560px;overflow:hidden;box-shadow:0 20px 50px rgba(15,31,59,.3)}
+  .modal h3{margin:0;background:linear-gradient(90deg,var(--navy-1),var(--navy-2));color:#fff;padding:12px 16px;font-size:15px;display:flex;align-items:center}
+  .modal h3 .x{margin-left:auto;background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer}
+  .modal .body{padding:16px}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+  .fgrid label{display:block;font-size:11.5px;color:var(--muted);font-weight:600;margin-bottom:3px}
+  .sumbox{background:#f7f9fc;border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0;font-size:13px;line-height:1.7}
+  .sumbox b{font-size:15px}
+  .foot{display:flex;gap:9px;justify-content:flex-end;margin-top:6px}
+
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#16233a;color:#fff;
+    padding:11px 18px;border-radius:8px;font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:92vw}
+  .toast.err{background:#8a2a20} .toast.ok{background:#1f7a46}
+
+  .mailbox textarea{width:100%;min-height:150px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  .login-wrap{min-height:72vh;display:flex;align-items:center;justify-content:center}
+  .login{background:#fff;border:1px solid var(--line);border-radius:12px;padding:26px;width:340px;max-width:92vw;box-shadow:0 10px 30px rgba(15,47,95,.08)}
+  .login h2{margin:.2em 0 .1em;text-align:center}
+  .login .s{color:var(--muted);text-align:center;font-size:12.5px;margin-top:0}
+  .login .f{margin:10px 0}
+  .login label{font-size:12px;color:var(--muted)}
+  .login button{width:100%;padding:10px;margin-top:6px;background:var(--navy-2);color:#fff;font-weight:700;font-size:14px}
+  .login .brand{display:flex;justify-content:center;margin-bottom:6px}
+  .loginerr{background:#fdecea;border:1px solid #f5cfca;color:#8a2a20;border-radius:6px;padding:8px 10px;font-size:12.5px;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, setDoc, deleteDoc, onSnapshot }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+/* Společný Firebase projekt celého portálu. Veřejné frontendové klíče —
+   je správné je mít v kódu, zabezpečení řeší pravidla Firestore. */
+const firebaseConfig = {
+  apiKey: "AIzaSyDi3OVq2Al0WXFPgqhMAN9lPGuExOU80Cc",
+  authDomain: "nakupni-pozadavky.firebaseapp.com",
+  projectId: "nakupni-pozadavky",
+  storageBucket: "nakupni-pozadavky.firebasestorage.app",
+  messagingSenderId: "214674774365",
+  appId: "1:214674774365:web:7f7b51c8169b75f8acb0b4",
+  measurementId: "G-BGDMXEWBQH"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+/* ==========================================================
+   Kdo do modulu smí
+   Výchozí stav: správci podle e-mailu smí zapisovat, ostatní modul
+   vůbec nevidí. Komukoli dalšímu se přístup nastaví v Nastavení →
+   uživatel → Přístup k modulům → Spotřeba energií (Skryté/Jen číst/
+   Zapisovat). Ruční nastavení má vždy přednost.
+   Stejná logika je v index.html, header.js, nastaveni.html
+   a v pravidlech Firestore — když ji měníš, uprav ji všude.
+   ========================================================== */
+const OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@gmail.com'];
+const isOwner = e => OWNERS.includes(String(e||'').trim().toLowerCase());
+const energyAccess = u => {
+  if(!u) return 'none';
+  const set=(u.modules||{}).energie;
+  if(set==='none'||set==='read'||set==='write') return set;
+  return isOwner(u.email) ? 'write' : 'none';
+};
+const canEnter = () => energyAccess(me)!=='none';
+const canWrite = () => energyAccess(me)==='write';
+
+/* ===== číselníky ===== */
+const MEDIA = {
+  el:   {k:'el',   nm:'Elektřina',  unit:'MWh', dec:3, color:'#2563a8', cls:'el',  rate:'kW',   rateMul:4000},
+  plyn: {k:'plyn', nm:'Zemní plyn', unit:'m³',  dec:0, color:'#b7791f', cls:'gas', rate:'m³/h', rateMul:4},
+};
+const MONTHS = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
+const MONTHS_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+/* ===== pomůcky ===== */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const T = s=>(window.T?window.T(s):s);
+const EN = () => (window.minimoLang?window.minimoLang()==='en':false);
+const pad2 = n => String(n).padStart(2,'0');
+const monthName = m => EN() ? MONTHS_EN[m-1] : MONTHS[m-1];
+const monthKey = (y,m) => `${y}-${pad2(m)}`;
+const num = (v,d=0)=>(isFinite(v)?Number(v):0).toLocaleString(EN()?'en-GB':'cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
+const nowIso = () => new Date().toISOString();
+
+if(window.registerI18N) window.registerI18N({
+  'Spotřeba energií — YFAI minimo':'Energy consumption — YFAI minimo',
+  'Spotřeba energií':'Energy consumption',
+  'Elektřina':'Electricity','Zemní plyn':'Natural gas',
+  'Měsíc:':'Month:','Měsíční spotřeba':'Monthly consumption','Max ¼h':'Max ¼h',
+  'za měsíc':'per month','maximum ¼h':'maximum ¼h',
+  'Přehled po měsících':'Monthly overview','Vývoj spotřeby':'Consumption trend','posledních 12 měsíců':'last 12 months',
+  'Měsíc':'Month','Elektřina (MWh)':'Electricity (MWh)','Max ¼h el.':'Max ¼h el.',
+  'Plyn (m³)':'Gas (m³)','Max ¼h plyn':'Max ¼h gas','Importoval':'Imported by','Nahráno':'Uploaded',
+  'Import dat':'Data import','Nahrát elektřinu (MWh)':'Upload electricity (MWh)','Nahrát plyn (m³)':'Upload gas (m³)',
+  'Nahraj měsíční export z měřáku (.xlsx nebo .csv) se čtvrthodinovými hodnotami. Spočítám maximum ¼h a měsíční součet.':'Upload the monthly meter export (.xlsx or .csv) with quarter-hour values. I will calculate the ¼h maximum and the monthly total.',
+  'Čtu soubor…':'Reading the file…','Zpracovávám…':'Processing…',
+  'Kontrola importu':'Import check','Médium':'Medium','Jednotka':'Unit','Rok':'Year',
+  'Sloupec s hodnotou':'Value column','Sloupec s časem':'Time column','— bez času —':'— no time —',
+  'Nalezeno ¼h hodnot':'¼h values found','Měsíční součet':'Monthly total','Maximum ¼h':'Maximum ¼h',
+  'kdy':'when','Uložit import':'Save import','Zrušit':'Cancel','Přepíše se stávající import za tento měsíc.':'This will overwrite the existing import for this month.',
+  'E-mail pro finance':'E-mail for finance','Vygenerovat e-mail (Outlook)':'Generate e-mail (Outlook)',
+  'Otevře Outlook s předvyplněným e-mailem — příjemce doplníš a odešleš sám.':'Opens Outlook with a pre-filled e-mail — you add the recipient and send it yourself.',
+  'Zkopírovat text':'Copy text','Komu (nepovinné, uloží se)':'To (optional, saved)','Předmět':'Subject',
+  'Text e-mailu':'E-mail body','Zkopírováno.':'Copied.','Import uložen.':'Import saved.','Import smazán.':'Import deleted.',
+  'Smazat':'Delete','Opravdu smazat tento import?':'Really delete this import?',
+  'Za tento měsíc zatím nejsou data. Nahraj elektřinu nebo plyn.':'No data for this month yet. Upload electricity or gas.',
+  'Zatím žádná data. Začni importem Excelu.':'No data yet. Start by importing an Excel file.',
+  'Do modulu Spotřeba energií nemáš přístup — přecházím na hlavní stránku…':'You do not have access to the Energy consumption module — going to the home page…',
+  'Nepodařilo se načíst soubor.':'Could not read the file.','V souboru jsem nenašel žádné ¼h hodnoty.':'I found no ¼h values in the file.',
+  'Nepodařilo se uložit: ':'Could not save: ','Nepodařilo se stáhnout knihovnu pro čtení Excelu. Ulož soubor jako CSV a nahraj ho znovu.':'Could not download the Excel-reading library. Save the file as CSV and upload it again.',
+  'jen pro čtení':'read-only','👁️ Tento modul máte jen pro čtení.':'👁️ You have this module as read-only.',
+  'Přihlásit se':'Sign in','Přihlašuji…':'Signing in…','Heslo':'Password','Připojuji se k Firebase…':'Connecting to Firebase…',
+  'Načítám data…':'Loading data…','Chyba':'Error','Zkusit znovu':'Try again',
+  'Report o spotřebě energií':'Energy consumption report',
+});
+
+/* ===== stav ===== */
+let me=null, authReady=false, dataReady=false, fatalErr='';
+let rows=[];                 // dokumenty kolekce energy
+let selKey='';               // vybraný měsíc "YYYY-MM"
+let loginBusy=false, loginErr='';
+let imp=null;                // stav kontroly importu
+let mailFor=null;            // {key} pro panel e-mailu
+let cfg={recipients:''};     // meta/energycfg (komu finance)
+let toastMsg=null, toastKind='';
+
+/* ===== Excel / CSV ===== */
+let xlsxP=null;
+function loadXlsx(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(xlsxP) return xlsxP;
+  xlsxP = new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload=()=>res(window.XLSX);
+    s.onerror=()=>rej(new Error(T('Nepodařilo se stáhnout knihovnu pro čtení Excelu. Ulož soubor jako CSV a nahraj ho znovu.')));
+    document.head.appendChild(s);
+  });
+  return xlsxP;
+}
+function csvToAoa(text){
+  const rows=[]; let row=[], cur='', q=false;
+  const push=()=>{row.push(cur);cur='';};
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"') q=true;
+    else if(c===','||c===';'||c==='\t') push();
+    else if(c==='\n'){ push(); rows.push(row); row=[]; }
+    else if(c!=='\r') cur+=c;
+  }
+  push(); if(row.length>1||row[0]) rows.push(row);
+  return rows;
+}
+async function readFileAoa(file){
+  const name=(file.name||'').toLowerCase();
+  if(name.endsWith('.csv')||name.endsWith('.txt')) return csvToAoa(await file.text());
+  const XLSX = await loadXlsx();
+  const wb = XLSX.read(await file.arrayBuffer(), {cellDates:false});
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:true, defval:null, blankrows:false});
+}
+
+/* Excelové sériové datum (UTC, ať se nic neposune o hodinu). */
+function fromSerial(n){
+  if(!isFinite(n)) return null;
+  const ms=Math.round((n-25569)*86400*1000);
+  return new Date(ms);
+}
+/* Rozpozná číslo i s čárkou/mezerami jako oddělovači. */
+function toNum(v){
+  if(v==null||v==='') return null;
+  if(typeof v==='number') return isFinite(v)?v:null;
+  let s=String(v).trim().replace(/\s/g,'').replace(/ /g,'');
+  // "1 234,56" -> 1234.56 ; "1,234.56" -> 1234.56
+  if(s.includes(',')&&s.includes('.')){ s=s.replace(/\./g,'').replace(',','.'); }
+  else if(s.includes(',')){ s=s.replace(',','.'); }
+  const n=parseFloat(s);
+  return isFinite(n)?n:null;
+}
+/* Je číslo v rozsahu, kde dává smysl jako excelové sériové datum (cca 2009–2119)? */
+const looksSerial = n => typeof n==='number' && isFinite(n) && n>=40000 && n<=80000;
+/* Pokusí se z buňky udělat Date — jen z věcí, co opravdu vypadají jako datum/čas
+   (sériové číslo, Date, ISO, "DD.MM.YYYY HH:MM"). Krátký text typu „12" NENÍ datum. */
+function toDate(v){
+  if(v==null||v==='') return null;
+  if(v instanceof Date) return isNaN(v)?null:v;
+  if(typeof v==='number') return looksSerial(v)?fromSerial(v):null;
+  const s=String(v).trim();
+  let m=s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if(m) return new Date(Date.UTC(+m[3],+m[2]-1,+m[1],+(m[4]||0),+(m[5]||0)));
+  m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if(m) return new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0)));
+  // jen řetězce, které opravdu vypadají na datum (oddělovač + dost dlouhé)
+  if(s.length>=8 && /[-/.:]/.test(s) && /\d{2,4}/.test(s)){ const d=new Date(s); if(!isNaN(d)) return d; }
+  return null;
+}
+
+/* Z pole řádků najde sloupec s časem a sloupec s hodnotou a spočítá souhrn.
+   valCol / timeCol lze vynutit (indexy); jinak se hádají automaticky. */
+function analyze(aoa, opt={}){
+  opt = opt||{};
+  // najdi řádek záhlaví = první řádek, kde je aspoň jedna textová buňka a pod ním čísla
+  let headRow=-1;
+  for(let i=0;i<Math.min(aoa.length,15);i++){
+    const r=aoa[i]||[];
+    if(r.some(c=>typeof c==='string'&&c.trim().length)){ headRow=i; break; }
+  }
+  const header=(headRow>=0?aoa[headRow]:[]).map(c=>String(c==null?'':c).trim());
+  const dataRows=aoa.slice(headRow>=0?headRow+1:0);
+  const nc=Math.max(header.length, ...dataRows.slice(0,50).map(r=>r?r.length:0), 1);
+  // skóre sloupců: kolik buněk je číslo (ne datum) a kolik vypadá jako datum/čas
+  const numHits=new Array(nc).fill(0), dateHits=new Array(nc).fill(0);
+  for(const r of dataRows){ if(!r) continue;
+    for(let c=0;c<nc;c++){ const v=r[c];
+      const isDate = toDate(v)!=null;        // sériové číslo v rozsahu dat, Date, nebo datumový řetězec
+      if(isDate) dateHits[c]++;
+      else if(toNum(v)!=null) numHits[c]++;   // číslo, které NENÍ datum = kandidát na hodnotu
+    }
+  }
+  const reVal=/spot|consum|odb[ěe]r|kwh|mwh|m3|m³|hodnot|value|energ|množ/i;
+  const reTime=/datum|[čc]as|time|\bod\b|from|start|timestamp|interval|p[ůu]lhod|[čc]tvrt/i;
+  // sloupec času: podle názvu, jinak sloupec s nejvíc datumovými buňkami
+  let timeCol = opt.timeCol;
+  if(timeCol==null){
+    timeCol = header.findIndex(h=>reTime.test(h));
+    if(timeCol<0){ let best=-1,bn=0; for(let c=0;c<nc;c++){ if(dateHits[c]>bn){bn=dateHits[c];best=c;} } timeCol=best; }
+  }
+  // sloupec hodnoty: podle názvu, jinak sloupec s nejvíc čísly, který NENÍ sloupec času
+  let valCol = opt.valCol;
+  if(valCol==null){
+    valCol = header.findIndex(h=>reVal.test(h));
+    if(valCol<0){ let best=-1,bn=-1; for(let c=0;c<nc;c++){ if(c===timeCol) continue; if(numHits[c]>bn){bn=numHits[c];best=c;} } valCol=best; }
+  }
+  // posbírej hodnoty
+  let total=0, cnt=0, maxV=-Infinity, maxAt=null;
+  const monthCount={};
+  for(const r of dataRows){ if(!r) continue;
+    const v=toNum(r[valCol]); if(v==null) continue;
+    total+=v; cnt++;
+    if(v>maxV){ maxV=v; maxAt = timeCol>=0 ? toDate(r[timeCol]) : null; }
+    if(timeCol>=0){ const d=toDate(r[timeCol]); if(d){ const k=monthKey(d.getUTCFullYear(),d.getUTCMonth()+1); monthCount[k]=(monthCount[k]||0)+1; } }
+  }
+  // nejčastější měsíc v datech
+  let guessY=null,guessM=null;
+  const mk=Object.entries(monthCount).sort((a,b)=>b[1]-a[1])[0];
+  if(mk){ const p=mk[0].split('-'); guessY=+p[0]; guessM=+p[1]; }
+  return {header,nc,valCol,timeCol,total,cnt,maxV:isFinite(maxV)?maxV:0,
+    maxAt:maxAt?maxAt.toISOString():null, guessY, guessM};
+}
+
+/* ===== auth ===== */
+onAuthStateChanged(auth, async user=>{
+  authReady=true;
+  if(!user){ me=null; dataReady=false; stopWatch(); render(); return; }
+  try{
+    const ref=doc(db,'users',user.uid);
+    let d=null; try{ const s=await getDoc(ref); d=s.exists()?s.data():null; }catch(e){}
+    me={uid:user.uid, email:user.email, name:(d&&d.name)||(user.email||'').split('@')[0],
+        role:(d&&d.role)||'zadavatel', modules:(d&&d.modules)||{}, positions:(d&&d.positions)||[]};
+  }catch(e){ me={uid:user.uid, email:user.email, name:user.email, modules:{}, positions:[]}; }
+  if(!canEnter()){ location.replace('index.html?noaccess=energie'); return; }
+  startWatch();
+  render();
+});
+
+let unsub=null, unsubCfg=null;
+function startWatch(){
+  stopWatch();
+  unsub = onSnapshot(collection(db,'energy'), snap=>{
+    rows = snap.docs.map(d=>Object.assign({_id:d.id}, d.data()));
+    dataReady=true;
+    if(!selKey) selKey = latestKey();
+    render();
+  }, err=>{ fatalErr=err.message||String(err); render(); });
+  unsubCfg = onSnapshot(doc(db,'meta','energycfg'), s=>{ cfg = s.exists()?s.data():{recipients:''}; render(); }, ()=>{});
+}
+function stopWatch(){ if(unsub){unsub();unsub=null;} if(unsubCfg){unsubCfg();unsubCfg=null;} }
+
+/* ===== odvozená data ===== */
+const allKeys = () => [...new Set(rows.map(r=>monthKey(r.year,r.month)))].sort().reverse();
+const latestKey = () => allKeys()[0] || '';
+const rowFor = (key,med) => rows.find(r=>monthKey(r.year,r.month)===key && r.medium===med) || null;
+const monthsSorted = () => allKeys();   // nejnovější první
+
+/* ===== render ===== */
+function render(){
+  const app=document.getElementById('app');
+  if(!authReady){ app.innerHTML=splash(T('Připojuji se k Firebase…')); window.i18nApply&&window.i18nApply(app); return; }
+  if(fatalErr){ app.innerHTML=splash(fatalErr,true); bind(); window.i18nApply&&window.i18nApply(app); return; }
+  if(!me){ app.innerHTML=loginView(); bind(); window.i18nApply&&window.i18nApply(app); return; }
+  if(!dataReady){ app.innerHTML=splash(T('Načítám data…')); window.i18nApply&&window.i18nApply(app); return; }
+  app.innerHTML = shell(mainView())
+    + (imp?impModal():'')
+    + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
+  bind();
+  window.i18nApply&&window.i18nApply(app);
+}
+function splash(msg,err){
+  return `<div class="login-wrap"><div class="login" style="text-align:center">
+    <div class="brand">${logoSvg()}</div>
+    <h2>${err?T('Chyba'):T('Spotřeba energií')}</h2>
+    <p class="s" ${err?'style="color:#c0392b"':''}>${esc(msg)}</p>
+    ${err?`<button class="btn-primary" data-a="reload" style="width:100%;padding:9px;margin-top:6px">${T('Zkusit znovu')}</button>`:''}
+  </div></div>`;
+}
+function shell(inner){
+  const uh = window.uheaderHTML ? window.uheaderHTML({module:'Spotřeba energií', cur:'energie',
+    user:esc(me.name), email:esc(me.email), level:'', logoutAttr:'data-a="logout"',
+    modules:allowedMods(), positions:me.positions||[], mods:me.modules||{}}) : '';
+  return `${uh}<main>${inner}</main>`;
+}
+/* menu modulů (ať se v hlavičce ukážou jen ty, kam smím) — zjednodušené, portal vždy */
+function allowedMods(){
+  const m=['portal'];
+  if(canEnter()) m.push('energie');
+  m.push('nakup','dovolenky','nastaveni','opravy','engineering');
+  return m;
+}
+function logoSvg(){
+  return `<svg viewBox="0 0 300 138" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YFAI minimo" width="150">
+    <defs><pattern id="ys" patternUnits="userSpaceOnUse" x="0" y="8" width="10" height="9.8">
+      <rect x="0" y="0" width="10" height="5.9" fill="#1f66b5"/></pattern></defs>
+    <text x="150" y="86" text-anchor="middle" fill="url(#ys)" font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="108" textLength="244" lengthAdjust="spacingAndGlyphs">YFAI</text>
+    <text x="150" y="128" text-anchor="middle" fill="#111418" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="42" letter-spacing="1" textLength="246" lengthAdjust="spacingAndGlyphs">minimo</text>
+  </svg>`;
+}
+
+function mainView(){
+  if(!rows.length){
+    return importPanel() + `<div class="panel"><div class="empty">${T('Zatím žádná data. Začni importem Excelu.')}</div></div>`;
+  }
+  const keys=monthsSorted();
+  if(!selKey||!keys.includes(selKey)) selKey=keys[0];
+  return dashbar(keys) + cardsView() + chartsView() + tableView() + emailPanel() + importPanel();
+}
+
+function dashbar(keys){
+  return `<div class="dashbar">
+    <span class="dl">${T('Měsíc:')}</span>
+    <select data-a="selmonth">${keys.map(k=>{const [y,m]=k.split('-');
+      return `<option value="${k}" ${k===selKey?'selected':''}>${esc(monthName(+m))} ${y}</option>`;}).join('')}</select>
+  </div>`;
+}
+
+function cardsView(){
+  const [y,m]=selKey.split('-');
+  const el=rowFor(selKey,'el'), gas=rowFor(selKey,'plyn');
+  const card=(med,r)=>{
+    const M=MEDIA[med];
+    if(!r) return `<div class="kcard ${M.cls}"><div class="lbl">${esc(T(M.nm))}</div>
+      <div class="val muted" style="font-size:16px">—</div><div class="note">${T('za měsíc')} ${esc(monthName(+m))} ${y}</div></div>`;
+    const rate = r.maxQh*M.rateMul;
+    return `<div class="kcard ${M.cls}">
+      <div class="lbl">${esc(T(M.nm))} — ${T('Měsíční spotřeba')}</div>
+      <div class="val">${num(r.total,M.dec)} <span class="unit">${M.unit}</span></div>
+      <div class="note">${T('Max ¼h')}: <b>${num(r.maxQh,M.dec)} ${M.unit}</b> (≈ ${num(rate, med==='el'?0:1)} ${M.rate})${r.maxQhAt?` · ${esc(dtCz(r.maxQhAt))}`:''}</div>
+    </div>`;
+  };
+  return `<div class="cards">${card('el',el)}${card('plyn',gas)}</div>
+    ${(!el&&!gas)?`<div class="notice">${T('Za tento měsíc zatím nejsou data. Nahraj elektřinu nebo plyn.')}</div>`:''}`;
+}
+
+function dtCz(iso){
+  const d=new Date(iso); if(isNaN(d)) return '';
+  return `${pad2(d.getUTCDate())}.${pad2(d.getUTCMonth()+1)}.${d.getUTCFullYear()} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+
+function chartsView(){
+  const keys=allKeys().slice(0,12).reverse();   // staré -> nové, posledních 12
+  const chart=(med)=>{
+    const M=MEDIA[med];
+    const data=keys.map(k=>{const r=rowFor(k,med);const [y,m]=k.split('-');
+      return {k, label:`${monthName(+m).slice(0,3)}`, y, val:r?r.total:0, has:!!r};});
+    return `<div class="chart"><h3><span class="sw" style="background:${M.color}"></span>${esc(T(M.nm))} (${M.unit})</h3>
+      ${barSvg(data,M.color,M.dec)}</div>`;
+  };
+  return `<div class="panel"><h2>${T('Vývoj spotřeby')}<span class="right">${T('posledních 12 měsíců')||''}</span></h2>
+    <div class="body"><div class="charts">${chart('el')}${chart('plyn')}</div></div></div>`;
+}
+
+function barSvg(data,color,dec){
+  if(!data.some(d=>d.has)) return `<div class="empty">${T('Zatím žádná data. Začni importem Excelu.')}</div>`;
+  const W=560,H=190,ml=8,mr=8,mt=14,mb=34,iw=W-ml-mr,ih=H-mt-mb;
+  const max=Math.max(...data.map(d=>d.val))||1;
+  const step=iw/data.length, bw=Math.min(40,step-8);
+  const bars=data.map((d,i)=>{
+    const h=d.has?Math.max(2,ih*d.val/max):0, x=ml+step*i+(step-bw)/2, y=mt+ih-h;
+    return `${d.has?`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${color}"><title>${esc(d.label)} ${d.y}: ${num(d.val,dec)}</title></rect>
+      <text x="${(x+bw/2).toFixed(1)}" y="${(y-3).toFixed(1)}" text-anchor="middle" font-size="9" fill="#41506b">${num(d.val,dec)}</text>`:''}
+      <text x="${(ml+step*i+step/2).toFixed(1)}" y="${(mt+ih+14).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="#6b7a90">${esc(d.label)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">
+    <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="#dde4ec"/>${bars}</svg>`;
+}
+
+function tableView(){
+  const keys=monthsSorted();
+  const r=(key)=>{
+    const [y,m]=key.split('-'); const el=rowFor(key,'el'), gas=rowFor(key,'plyn');
+    const cell=(v,M,cls)=>v?`<td class="num ${cls}">${num(v.total,M.dec)}</td><td class="num ${cls} muted">${num(v.maxQh,M.dec)}</td>`
+                          :`<td class="num ${cls} muted">—</td><td class="num ${cls} muted">—</td>`;
+    const who = (el&&el.importedBy)||(gas&&gas.importedBy)||'';
+    return `<tr>
+      <td><b>${esc(monthName(+m))} ${y}</b></td>
+      ${cell(el,MEDIA.el,'el')}
+      ${cell(gas,MEDIA.plyn,'gas')}
+      <td class="muted">${esc(who)}</td>
+      ${canWrite()?`<td>${el||gas?`<button class="btn-ghost" data-a="delmonth" data-v="${key}" title="${T('Smazat')}">🗑</button>`:''}</td>`:''}
+    </tr>`;
+  };
+  return `<div class="panel"><h2>${T('Přehled po měsících')}</h2>
+    <div class="body" style="padding:0;overflow:auto">
+    <table><thead><tr>
+      <th>${T('Měsíc')}</th>
+      <th class="num">${T('Elektřina (MWh)')}</th><th class="num">${T('Max ¼h el.')}</th>
+      <th class="num">${T('Plyn (m³)')}</th><th class="num">${T('Max ¼h plyn')}</th>
+      <th>${T('Importoval')}</th>${canWrite()?'<th></th>':''}
+    </tr></thead><tbody>${keys.map(r).join('')}</tbody></table></div></div>`;
+}
+
+/* ===== e-mail pro finance ===== */
+function reportText(key){
+  const [y,m]=key.split('-'); const el=rowFor(key,'el'), gas=rowFor(key,'plyn');
+  const L=[];
+  L.push(`${T('Report o spotřebě energií')} — ${monthName(+m)} ${y}`);
+  L.push('');
+  if(el){ L.push(`${T('Elektřina')}:`);
+    L.push(`  • ${T('Měsíční spotřeba')}: ${num(el.total,MEDIA.el.dec)} MWh`);
+    L.push(`  • ${T('Maximum ¼h')}: ${num(el.maxQh,MEDIA.el.dec)} MWh (≈ ${num(el.maxQh*MEDIA.el.rateMul,0)} kW)${el.maxQhAt?` — ${dtCz(el.maxQhAt)}`:''}`);
+    L.push(''); }
+  if(gas){ L.push(`${T('Zemní plyn')}:`);
+    L.push(`  • ${T('Měsíční spotřeba')}: ${num(gas.total,MEDIA.plyn.dec)} m³`);
+    L.push(`  • ${T('Maximum ¼h')}: ${num(gas.maxQh,MEDIA.plyn.dec)} m³ (≈ ${num(gas.maxQh*MEDIA.plyn.rateMul,1)} m³/h)${gas.maxQhAt?` — ${dtCz(gas.maxQhAt)}`:''}`);
+    L.push(''); }
+  return L.join('\r\n');
+}
+function reportSubject(key){
+  const [y,m]=key.split('-');
+  return `${T('Report o spotřebě energií')} — ${monthName(+m)} ${y}`;
+}
+function emailPanel(){
+  const subj=reportSubject(selKey), body=reportText(selKey);
+  const to=esc(cfg.recipients||'');
+  return `<div class="panel mailbox"><h2>📧 ${T('E-mail pro finance')}</h2><div class="body">
+    <div class="notice">${T('Otevře Outlook s předvyplněným e-mailem — příjemce doplníš a odešleš sám.')}</div>
+    <div class="fgrid" style="grid-template-columns:1fr">
+      <div><label>${T('Komu (nepovinné, uloží se)')}</label>
+        <input id="mail-to" value="${to}" placeholder="finance@…; controlling@…" ${canWrite()?'':'disabled'}></div>
+      <div><label>${T('Předmět')}</label><input id="mail-subj" value="${esc(subj)}"></div>
+      <div><label>${T('Text e-mailu')}</label><textarea id="mail-body">${esc(body)}</textarea></div>
+    </div>
+    <div class="foot" style="justify-content:flex-start;margin-top:12px">
+      <button class="btn-ok" data-a="mail-open">✉️ ${T('Vygenerovat e-mail (Outlook)')}</button>
+      <button class="btn-ghost" data-a="mail-copy">📋 ${T('Zkopírovat text')}</button>
+    </div>
+  </div></div>`;
+}
+
+/* ===== import ===== */
+function importPanel(){
+  if(!canWrite()) return `<div class="notice">👁️ ${T('👁️ Tento modul máte jen pro čtení.')}</div>`;
+  return `<div class="panel"><h2>⬆️ ${T('Import dat')}</h2><div class="body">
+    <div class="notice">${T('Nahraj měsíční export z měřáku (.xlsx nebo .csv) se čtvrthodinovými hodnotami. Spočítám maximum ¼h a měsíční součet.')}</div>
+    <div class="imp-row">
+      <label class="filebtn el">⚡ ${T('Nahrát elektřinu (MWh)')}<input type="file" accept=".xlsx,.xls,.csv" data-a="file" data-med="el"></label>
+      <label class="filebtn gas">🔥 ${T('Nahrát plyn (m³)')}<input type="file" accept=".xlsx,.xls,.csv" data-a="file" data-med="plyn"></label>
+      ${imp&&imp.busy?`<span class="muted">${esc(imp.busy)}</span>`:''}
+    </div>
+  </div></div>`;
+}
+
+function impModal(){
+  if(!imp||!imp.a) return '';
+  const a=imp.a, M=MEDIA[imp.med];
+  const colOpts=(sel,allowNone)=>{
+    let o = allowNone?`<option value="-1" ${sel<0?'selected':''}>${T('— bez času —')}</option>`:'';
+    for(let c=0;c<a.nc;c++){ const h=(a.header[c]||('#'+(c+1))); o+=`<option value="${c}" ${c===sel?'selected':''}>${esc(h)}</option>`; }
+    return o;
+  };
+  const years=[]; const cy=new Date().getFullYear();
+  for(let y=cy+1;y>=cy-5;y--) years.push(y);
+  return `<div class="modal-bg" data-a="imp-bg"><div class="modal"><h3>${T('Kontrola importu')} — ${esc(T(M.nm))}<button class="x" data-a="imp-cancel">✕</button></h3>
+    <div class="body">
+      <div class="fgrid">
+        <div><label>${T('Médium')}</label><input value="${esc(T(M.nm))} (${M.unit})" disabled></div>
+        <div><label>${T('Jednotka')}</label><input value="${M.unit}" disabled></div>
+        <div><label>${T('Měsíc')}</label><select id="imp-month">${MONTHS.map((mn,i)=>`<option value="${i+1}" ${(i+1)===imp.month?'selected':''}>${esc(monthName(i+1))}</option>`).join('')}</select></div>
+        <div><label>${T('Rok')}</label><select id="imp-year">${years.map(y=>`<option ${y===imp.year?'selected':''}>${y}</option>`).join('')}</select></div>
+        <div><label>${T('Sloupec s hodnotou')}</label><select id="imp-valcol">${colOpts(a.valCol,false)}</select></div>
+        <div><label>${T('Sloupec s časem')}</label><select id="imp-timecol">${colOpts(a.timeCol,true)}</select></div>
+      </div>
+      <div class="sumbox">
+        ${T('Nalezeno ¼h hodnot')}: <b>${num(a.cnt,0)}</b><br>
+        ${T('Měsíční součet')}: <b>${num(a.total,M.dec)} ${M.unit}</b><br>
+        ${T('Maximum ¼h')}: <b>${num(a.maxV,M.dec)} ${M.unit}</b> (≈ ${num(a.maxV*M.rateMul, imp.med==='el'?0:1)} ${M.rate})${a.maxAt?`<br><span class="muted">${T('kdy')}: ${esc(dtCz(a.maxAt))}</span>`:''}
+      </div>
+      ${rowFor(monthKey(imp.year,imp.month),imp.med)?`<div class="notice warn">${T('Přepíše se stávající import za tento měsíc.')}</div>`:''}
+      <div class="foot">
+        <button class="btn-ghost" data-a="imp-cancel">${T('Zrušit')}</button>
+        <button class="btn-ok" data-a="imp-save">${T('Uložit import')}</button>
+      </div>
+    </div></div></div>`;
+}
+
+/* přepočítá souhrn po změně sloupců/měsíce v okně kontroly */
+function recalcImp(){
+  if(!imp||!imp.aoa) return;
+  const a=analyze(imp.aoa,{valCol:imp.valCol,timeCol:imp.timeCol<0?undefined:imp.timeCol});
+  // respektuj ruční volbu času "bez času"
+  if(imp.timeCol<0){ a.timeCol=-1; a.maxAt=null; }
+  imp.a=a;
+}
+
+/* ===== login ===== */
+function loginView(){
+  return `<div class="login-wrap"><form class="login" id="loginForm">
+    <div class="brand">${logoSvg()}</div>
+    <h2>minimo · YFAI</h2>
+    <p class="s">${T('Spotřeba energií')}</p>
+    ${loginErr?`<div class="loginerr">${esc(loginErr)}</div>`:''}
+    <div class="f"><label>E-mail</label><input type="email" id="li-email" autocomplete="username" required></div>
+    <div class="f"><label>${T('Heslo')}</label><input type="password" id="li-pass" autocomplete="current-password" required></div>
+    <button type="submit" ${loginBusy?'disabled':''}>${loginBusy?T('Přihlašuji…'):T('Přihlásit se')}</button>
+  </form></div>`;
+}
+
+/* ===== toast ===== */
+function i18nToast(m){
+  if(!window.T||!window.minimoLang||window.minimoLang()!=='en'||typeof m!=='string') return m;
+  const full=window.T(m); if(full!==m) return full;
+  const i=m.indexOf(': '); if(i>0){ const p=m.slice(0,i+2); const tp=window.T(p); if(tp!==p) return tp+m.slice(i+2); }
+  return m;
+}
+function toast(m,k=''){ m=i18nToast(m); toastMsg=m; toastKind=k; render(); clearTimeout(toast._t);
+  toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
+
+/* ===== akce ===== */
+async function doLogin(email,pass){
+  loginBusy=true; loginErr=''; render();
+  try{ await signInWithEmailAndPassword(auth,email,pass); }
+  catch(e){ loginBusy=false; loginErr=authMsg(e.code); render(); }
+}
+function authMsg(code){
+  const m={'auth/invalid-email':'Neplatný e-mail.','auth/user-not-found':'Účet neexistuje.',
+    'auth/wrong-password':'Nesprávné heslo.','auth/invalid-credential':'Nesprávný e-mail nebo heslo.',
+    'auth/too-many-requests':'Příliš mnoho pokusů. Zkus to za chvíli.'};
+  return m[code]||('Přihlášení selhalo ('+code+').');
+}
+
+async function handleFile(file, med){
+  if(!file) return;
+  imp={med, busy:T('Čtu soubor…')}; render();
+  try{
+    const aoa=await readFileAoa(file);
+    const a=analyze(aoa);
+    if(!a.cnt){ imp=null; toast(T('V souboru jsem nenašel žádné ¼h hodnoty.'),'err'); return; }
+    const d=new Date(); let gm=a.guessM, gy=a.guessY;
+    if(!gm){ // výchozí = minulý měsíc (report se dělá 1. v měsíci)
+      const pm=new Date(d.getFullYear(), d.getMonth()-1, 1); gm=pm.getMonth()+1; gy=pm.getFullYear(); }
+    imp={med, aoa, a, valCol:a.valCol, timeCol:a.timeCol, month:gm, year:gy, fileName:file.name, busy:''};
+    render();
+  }catch(e){ imp=null; toast((e&&e.message)||T('Nepodařilo se načíst soubor.'),'err'); }
+}
+
+async function saveImport(){
+  if(!imp||!imp.a) return;
+  const M=MEDIA[imp.med], a=imp.a;
+  const id=`${monthKey(imp.year,imp.month)}_${imp.med}`;
+  const data={ year:imp.year, month:imp.month, medium:imp.med, unit:M.unit,
+    total:round(a.total,6), maxQh:round(a.maxV,6), maxQhAt:a.maxAt||null, intervals:a.cnt,
+    fileName:imp.fileName||'', importedBy:me.name, importedAt:nowIso() };
+  try{
+    await setDoc(doc(db,'energy',id), data);
+    selKey=monthKey(imp.year,imp.month); imp=null; toast(T('Import uložen.'),'ok');
+  }catch(e){ toast(T('Nepodařilo se uložit: ')+(e.message||''),'err'); }
+}
+const round=(v,d)=>{const p=Math.pow(10,d);return Math.round((Number(v)||0)*p)/p;};
+
+async function saveRecipients(v){
+  try{ await setDoc(doc(db,'meta','energycfg'),{recipients:v},{merge:true}); }catch(e){}
+}
+
+function openMail(){
+  const to=encodeURIComponent((document.getElementById('mail-to')||{}).value||'');
+  const subj=encodeURIComponent((document.getElementById('mail-subj')||{}).value||reportSubject(selKey));
+  const body=encodeURIComponent((document.getElementById('mail-body')||{}).value||reportText(selKey));
+  window.location.href=`mailto:${to}?subject=${subj}&body=${body}`;
+}
+async function copyMail(){
+  const body=(document.getElementById('mail-body')||{}).value||reportText(selKey);
+  try{ await navigator.clipboard.writeText(body); toast(T('Zkopírováno.'),'ok'); }
+  catch(e){ const ta=document.getElementById('mail-body'); if(ta){ta.focus();ta.select();} }
+}
+
+/* ===== bind ===== */
+function bind(){
+  const f=document.getElementById('loginForm');
+  if(f) f.addEventListener('submit',e=>{e.preventDefault();
+    doLogin(document.getElementById('li-email').value.trim(), document.getElementById('li-pass').value);});
+
+  // jazykový přepínač a menu modulů obsluhuje header.js sám; tady jen odhlášení
+  document.querySelectorAll('[data-a="logout"]').forEach(b=>b.onclick=()=>signOut(auth));
+
+  document.querySelectorAll('[data-a]').forEach(el=>{
+    const a=el.getAttribute('data-a');
+    if(a==='reload') el.onclick=()=>location.reload();
+    if(a==='selmonth') el.onchange=()=>{ selKey=el.value; render(); };
+    if(a==='file') el.onchange=()=>{ const file=el.files&&el.files[0]; el.value=''; handleFile(file, el.getAttribute('data-med')); };
+    if(a==='imp-cancel'||a==='imp-bg'){ el.onclick=(ev)=>{ if(a==='imp-bg'&&ev.target!==el) return; imp=null; render(); }; }
+    if(a==='imp-save') el.onclick=saveImport;
+    if(a==='mail-open') el.onclick=openMail;
+    if(a==='mail-copy') el.onclick=copyMail;
+    if(a==='delmonth') el.onclick=()=>delMonth(el.getAttribute('data-v'));
+  });
+
+  // okno kontroly importu — změna voleb přepočítá souhrn
+  const vc=document.getElementById('imp-valcol'), tc=document.getElementById('imp-timecol'),
+        mo=document.getElementById('imp-month'), yr=document.getElementById('imp-year');
+  if(vc) vc.onchange=()=>{ imp.valCol=+vc.value; recalcImp(); render(); };
+  if(tc) tc.onchange=()=>{ imp.timeCol=+tc.value; recalcImp(); render(); };
+  if(mo) mo.onchange=()=>{ imp.month=+mo.value; render(); };
+  if(yr) yr.onchange=()=>{ imp.year=+yr.value; render(); };
+
+  // uložení příjemců e-mailu (při opuštění pole)
+  const mt=document.getElementById('mail-to');
+  if(mt && canWrite()) mt.onchange=()=>saveRecipients(mt.value.trim());
+}
+
+async function delMonth(key){
+  if(!canWrite()) return;
+  if(!confirm(T('Opravdu smazat tento import?'))) return;
+  for(const med of ['el','plyn']){ const r=rowFor(key,med);
+    if(r){ try{ await deleteDoc(doc(db,'energy',r._id)); }catch(e){} } }
+  toast(T('Import smazán.'),'ok');
+}
+</script>
+</body>
+</html>

@@ -56,6 +56,21 @@ service cloud.firestore {
     }
     function canLamaRead()  { return signedIn() && lamaAccess() != 'none'; }
     function canLamaWrite() { return signedIn() && lamaAccess() == 'write'; }
+    // Spotřeba energií: přístup z users.modules.energie (none/read/write).
+    // Bez ručního nastavení vidí a zapisují jen správci podle e-mailu, ostatní modul nevidí.
+    // Stejná logika je v index.html, header.js, nastaveni.html a energie.html.
+    function energieSet() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+             .get('modules', {}).get('energie', '');
+    }
+    function energieAccess() {
+      return !signedIn() ? 'none'
+           : energieSet() in ['none','read','write'] ? energieSet()
+           : isEmailAdmin() ? 'write'
+           : 'none';
+    }
+    function canEnergyRead()  { return signedIn() && energieAccess() != 'none'; }
+    function canEnergyWrite() { return signedIn() && energieAccess() == 'write'; }
     function isSklad()        { return signedIn() && myRole() == 'skladnik'; }
     function isSchvalovatel() { return signedIn() && myRole() == 'schvalovatel'; }
     function canEdit()        { return isAdmin() || isSklad(); }
@@ -217,6 +232,21 @@ service cloud.firestore {
       allow update: if isAdmin()
                     || (signedIn()
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq']));
+      allow delete: if isAdmin();
+    }
+
+    // --- Spotřeba energií ---
+    // Měsíční spotřeby elektřiny a plynu. Vidí jen ti, kdo do modulu smí;
+    // import a mazání jen ti, kdo smí zapisovat. Id dokumentu = "RRRR-MM_medium",
+    // takže opakovaný import téhož měsíce přepíše, nezaloží duplicitu.
+    match /energy/{id} {
+      allow read:   if canEnergyRead();
+      allow create, update, delete: if canEnergyWrite();
+    }
+    // Nastavení modulu energií (komu se posílá e-mail pro finance).
+    match /meta/energycfg {
+      allow read:   if canEnergyRead();
+      allow create, update: if canEnergyWrite();
       allow delete: if isAdmin();
     }
 

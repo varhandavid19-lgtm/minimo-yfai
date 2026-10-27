@@ -148,6 +148,7 @@ const MODULES = [
   {ico:'🏭', nm:'Engineering',       ds:'Prostoje na linkách, KPI a import reportu ze Symesticu.', href:'engineering.html', active:true, key:'engineering', engOnly:true},
   {ico:'🚶', nm:'Shopfloor walk',    ds:'Nálezy z obchůzky po výrobě — vyfoť, přiřaď ownera, hlídej termín.', href:'shopfloor.html', active:true, key:'shopfloor', sfwOnly:true},
   {ico:LLAMA_ICO, nm:'Úkoly pro LAMA AGENCY', ds:'Úkoly pro agenturu — zadání, termín, stav a vyjádření jejich teamleadera.', href:'lama.html', active:true, key:'lama', lamaOnly:true},
+  {ico:'⚡', nm:'Spotřeba energií',   ds:'Měsíční spotřeba elektřiny a plynu, graf vývoje, max ¼h a e-mail pro finance.', href:'energie.html', active:true, key:'energie', energyOnly:true},
   {ico:'🔧', nm:'Údržba',            ds:'Hlášení a evidence oprav a údržby strojů. Připravujeme.', active:false},
   {ico:'⚠️', nm:'Reklamace',         ds:'Evidence reklamací a neshod kvality. Připravujeme.', active:false},
   {ico:'⚙️', nm:'Nastavení',         ds:'Správa uživatelů, práv a modulů.', href:'nastaveni.html', active:true, key:'nastaveni'},
@@ -176,6 +177,8 @@ if(window.registerI18N) window.registerI18N({
   'Prostoje na linkách, KPI a import reportu ze Symesticu.':'Line downtimes, KPIs and report import from Symestic.',
   'Nálezy z obchůzky po výrobě — vyfoť, přiřaď ownera, hlídej termín.':'Findings from the shopfloor walk — take a photo, assign an owner, track the deadline.',
   'Úkoly pro agenturu — zadání, termín, stav a vyjádření jejich teamleadera.':'Tasks for the agency — assignment, deadline, status and their team leader\'s response.',
+  'Spotřeba energií':'Energy consumption',
+  'Měsíční spotřeba elektřiny a plynu, graf vývoje, max ¼h a e-mail pro finance.':'Monthly electricity and gas consumption, trend chart, ¼h max and an e-mail for finance.',
   'Hlášení a evidence oprav a údržby strojů. Připravujeme.':'Reporting and tracking of machine repairs and maintenance. Coming soon.',
   'Evidence reklamací a neshod kvality. Připravujeme.':'Tracking of complaints and quality non-conformities. Coming soon.',
   'Správa uživatelů, práv a modulů.':'Managing users, permissions and modules.',
@@ -234,6 +237,12 @@ const sfwAccess = () => { const set=(myModules||{}).shopfloor;
 const lamaAccess = () => { const set=(myModules||{}).lama;
   if(set==='none'||set==='read'||set==='write') return set;
   return isOpravyOwner() ? 'write' : 'none'; };
+/* Spotřeba energií: přístup z users.modules.energie (none/read/write).
+   Bez ručního nastavení vidí a zapisují jen správci podle e-mailu.
+   Stejná logika je v energie.html, header.js, nastaveni.html a v pravidlech Firestore. */
+const energyAccess = () => { const set=(myModules||{}).energie;
+  if(set==='none'||set==='read'||set==='write') return set;
+  return isOpravyOwner() ? 'write' : 'none'; };
 /* Modul, ze kterého sem někoho přesměrovalo, protože do něj nesmí (?noaccess=klíč).
    Parametr se hned smaže z adresy, ať hláška nevisí po obnovení stránky. */
 const NOACCESS_NAME = (()=>{ try{
@@ -245,6 +254,7 @@ function appView(){
   const tiles = MODULES.filter(m=> m.engOnly ? isEngPerson()
     : m.sfwOnly ? sfwAccess()!=='none'
     : m.lamaOnly ? lamaAccess()!=='none'
+    : m.energyOnly ? energyAccess()!=='none'
     : m.ownerOnly ? isOpravyOwner()
     : (!m.key || resolveModule(myModules,myLevel,m.key)!=='none')).map(m=> m.active
     ? `<a class="tile active" href="${m.href}">

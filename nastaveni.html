@@ -225,6 +225,7 @@ const MODULES_LIST = [
   {key:'nastaveni', label:'Nastavení'},
   {key:'shopfloor', label:'Shopfloor walk'},
   {key:'lama',      label:'Úkoly pro LAMA AGENCY'},
+  {key:'energie',   label:'Spotřeba energií'},
 ];
 const MODSTATES = [
   {key:'none',  label:'Skryté'},
@@ -249,6 +250,9 @@ const resolveModule = (mods, level, key, u) => { const p=mods&&mods[key];
   // Úkoly pro LAMA AGENCY: bez ručního nastavení zapisují jen správci, ostatní modul nevidí.
   // Stejná logika je v index.html, header.js, lama.html a v pravidlech Firestore.
   if(key==='lama') return OPRAVY_OWNERS.includes(String((u&&u.email)||'').trim().toLowerCase()) ? 'write' : 'none';
+  // Spotřeba energií: bez ručního nastavení vidí a zapisují jen správci podle e-mailu.
+  // Stejná logika je v index.html, header.js, energie.html a v pravidlech Firestore.
+  if(key==='energie') return OPRAVY_OWNERS.includes(String((u&&u.email)||'').trim().toLowerCase()) ? 'write' : 'none';
   return key==='nastaveni' ? (rankOf(level)>=5?'write':'none') : 'write'; };   // výchozí podle levelu
 const allowedMods = (mods, level) => ['portal',
   resolveModule(mods,level,'nakup')!=='none'?'nakup':null,
@@ -275,6 +279,7 @@ if(window.registerI18N) window.registerI18N({
   '+ spravuje číselníky a nastavení modulů.':'+ manages code lists and module settings.',
   'Vše + správa uživatelů a levelů.':'Everything + managing users and levels.',
   'Skryté':'Hidden','Jen číst':'Read only','Zapisovat':'Write',
+  'Spotřeba energií':'Energy consumption',
   'Zapisovat jen sebe':'Write own only','Zapisovat všechny':'Write all',
   'Všichni':'All',
   'V této oblasti nikdo není.':'No one in this area.',
