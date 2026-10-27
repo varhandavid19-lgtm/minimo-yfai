@@ -51,7 +51,33 @@
     'Menu modulů':'Modules menu',
     'týden':'week',
     '🖥️ Zobrazit jako na počítači':'🖥️ Desktop view',
-    '📱 Přepnout na mobilní zobrazení':'📱 Mobile view'
+    '📱 Přepnout na mobilní zobrazení':'📱 Mobile view',
+    /* Běžné popisky napříč moduly (tlačítka, hlavičky, hlášky). */
+    'Uložit':'Save','Uložit změny':'Save changes','Zrušit':'Cancel','Smazat':'Delete',
+    'Upravit':'Edit','Zavřít':'Close','Přidat':'Add','Přidat řádek':'Add row',
+    'Odebrat':'Remove','Zpět':'Back','Hledat':'Search','Hledat…':'Search…',
+    'Vše':'All','Ano':'Yes','Ne':'No','Hotovo':'Done','Načítám…':'Loading…',
+    'Uloženo.':'Saved.','Historie':'History','Export':'Export','Export CSV':'Export CSV',
+    'Stav':'Status','Priorita':'Priority','Datum':'Date','Poznámka':'Note',
+    'Popis':'Description','Dodavatel':'Supplier','Výrobce':'Manufacturer',
+    'Množství':'Quantity','Množ.':'Qty','Cena':'Price','Celkem':'Total','Měna':'Currency',
+    'Účet':'Account','Linka':'Line','Stroj':'Machine','Owner':'Owner','Termín':'Deadline',
+    'Jméno':'Name','E-mail':'E-mail','Telefon':'Phone','Role':'Role','Útvar':'Team',
+    'Datum dodání':'Delivery date','Skladové číslo':'Stock number',
+    'běžná':'normal','kritická':'critical','nízká':'low','vysoká':'high',
+    'Připojuji se k Firebase.':'Connecting to Firebase.',
+    'Nemáš oprávnění':'No permission','← Zpět na hlavní stránku':'← Back to home',
+    'jen pro čtení':'read only','Zpět na hlavní stránku':'Back to home',
+    /* Přihlášení + chybové hlášky (stejné ve všech modulech). */
+    'Heslo':'Password','Přihlásit se':'Sign in','Přihlašuji…':'Signing in…',
+    'Neplatný e-mail.':'Invalid e-mail.','Účet neexistuje.':'Account does not exist.',
+    'Nesprávné heslo.':'Incorrect password.','Nesprávný e-mail nebo heslo.':'Incorrect e-mail or password.',
+    'Příliš mnoho pokusů, zkuste to za chvíli.':'Too many attempts, try again shortly.',
+    'Přihlašování e-mailem není ve Firebase zapnuté.':'E-mail sign-in is not enabled in Firebase.',
+    'Přihlášení se nezdařilo (':'Sign-in failed (',
+    'Neznámá chyba':'Unknown error','Otevřít':'Open','Zrušit filtr':'Clear filter',
+    'Nic neodpovídá filtru.':'Nothing matches the filter.','↻ Načíst znovu':'↻ Reload',
+    '⭳ Export CSV':'⭳ Export CSV'
   });
 
   /* Automatický překlad vykreslené stránky: projde textové uzly a atributy

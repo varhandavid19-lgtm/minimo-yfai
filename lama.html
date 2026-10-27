@@ -299,6 +299,41 @@ const PHOTO_Q = 0.72;              // kvalita JPEG — typicky pětinová veliko
 
 /* ===== drobné pomůcky ===== */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const T = s => (window.T ? window.T(s) : s);
+if(window.registerI18N) window.registerI18N({
+  'Požadavky na správce':'Requests to admin','Požadavky na správce (Plánování směn)':'Requests to admin (Shift planning)',
+  'Interní LAMA':'Internal LAMA','Ostatní':'Other','Zázemí a okolí':'Facilities & surroundings','Údržba a dílna':'Maintenance & workshop',
+  'Nové':'New','V řešení':'In progress','Po termínu':'Overdue','čeká na převzetí':'waiting to be taken',
+  'rozpracováno':'in progress','všechno v termínu':'all on time','řeš hned':'act now',
+  'nový':'new','v řešení':'in progress',
+  'změna termínu':'deadline change','dní':'days','dříve':'earlier','později':'later',
+  'Máš přístup jen na čtení.':'You have read-only access.','Popiš úkol.':'Describe the task.','Vyplň termín.':'Fill in the deadline.',
+  'Ukládám…':'Saving…','Načítám úkoly…':'Loading tasks…','Mažu úkol…':'Deleting task…',
+  'Uložení selhalo. ':'Save failed. ','Přesun se nepovedl. ':'Move failed. ','Smazání selhalo. ':'Delete failed. ',
+  'Zpracovávám přílohy…':'Processing attachments…','Nahrávám přílohy…':'Uploading attachments…',
+  'Nenahrálo se: ':'Upload failed: ','Příloha nahrána.':'Attachment uploaded.','Uložení příloh selhalo. ':'Saving attachments failed. ',
+  'Nastavení se nepodařilo načíst. ':'Failed to load settings. ','Notifikace uloženy.':'Notifications saved.','Tohle nevypadá jako e-mail: ':'This does not look like an e-mail: ',
+  'Příloha ':'Attachment ','Úkol ':'Task ','Nový úkol — ':'New task — ',
+  'Zobrazit vše':'Show all','bez filtrů, i hotové':'no filters, including done','+ Nový úkol':'+ New task',
+  'Hledat v úkolu, poznámce, oblasti…':'Search in task, note, area…','Všechny oblasti':'All areas','Všechny priority':'All priorities','skrýt hotové':'hide done',
+  '✉️ Notifikace':'✉️ Notifications','Zatím tu nejsou žádné úkoly.':'No tasks yet.','Zatím tu nejsou žádné úkoly. Klikni na':'No tasks yet. Click',
+  '✉️ E-mailové notifikace':'✉️ E-mail notifications',
+  'Adresy odděl čárkou. Prázdné = záložka nic neposílá. E-maily odcházejí z firemní schránky minima.':'Separate addresses with commas. Empty = this tab sends nothing. E-mails are sent from the minimo company mailbox.',
+  'nový úkol (hned)':'new task (immediately)','úkol hotový (hned, i kdo ho dokončil)':'task done (immediately, incl. who completed it)',
+  'blíží se termín (po 1/3 a 2/3 doby)':'deadline approaching (at 1/3 and 2/3 of the time)','po termínu (každé ráno v 7:00)':'overdue (every morning at 7:00)',
+  'Připomínky a úkoly po termínu chodí v jednom ranním e-mailu na záložku.':'Reminders and overdue tasks arrive in one morning e-mail to this tab.',
+  'Požadavek na správce':'Request to admin','Úkol pro LAMA AGENCY':'Task for LAMA AGENCY','jen čtení':'read only',
+  'Pole s':'Fields with','jsou povinná.':'are required.','Zadáno':'Created','Úkol':'Task','Záložka':'Tab','— změnou úkol přesuneš':'— changing it moves the task',
+  'Poznámka / vyjádření agentury':'Note / agency response','Poznámka / vyjádření':'Note / response',
+  'Přílohy a fotky':'Attachments & photos','📎 Přidat soubor':'📎 Add file','· nahraje se po uložení':'· uploads after saving',
+  'Na telefonu otevře „Vyfotit" rovnou fotoaparát — fotka se před nahráním sama zmenší.':'On a phone, "Take photo" opens the camera directly — the photo is shrunk before upload.',
+  'Uložit úkol':'Save task','Č.':'No.','Po termínu (dní)':'Overdue (days)','Příloh':'Attachments',
+  'K úkolům máš přístup jen na čtení — vidíš je, ale neměníš.':'You have read-only access to tasks — you can see them but not change them.',
+  'Do Požadavků na správce má přístup jen ten, kdo v Plánování směn smí zapisovat.':'Only someone who can write in Shift planning has access to Requests to admin.',
+  'K úkolům pro LAMA AGENCY nemáš přístup — přecházím na hlavní stránku…':'You do not have access to LAMA AGENCY tasks — redirecting to home…',
+  'vyber nebo napiš, např. IMM07':'select or type, e.g. IMM07','např. novak@firma.cz, svoboda@firma.cz':'e.g. novak@firma.cz, svoboda@firma.cz',
+  ' uložen.':' saved.',' smazán.':' deleted.',' se nenahrála: ':' failed to upload: ',' příloh nahráno.':' attachments uploaded.','1 příloha':'1 attachment',' příloh':' attachments'
+});
 const pad2 = n => String(n).padStart(2,'0');
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
 /* Text do historie: „změna termínu: 26. 10. 2026 → 2. 11. 2026 (o 7 dní později)".
@@ -469,13 +504,13 @@ async function save(){
         const arr=[], hist=rec.hist.slice();
         for(const fl of pending){
           try{ arr.push(await upload(ref.id,fl)); hist.push(`${today()} · ${me.name} · přidal přílohu ${fl.name}`); }
-          catch(e){ toast('Příloha '+fl.name+' se nenahrála: '+((e&&e.message)||e),'err'); }
+          catch(e){ toast(T('Příloha ')+fl.name+T(' se nenahrála: ')+((e&&e.message)||e),'err'); }
         }
         if(arr.length){ await updateDoc(ref,{files:arr,hist}); rec.files=arr; rec.hist=hist; }
         pending=[];
       }
       items.unshift(Object.assign({_id:ref.id}, rec));
-      toast('Úkol '+no+' uložen.','ok');
+      toast(T('Úkol ')+no+T(' uložen.'),'ok');
     }else{
       /* Změna termínu se do historie zapíše zvlášť — odkud kam a o kolik dní
          (v okně svítí červeně). Ostatní změny dál jako „upraveno". */
@@ -493,7 +528,7 @@ async function save(){
       toast(moved ? `Úkol ${t.no} přesunut do záložky ${listLabel(listOf(t))}.` : 'Uloženo.','ok');
     }
     open=null; oMsg='';
-  }catch(e){ oMsg='Uložení selhalo. '+writeHint(e); }
+  }catch(e){ oMsg=T('Uložení selhalo. ')+writeHint(e); }
   render();
 }
 /* Přesun úkolu do jiné záložky (přetažením řádku na záložku). Stejný zápis do historie
@@ -506,7 +541,7 @@ async function moveTask(id, list){
     await updateDoc(doc(db,COLL,id), {list, hist});
     t.list=list; t.hist=hist;
     toast(`Úkol ${t.no} přesunut do záložky ${listLabel(list)}.`,'ok');
-  }catch(e){ toast('Přesun se nepovedl. '+writeHint(e),'err'); }
+  }catch(e){ toast(T('Přesun se nepovedl. ')+writeHint(e),'err'); }
 }
 async function removeItem(id){
   const t=items.find(x=>x._id===id); if(!t) return;
@@ -520,8 +555,8 @@ async function removeItem(id){
     await deleteDoc(doc(db,COLL,id));
     items=items.filter(x=>x._id!==id);
     if(open && open._id===id){ open=null; oMsg=''; }
-    toast('Úkol '+t.no+' smazán.','ok');
-  }catch(e){ toast('Smazání selhalo. '+writeHint(e),'err'); }
+    toast(T('Úkol ')+t.no+T(' smazán.'),'ok');
+  }catch(e){ toast(T('Smazání selhalo. ')+writeHint(e),'err'); }
   busy=''; render();
 }
 
@@ -568,13 +603,13 @@ async function addFiles(list){
   let n=0;
   for(const fl of ok){
     try{ arr.push(await upload(t._id,fl)); hist.push(`${today()} · ${me.name} · přidal přílohu ${fl.name}`); n++; }
-    catch(e){ toast('Nenahrálo se: '+fl.name+' — '+((e&&e.message)||e),'err'); }
+    catch(e){ toast(T('Nenahrálo se: ')+fl.name+' — '+((e&&e.message)||e),'err'); }
   }
   if(n){
     try{ await updateDoc(doc(db,COLL,t._id), {files:arr, hist});
          t.files=arr; t.hist=hist; sync(t);
-         toast(n===1?'Příloha nahrána.':n+' příloh nahráno.','ok'); }
-    catch(e){ toast('Uložení příloh selhalo. '+writeHint(e),'err'); }
+         toast(n===1?'Příloha nahrána.':n+T(' příloh nahráno.'),'ok'); }
+    catch(e){ toast(T('Uložení příloh selhalo. ')+writeHint(e),'err'); }
   }
   oMsg=''; render();
 }
@@ -587,7 +622,7 @@ async function removeFile(i){
   files.splice(i,1);
   const hist=(t.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${fl.name}`);
   try{ await updateDoc(doc(db,COLL,t._id), {files, hist}); t.files=files; t.hist=hist; sync(t); }
-  catch(e){ toast('Smazání selhalo. '+writeHint(e),'err'); }
+  catch(e){ toast(T('Smazání selhalo. ')+writeHint(e),'err'); }
   render();
 }
 
@@ -694,7 +729,7 @@ async function openNtf(){
   if(!canDelete()) return;
   nMsg=''; ntf={};
   try{ const s=await getDoc(doc(db,'meta',CFG_ID)); ntf=JSON.parse(JSON.stringify((s.exists() && s.data().notify) || {})); }
-  catch(e){ nMsg='Nastavení se nepodařilo načíst. '+writeHint(e); }
+  catch(e){ nMsg=T('Nastavení se nepodařilo načíst. ')+writeHint(e); }
   LISTS.forEach(l=>{ ntf[l.k]=Object.assign({to:'', newTask:true, done:true, remind:true, overdue:true}, ntf[l.k]||{}); });
   render();
 }
@@ -712,10 +747,10 @@ async function saveNtf(){
   const bad=[];
   LISTS.forEach(l=>String(ntf[l.k].to||'').split(/[\s,;]+/).filter(Boolean)
     .forEach(a=>{ if(!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(a)) bad.push(a); }));
-  if(bad.length){ nMsg='Tohle nevypadá jako e-mail: '+bad.join(', '); render(); return; }
+  if(bad.length){ nMsg=T('Tohle nevypadá jako e-mail: ')+bad.join(', '); render(); return; }
   nMsg='Ukládám…'; render();
   try{ await setDoc(doc(db,'meta',CFG_ID),{notify:ntf},{merge:true}); ntf=null; nMsg=''; toast('Notifikace uloženy.','ok'); }
-  catch(e){ nMsg='Uložení selhalo. '+writeHint(e); render(); }
+  catch(e){ nMsg=T('Uložení selhalo. ')+writeHint(e); render(); }
 }
 function ntfModal(){
   return `<div class="overlay" id="ntf-ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="Notifikace">
@@ -750,7 +785,7 @@ function itemModal(){
                     : (t.files||[]);
   return `
   <div class="overlay" id="ovl"><div class="modal" role="dialog" aria-modal="true" aria-label="${PLAN_MODE?'Požadavek na správce':'Úkol pro LAMA AGENCY'}">
-    <h3>${isNew?'Nový úkol — '+esc(listLabel(listOf(t))):'Úkol '+esc(t.no)+' — '+esc(listLabel(listOf(t)))}
+    <h3>${isNew?'Nový úkol — '+esc(listLabel(listOf(t))):T('Úkol ')+esc(t.no)+' — '+esc(listLabel(listOf(t)))}
       <button class="x" data-a="close" aria-label="Zavřít">✕</button></h3>
     <div class="robar">
       ${ro?'<span class="badge b-blue">jen čtení</span>':'Pole s <span style="color:var(--red)">*</span> jsou povinná.'}
@@ -829,8 +864,8 @@ function exportCsv(){
    Vykreslení a ovládání
    ========================================================== */
 function render(){
-  if(!me){ appEl.innerHTML=loginView(); bind(); return; }
-  if(!canEnter()){ appEl.innerHTML=shell(noAccessView()); bind(); return; }
+  if(!me){ appEl.innerHTML=loginView(); bind(); window.i18nApply&&window.i18nApply(appEl); return; }
+  if(!canEnter()){ appEl.innerHTML=shell(noAccessView()); bind(); window.i18nApply&&window.i18nApply(appEl); return; }
   appEl.innerHTML = shell(`
     ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
     ${busy?`<div class="notice">${esc(busy)}</div>`:''}
@@ -839,7 +874,7 @@ function render(){
     + (open?itemModal():'')
     + (ntf?ntfModal():'')
     + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
-  bind();
+  bind(); window.i18nApply&&window.i18nApply(appEl);
 }
 /* Kdo do modulu nesmí, skončí na hlavní stránce s moduly, kam smí. */
 function noAccessView(){
