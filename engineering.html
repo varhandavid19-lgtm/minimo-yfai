@@ -1470,7 +1470,119 @@ let imp=newImp('dt');
 let toastMsg=null, toastKind='';
 
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const num = (v,d=1)=>(isFinite(v)?Number(v):0).toLocaleString('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
+const T = s=>(window.T?window.T(s):s);
+if(window.registerI18N) window.registerI18N({
+  'Engineering — řízení výkonu':'Engineering — performance management',
+  'přidají pozici (např. IMM PE nebo PE coordinator).':'add a position (e.g. IMM PE or PE coordinator).',
+  /* záložky */
+  'Hlavní stránka':'Home','Problem solving':'Problem solving','Akční plán':'Action plan','KPI':'KPI',
+  'Prostoje':'Downtimes','Přestavby':'Changeovers','Generovat pareto':'Generate pareto','Import':'Import',
+  'Zobrazit akční plán':'Show action plan','Zobrazit přehled':'Show overview','Přejít na hlavní stránku':'Go to home','Přejít na import':'Go to import',
+  'Otevřít Quality loss report ↗':'Open Quality loss report ↗','Otevřít nastavení →':'Open settings →',
+  /* hinty u záložek */
+  'Nový A3 založíš tlačítkem v seznamu — na jakoukoli linku i stroj.':'Start a new A3 with the button in the list — for any line or machine.',
+  'Akční plán je nezávislý na období — vidíš všechny tasky.':'The action plan is independent of the period — you see all tasks.',
+  'Hlavní stránka počítá po týdnech z posledních 12 týdnů.':'The home page calculates by week from the last 12 weeks.',
+  'Scrap se počítá po měsících — posledních 12.':'Scrap is calculated by month — the last 12.',
+  'Období si u parety vybereš přímo na stránce.':'You choose the period for the pareto directly on the page.',
+  /* období */
+  'Období':'Period','Období:':'Period:','Týden':'Week','Týden:':'Week:','Měsíc':'Month','Měsíce':'Months',
+  'Tento měsíc':'This month','Minulý měsíc':'Last month','Minulý týden':'Last week','Celý měsíc':'Whole month','Celý závod':'Whole plant',
+  '7 dní':'7 days','14 dní':'14 days','30 dní':'30 days','Vše':'All','Kumulativně':'Cumulatively','Celkem':'Total',
+  '↻ Načíst znovu':'↻ Reload','⚙️ Nastavení':'⚙️ Settings','Nastavení':'Settings','Nastavení standardu':'Standard settings',
+  /* obecné akce / stavy */
+  'Uložit':'Save','Zavřít':'Close','Zrušit':'Cancel','Zrušit filtr':'Clear filter','Zrušit výběr':'Clear selection',
+  'Otevřít':'Open','Schválit':'Approve','Uzavřít':'Close','Uzavřeno':'Closed','Vrátit':'Revert','Zpět':'Back',
+  'Vybrat vše':'Select all','Vybrat obrázky':'Select images','Vybrat jiný soubor':'Choose another file','Najít záznamy':'Find records',
+  'Zobrazit dalších 300':'Show another 300','Seřadit na review':'Sort for review','Načíst znovu':'Reload',
+  'Načítám…':'Loading…','Načteno':'Loaded','Načteno úkolů':'Tasks loaded','Připojuji se k Firebase.':'Connecting to Firebase.',
+  'Připravuji fotky…':'Preparing photos…','Import hotový':'Import finished',
+  /* prázdné stavy / hlášky */
+  'Nic neodpovídá filtru.':'Nothing matches the filter.','Nic neodpovídá hledání.':'Nothing matches the search.',
+  'Zatím žádná data.':'No data yet.','Za tohle období žádná data.':'No data for this period.',
+  'Zatím tu nejsou žádné prostoje':'No downtimes here yet','Zatím tu nejsou žádná data o scrapu':'No scrap data here yet',
+  'Zatím žádný problem solving':'No problem solving yet','Zatím žádný úkol.':'No task yet.','Zatím žádný task. Založ ho tlačítkem':'No task yet. Create it with the button',
+  'Zatím žádný řádek — přidej ho tlačítkem dole.':'No row yet — add it with the button below.','Zatím žádný import.':'No import yet.',
+  'Zatím žádná příloha.':'No attachment yet.','Zatím není z čeho řídit':'Nothing to manage from yet',
+  'Žádná opatření.':'No actions.','Žádné prostoje.':'No downtimes.','Žádný otevřený problém.':'No open problem.',
+  'Za zvolené období a filtr nejsou žádné prostoje.':'There are no downtimes for the selected period and filter.',
+  'V souboru nejsou žádné prostoje ke zpracování.':'There are no downtimes to process in the file.',
+  'Na trend zatím není dost týdnů.':'Not enough weeks for a trend yet.',
+  'Za tohle období nejsou načtené jednotlivé přestavby. Souhrny nahoře platí.':'Individual changeovers are not loaded for this period. The summaries above still apply.',
+  'Nikdo takový tu není. Lidi se přidávají v Nastavení celého minima.':'There is no such person. People are added in the Settings of the whole minimo.',
+  'Tihle lidé nejsou v Nastavení minima:':'These people are not in minimo Settings:',
+  'Import reportu dělá procesní inženýr nebo správce.':'The report is imported by a process engineer or administrator.',
+  /* KPI dlaždice / nadpisy grafů */
+  'Průměrný výkon linek':'Average line performance','Týdenní výkon linek':'Weekly line performance','Trend výkonu po týdnech':'Performance trend by week',
+  'Nejhorší linka':'Worst line','Nejhorší linka:':'Worst line:','Nejhorší linky dne':'Worst lines of the day','Nejhorší projekt':'Worst project',
+  'Prostoje po linkách':'Downtime by line','Prostoje po strojích':'Downtime by machine','Po linkách':'By line','Po strojích':'By machine',
+  'Podle důvodu':'By reason','Podle směny':'By shift','Po zdroji a skupině':'By source and group','TOP 10 důvodů prostoje':'TOP 10 downtime reasons',
+  'Nejčastější důvody dne':'Most frequent reasons of the day','Největší důvod:':'Biggest reason:','Nezařazené prostoje':'Unclassified downtime',
+  'Nezařazené důvody':'Unclassified reasons','Nezařazené linky':'Unclassified lines','Nezařazeno':'Unclassified','nezařazené':'unclassified','nepřiřazeno':'unassigned',
+  'Typy prostojů':'Downtime types','3 · Typy prostojů':'3 · Downtime types','Jen technické':'Technical only','Technický prostoj':'Technical downtime','technický prostoj':'technical downtime',
+  'Z toho poruchy strojů':'Of which machine breakdowns','Práh výkonu':'Performance threshold','Výkon':'Performance','Podíl':'Share',
+  'Přehled po měsících':'Monthly overview','Vývoj po dnech':'Daily development','Vývoj scrapu po měsících':'Scrap development by month',
+  'Scrap v penězích':'Scrap in money','zmetky v eurech proti tržbám':'scrap in euros vs. revenue','Tržby':'Revenue',
+  'Pareto ztrát':'Loss pareto','Dní dat':'Days of data','Případů':'Cases','Položka':'Item','Údaj':'Value',
+  /* přestavby */
+  'Jednotlivé přestavby':'Individual changeovers','Celkem na přestavbách':'Total on changeovers','Nejdelší přestavba':'Longest changeover',
+  'Jak dlouho trvá přestavba':'How long a changeover takes','Kolik času sežerou celkem':'How much time they take in total',
+  'Počet přestaveb':'Number of changeovers','Průměr na přestavbu':'Average per changeover','Nejvíc přestaveb:':'Most changeovers:','Přest.':'Chg.',
+  'Plánovaný čas':'Planned time','Plánovaný čas':'Planned time','čas, kdy se nevyrábělo kvůli přehození':'time not producing due to switchover',
+  /* tabulkové hlavičky */
+  'Linka / týden':'Line / week','Linka':'Line','Směna':'Shift','Čas':'Time','Trvání':'Duration','Důvod':'Reason','Poznámka':'Note','Poznámky':'Notes',
+  'Číslo':'Number','Č.':'No.','Řádků':'Rows','Změna':'Change','Zadáno':'Entered','Problém':'Problem','Vlastník':'Owner','Spouštěč':'Trigger',
+  'Termín':'Deadline','Termín původní':'Original deadline','Platný termín':'Valid deadline','Nový termín':'New deadline','Termín uzavření':'Closing deadline',
+  'Ke schválení':'For approval','Ke smazání':'To delete','Poslední akce':'Last action','Posunů':'Changes','Počet posunů':'Number of changes',
+  'Ranní':'Morning','Odpolední':'Afternoon','Noční':'Night','celý den':'whole day',
+  /* filtry (selecty) */
+  'Všechny linky':'All lines','Všechny stroje':'All machines','Všechny směny':'All shifts','Všechny důvody':'All reasons',
+  'Všechny stavy':'All statuses','Všechny procesy':'All processes','Všechny prostoje':'All downtimes','Všechny skupiny':'All groups',
+  'Všechny zdroje':'All sources','Všechna oddělení':'All departments','Všichni owneři':'All owners','Všichni řešitelé':'All solvers',
+  'Typ: vše':'Type: all','skrýt uzavřené':'hide closed','jen otevřená':'open only','Počítat:':'Count:',
+  'Nic nevybráno = počítají se všechny linky.':'Nothing selected = all lines are counted.','Nic nevybráno = všechny typy.':'Nothing selected = all types.',
+  /* problem solving / A3 */
+  'Nový A3 problem solving':'New A3 problem solving','+ Nový A3 problem solving':'+ New A3 problem solving',
+  'Vytvořit A3 problem solving':'Create A3 problem solving','Vytvořit A3 pro všechny':'Create A3 for all','Založit a otevřít':'Create and open',
+  'Otevřené problémy':'Open problems','Otevřené analýzy':'Open analyses','Otevřené tasky':'Open tasks','Otevřené tasky po oblastech':'Open tasks by area',
+  'Okamžité opatření':'Immediate action','Okamžitá opatření u otevřených problémů':'Immediate actions for open problems','Opatření':'Actions',
+  'Opatření po termínu':'Overdue actions','Follow-up opatření':'Follow-up action','Nápravné opatření':'Corrective action',
+  'Kořenová příčina':'Root cause','bez kořenové příčiny':'no root cause','Krátký popis problému':'Short problem description','Popis problému':'Problem description',
+  'Očekávaný výstup':'Expected output','3 · Očekávaný výstup – důkaz':'3 · Expected output – evidence','Očekávaný výstup – důkaz':'Expected output – evidence',
+  'Ověření účinnosti':'Effectiveness verification','Ověřit do':'Verify by','Výsledek ověření':'Verification result','Čeká na ověření':'Awaiting verification',
+  'Čeká na A3 analýzu':'Awaiting A3 analysis','Owner analýzy':'Analysis owner','Standard vyžaduje analýzu:':'The standard requires analysis:',
+  'Co se kvůli tomuhle problému muselo přepsat.':'What had to be rewritten because of this problem.','Upravené dokumenty':'Updated documents',
+  'Týden, ke kterému problém patří':'The week the problem belongs to','Poznámka — z čeho na co':'Note — from what to what',
+  'procesní inženýr, který to řeší':'the process engineer handling it','jedna věta, uvidíš ji v seznamu':'one sentence, you will see it in the list',
+  /* tasky / akční plán */
+  'Akční plán managementu':'Management action plan','+ Nový task':'+ New task','+ Přidat úkol do akčního plánu':'+ Add task to the action plan',
+  '+ Přidat další fotku':'+ Add another photo','+ Přidat řádek':'+ Add row','Úkoly':'Tasks','Úkoly v akčním plánu':'Tasks in the action plan',
+  'Nejbližší termín':'Nearest deadline','Bez termínu':'No deadline','Termín do 7 dní':'Deadline within 7 days','Po termínu':'Overdue','po termínu':'overdue',
+  'Uzavřeno tento měsíc':'Closed this month','Poslední akce uzavřena:':'Last action closed:','Posunout termín':'Change deadline','Posuny termínů':'Deadline changes',
+  'Termín se zatím neposouval.':'The deadline has not been changed yet.','Přílohy':'Attachments',
+  /* denní review / přehled hlavní stránka */
+  'Denní ENG review':'Daily ENG review','Denní report z fotky':'Daily report from a photo','Seřadit na review':'Sort for review',
+  'Dlaždice ukazují:':'The tiles show:','Lidé a přestávky':'People and breaks','Organizace výroby':'Production organization',
+  'Materiál a logistika':'Material and logistics','Systém a data':'System and data','Úklid prostojů':'Downtime cleanup',
+  /* import */
+  'Historie importů':'Import history','Co v souboru potřebuju:':'What I need in the file:','Na co se to hodí:':'What it is good for:',
+  'Měsíc, když ho soubor neobsahuje:':'Month when the file does not contain it:','Gclass — obrázek místo Excelu':'Gclass — image instead of Excel',
+  'Přetáhni sem soubory nebo':'Drag files here or','Vybrat jiný soubor':'Choose another file','za celý soubor':'for the whole file',
+  'Tohle není obrázek. Přetáhni fotku nebo snímek obrazovky reportu.':'This is not an image. Drag a photo or a screenshot of the report.',
+  'Pozor, tohle maže ostrá data.':'Caution, this deletes live data.','Tohle se smaže a nejde to vrátit.':'This will be deleted and cannot be undone.',
+  'Projdi si čísla níž a teprve pak potvrď.':'Check the numbers below and only then confirm.',
+  'smazat staré nebo nezařazené záznamy':'delete old or unclassified records','Nečitelné řádky':'Unreadable rows','řádků k uložení':'rows to save',
+  /* legenda barev polí */
+  'bílé — vyplňuješ ty':'white — you fill in','žluté — až při posunu':'yellow — only when changing','šedé — dopočítá se samo':'grey — calculated automatically',
+  'žluté':'yellow','šedé':'grey','červeně = po termínu':'red = overdue','řádek po termínu':'row overdue',
+  /* dialog */
+  'Potvrzení':'Confirmation',
+  /* různé drobné */
+  'Od (nepovinné)':'From (optional)','Do (nepovinné)':'To (optional)','— může jich být víc':'— there can be several',
+  '— nepoužít —':'— do not use —','— nevybráno —':'— not selected —','ke schválení':'for approval','uzavřeno':'closed',
+  /* toasty – prefixy */
+  'Nepodařilo se uložit: ':'Could not save: ','Nepodařilo se smazat: ':'Could not delete: ','Import selhal: ':'Import failed: '
+});
 const today = () => new Date().toISOString().slice(0,10);
 const dateFrom = n => { const d=new Date(); d.setDate(d.getDate()-(n-1)); return d.toISOString().slice(0,10); };
 /* Volby období nad KPI a Prostoji. Měsíce mají i horní mez, dny jen dolní. */
@@ -1499,7 +1611,13 @@ function fmtDur(sec){
   if(sec<3600) return Math.round(sec/60)+' min';
   return num(sec/3600,1)+' h';
 }
-function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
+function i18nToast(m){
+  if(!window.T||!window.minimoLang||window.minimoLang()!=='en'||typeof m!=='string') return m;
+  const full=window.T(m); if(full!==m) return full;
+  for(const sep of [': ','. ']){ const i=m.indexOf(sep); if(i>0){ const p=m.slice(0,i+sep.length); const tp=window.T(p); if(tp!==p) return tp+m.slice(i+sep.length); } }
+  return m;
+}
+function toast(m,k=''){ m=i18nToast(m); toastMsg=m; toastKind=k; render(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
 
 /* ===== auth ===== */
 onAuthStateChanged(auth, async user=>{
@@ -4924,11 +5042,11 @@ function exportCsv(){
 /* ===== render ===== */
 function render(){
   const app=document.getElementById('app');
-  if(!me){ app.innerHTML=loginView(); bind(); return; }
+  if(!me){ app.innerHTML=loginView(); bind(); window.i18nApply&&window.i18nApply(app); return; }
   if(!canEnter(me)){
     app.innerHTML = shell(`<div class="notice">Do Engineeringu má přístup jen procesní inženýr nebo koordinátor.
       Pokud sem patříš, ať ti v <b>Nastavení</b> přidají pozici (např. IMM PE nebo PE coordinator).</div>`);
-    bind(); return;
+    bind(); window.i18nApply&&window.i18nApply(app); return;
   }
   const inner = engTab==='ps'    ? psView()
               : engTab==='tasks' ? tasksView()
@@ -4968,6 +5086,7 @@ function render(){
     ${inner}`) + (openPs?problemModal():'') + (openTask?taskModal():'') + psNewModal() + parPickModal() + parDetailModal()
     + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
   bind();
+  window.i18nApply&&window.i18nApply(app);
 }
 function shell(inner){
   const uh = window.uheaderHTML ? window.uheaderHTML({module:'Engineering', cur:'engineering', positions:(me&&me.positions)||[],
