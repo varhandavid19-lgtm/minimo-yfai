@@ -54,6 +54,35 @@
     '📱 Přepnout na mobilní zobrazení':'📱 Mobile view'
   });
 
+  /* Automatický překlad vykreslené stránky: projde textové uzly a atributy
+     (placeholder/title/aria-label) a nahradí jen ty, které PŘESNĚ (po oříznutí
+     mezer) odpovídají popisku ve slovníku. Data se tím nepřekládají — uživatelský
+     text se shodou s celým popiskem prakticky nikdy netrefí. Volá se po každém
+     překreslení modulu: window.i18nApply(korenovyPrvek). */
+  window.i18nApply = function(root){
+    if(lang()!=='en') return;
+    root = root || document.body; if(!root) return;
+    try{
+      var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), nodes=[], n;
+      while((n=w.nextNode())) nodes.push(n);
+      for(var i=0;i<nodes.length;i++){
+        var t=nodes[i], raw=t.nodeValue; if(!raw) continue;
+        var key=raw.trim(); if(!key) continue;
+        var e=I18N[key];
+        if(e!==undefined && e!==key) t.nodeValue = raw.replace(key, e);
+      }
+      var attrs=['placeholder','title','aria-label'];
+      var els=root.querySelectorAll('[placeholder],[title],[aria-label]');
+      for(var j=0;j<els.length;j++){
+        for(var a=0;a<attrs.length;a++){
+          var v=els[j].getAttribute(attrs[a]); if(v==null) continue;
+          var k=v.trim(), en=I18N[k];
+          if(en!==undefined && en!==k) els[j].setAttribute(attrs[a], v.replace(k,en));
+        }
+      }
+    }catch(e){ /* překlad nikdy nesmí shodit stránku */ }
+  };
+
   window.uheaderHTML = function(o){
     o = o || {};
     function link(href, ico, label, key){

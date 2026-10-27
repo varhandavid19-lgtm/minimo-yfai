@@ -266,6 +266,54 @@ const SECTIONS = [
 ];
 
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const T = s => (window.T ? window.T(s) : s);
+/* Překlady modulu Nastavení (systémové popisky; data se nepřekládají). */
+if(window.registerI18N) window.registerI18N({
+  'Vidí a zakládá svoje (požadavek, žádost o dovolenou). Needituje cizí.':'Sees and creates their own (request, leave request). Cannot edit others.',
+  '+ mění stavy a údaje ve skladových věcech.':'+ changes statuses and data in warehouse items.',
+  '+ schvaluje a zamítá.':'+ approves and rejects.',
+  '+ spravuje číselníky a nastavení modulů.':'+ manages code lists and module settings.',
+  'Vše + správa uživatelů a levelů.':'Everything + managing users and levels.',
+  'Skryté':'Hidden','Jen číst':'Read only','Zapisovat':'Write',
+  'Zapisovat jen sebe':'Write own only','Zapisovat všechny':'Write all',
+  'Všichni':'All',
+  'V této oblasti nikdo není.':'No one in this area.',
+  'Zatím žádní uživatelé. Objeví se tu každý, kdo se přihlásí do portálu.':'No users yet. Everyone who signs in to the portal will appear here.',
+  'Nemáte právo měnit nastavení.':'You do not have permission to change settings.',
+  'Nastavení Engineeringu uloženo.':'Engineering settings saved.',
+  'Neuložilo se: ':'Not saved: ',
+  'Chyba načítání uživatelů: ':'Error loading users: ',
+  'Nemáte právo měnit uživatele.':'You do not have permission to change users.',
+  'Uloženo.':'Saved.',
+  'Nepodařilo se uložit: ':'Failed to save: ',
+  'Nemáte právo mazat uživatele.':'You do not have permission to delete users.',
+  'Uživatel smazán.':'User deleted.',
+  'Nepodařilo se smazat: ':'Failed to delete: ',
+  '🏭 Engineering — řízení výkonu':'🏭 Engineering — performance management',
+  'platí pro modul Engineering':'applies to the Engineering module',
+  'Plánovaný výrobní čas na linku a den':'Planned production time per line and day',
+  'Práh výkonu':'Performance threshold',
+  'Opakovaný problém':'Repeated problem',
+  'Eskalace na manažera':'Escalation to manager',
+  'Ověření účinnosti za':'Effectiveness check after',
+  'Kdo se nabízí v Engineeringu':'Who is offered in Engineering',
+  'Process Engineers — owner analýzy':'Process Engineers — analysis owner',
+  'Do výkonu nepočítat tyhle skupiny důvodů':'Exclude these reason groups from performance',
+  'Uložit nastavení Engineeringu':'Save Engineering settings',
+  '👁️ Máte nastavení jen pro čtení.':'👁️ You have the settings as read only.',
+  'Pozice / odpovědnosti':'Positions / responsibilities',
+  'Přístup k modulům':'Module access',
+  'Práva v Plánování (po sekcích)':'Permissions in Planning (by section)',
+  'Jméno':'Name','Smazat':'Delete','Smazat uživatele':'Delete user',
+  '👥 Uživatelé':'👥 Users',
+  'Výchozí podle levelu':'Default by level',
+  'Nemáš oprávnění':'No permission',
+  'Do modulu Nastavení nemáš přístup.':'You do not have access to the Settings module.',
+  '← Zpět na hlavní stránku':'← Back to home',
+  'jen pro čtení':'read only',
+  'ℹ️ Co který level znamená':'ℹ️ What each level means',
+  'Zrušit':'Cancel','Uložit':'Save','účtů':'accounts'
+});
 let activeUid=null;   // zvýrazněný řádek tabulky uživatelů (klik do řádku), klik mimo tabulku ho zruší
 /* Filtr tabulky uživatelů podle oblasti (sekce Plánování). Do oblasti patří, kdo má aspoň
    jednu její pozici; „Bez pozice" = nemá žádnou z pozic sekcí. Prohlížeč si volbu pamatuje. */
@@ -332,7 +380,7 @@ async function saveEngcfg(){
     await setDoc(doc(db,'meta','engcfg'), patch, {merge:true});
     engcfg=Object.assign({},engcfg,patch);
     toast('Nastavení Engineeringu uloženo.','ok');
-  }catch(e){ toast('Neuložilo se: '+((e&&e.message)||e),'err'); }
+  }catch(e){ toast(T('Neuložilo se: ')+((e&&e.message)||e),'err'); }
   render();
 }
 function engView(){
@@ -392,7 +440,7 @@ function subscribe(){
     users = s.docs.map(d=>({uid:d.id, ...d.data()}))
       .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'cs'));
     render();
-  }, e=>toast('Chyba načítání uživatelů: '+e.message,'err'));
+  }, e=>toast(T('Chyba načítání uživatelů: ')+e.message,'err'));
 }
 
 function editUserView(){
@@ -463,7 +511,7 @@ async function saveUser(){
   try{
     await updateDoc(doc(db,'users',u.uid), {level:u.level, role:LEVEL2ROLE[u.level], positions:u.positions, perms:u.perms, modules:u.modules});
     uedit=null; toast('Uloženo.','ok'); render();
-  }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
+  }catch(e){ toast(T('Nepodařilo se uložit: ')+e.message,'err'); }
 }
 async function removeUser(uid, name){
   if(!canWriteSettings()){ toast('Nemáte právo mazat uživatele.','err'); return; }
@@ -472,16 +520,16 @@ async function removeUser(uid, name){
   try{
     await deleteDoc(doc(db,'users',uid));
     toast('Uživatel smazán.','ok');
-  }catch(e){ toast('Nepodařilo se smazat: '+e.message,'err'); }
+  }catch(e){ toast(T('Nepodařilo se smazat: ')+e.message,'err'); }
 }
 
 function render(){
   if(!ready){ return; }
-  if(myAccess()==='none'){ appEl.innerHTML=denyView(); return; }
+  if(myAccess()==='none'){ appEl.innerHTML=denyView(); window.i18nApply&&window.i18nApply(appEl); return; }
   // překreslení (i po každém uložení změny v tabulce) nesmí odskočit — zapamatuj posuvníky
   const tw=appEl.querySelector('.utblwrap'), tTop=tw?tw.scrollTop:0, tLeft=tw?tw.scrollLeft:0;
   const wx=window.scrollX, wy=window.scrollY;
-  appEl.innerHTML = view(); wire(); renderToast();
+  appEl.innerHTML = view(); wire(); renderToast(); window.i18nApply&&window.i18nApply(appEl);
   const nw=appEl.querySelector('.utblwrap'); if(nw){ nw.scrollTop=tTop; nw.scrollLeft=tLeft; }
   window.scrollTo(wx, wy);
 }
@@ -496,14 +544,14 @@ function cellMod(u, m, rw){
   const dm=resolveModule(null, levelOf(u), m.key, u);
   const cur=(u.modules&&u.modules[m.key])||'';
   // v tabulce zkráceně „⟲ …" (= výchozí podle levelu), ať se sloupce vejdou na obrazovku
-  const opts=`<option value="" ${cur===''?'selected':''} title="Výchozí podle levelu">⟲ ${esc((MODSTATE_BY[dm]||MODSTATES[0]).label)}</option>`
+  const opts=`<option value="" ${cur===''?'selected':''} title="Výchozí podle levelu">⟲ ${esc(T((MODSTATE_BY[dm]||MODSTATES[0]).label))}</option>`
     + MODSTATES.map(s=>`<option value="${s.key}" ${cur===s.key?'selected':''}>${esc(s.label)}</option>`).join('');
   return `<select class="t-mod" data-uid="${esc(u.uid)}" data-mod="${m.key}" ${rw?'':'disabled'}>${opts}</select>`;
 }
 function cellPerm(u, s, rw){
   const dp=planDefault(u, s.key);
   const cur=(u.perms&&u.perms[s.key])||'';
-  const opts=`<option value="" ${cur===''?'selected':''} title="Výchozí podle levelu">⟲ ${esc(PERM_BY[dp].label)}</option>`
+  const opts=`<option value="" ${cur===''?'selected':''} title="Výchozí podle levelu">⟲ ${esc(T(PERM_BY[dp].label))}</option>`
     + PERM_STATES.map(p=>`<option value="${p.key}" ${cur===p.key?'selected':''}>${esc(p.label)}</option>`).join('');
   return `<select class="t-perm" data-uid="${esc(u.uid)}" data-sec="${s.key}" ${rw?'':'disabled'}>${opts}</select>`;
 }
@@ -522,13 +570,13 @@ async function writeUser(u){
     {level:u.level||levelOf(u), role:LEVEL2ROLE[u.level||levelOf(u)], positions:u.positions||[], perms:u.perms||{}, modules:u.modules||{}});
 }
 async function patchLevel(uid,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
-  u.level=val; render(); try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+  u.level=val; render(); try{ await writeUser(u); }catch(e){ toast(T('Nepodařilo se uložit: ')+e.message,'err'); } }
 async function patchMod(uid,key,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
   u.modules=Object.assign({},u.modules); if(val) u.modules[key]=val; else delete u.modules[key];
-  try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+  try{ await writeUser(u); }catch(e){ toast(T('Nepodařilo se uložit: ')+e.message,'err'); } }
 async function patchPerm(uid,key,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
   u.perms=Object.assign({},u.perms); if(val) u.perms[key]=val; else delete u.perms[key];
-  try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+  try{ await writeUser(u); }catch(e){ toast(T('Nepodařilo se uložit: ')+e.message,'err'); } }
 /* „Zapisovat všechny" v sekci Toolsetters zároveň otevírá záložku Výpočet bonusů v Plánování
    (dovolenky.html, canBonus). Když volba nově vede na „všechny" (ručně i přes „⟲ výchozí"),
    admin to musí potvrdit v okně (bonusConfirm). Zrušení nic neuloží a výběr se vrátí. */
@@ -557,10 +605,10 @@ function bonusConfirmView(){
 }
 async function addPos(uid,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
   u.positions=(u.positions||[]).slice(); if(!u.positions.includes(val)) u.positions.push(val);
-  render(); try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+  render(); try{ await writeUser(u); }catch(e){ toast(T('Nepodařilo se uložit: ')+e.message,'err'); } }
 async function rmPos(uid,val){ if(!canWriteSettings())return; const u=findU(uid); if(!u)return;
   u.positions=(u.positions||[]).filter(p=>p!==val);
-  render(); try{ await writeUser(u); }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); } }
+  render(); try{ await writeUser(u); }catch(e){ toast(T('Nepodařilo se uložit: ')+e.message,'err'); } }
 
 function denyView(){
   return `<div class="center"><div class="card">
@@ -604,7 +652,7 @@ function view(){
         👁️ Máte modul Nastavení <b>jen pro čtení</b> – uživatele vidíte, ale nemůžete je upravovat ani mazat.</p>`;
   return `${uh}
   <main>
-    <div class="panel wide"><h2>👥 Uživatelé <span class="right">${userFilter==='all'?'':shown.length+' z '}${users.length} účtů</span></h2><div class="body">
+    <div class="panel wide"><h2>👥 Uživatelé <span class="right">${userFilter==='all'?'':shown.length+' z '}${users.length} ${T('účtů')}</span></h2><div class="body">
       ${roNote}
       <p style="margin:0 0 12px;font-size:12px;color:var(--muted);background:#eef3fb;border:1px solid #d6e2f3;border-radius:8px;padding:9px 11px">
         ℹ️ Účet se tu objeví, až se jím člověk <b>poprvé přihlásí</b> do portálu (profil se vytvoří automaticky).
@@ -708,7 +756,7 @@ function wire(){
   }
 }
 
-function toast(m,k=''){ toastMsg=m; toastKind=k; renderToast(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;renderToast();},3000); }
+function toast(m,k=''){ toastMsg=(window.T?window.T(m):m); toastKind=k; renderToast(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;renderToast();},3000); }
 function renderToast(){
   document.querySelectorAll('.toast').forEach(t=>t.remove());
   if(!toastMsg) return;
