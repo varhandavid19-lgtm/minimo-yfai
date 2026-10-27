@@ -159,6 +159,34 @@ const sectionByName = n => (cfg.sections||[]).find(s=>s.name===n);
 
 /* ===== pomocné ===== */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const T = s => (window.T ? window.T(s) : s);
+if(window.registerI18N) window.registerI18N({
+  'Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.':'This module is still in preparation and tested only by the admin. You do not have access.',
+  'Nemám přístup k datům: ':'No access to data: ',
+  'PO ve schvalování':'PO in approval','PO odesláno (oprava probíhá)':'PO sent (repair in progress)',
+  'doručeno (díl zpět)':'delivered (part back)','doručeno':'delivered',
+  'Administrátor':'Administrator','Skladník':'Warehouse',
+  'Jako skladník/admin můžeš měnit stav i generovat Word a nákupní požadavek.':'As warehouse/admin you can change the status and generate a Word doc and a purchase request.',
+  'Nový požadavek na opravu':'New repair request','Nový požadavek':'New request','Externí oprava dílu — ':'External part repair — ',
+  'Popis dílu':'Part description','Skladové číslo':'Stock number','Typové označení dílu':'Part type designation',
+  'Sériové číslo':'Serial number','Typ dílu':'Part type','Počet ks':'Quantity (pcs)','Popis závady':'Fault description',
+  'Firma provádějící opravu':'Repair company','Adresa příjemce (kam se posílá)':'Recipient address (where to send)',
+  'Kontaktní osoba příjemce':'Recipient contact person','Telefon příjemce':'Recipient phone','Do čeho zabaleno':'Packaging',
+  'Délka (cm)':'Length (cm)','Výška (cm)':'Height (cm)','Jméno a příjmení odesílatele':'Sender full name','Telefon odesílatele':'Sender phone',
+  'Velikost zásilky (D×V×Š) v cm':'Parcel size (L×H×W) in cm','Hmotnost zásilky kg':'Parcel weight kg','Hodnota zásilky':'Parcel value',
+  'Obsah zásilky':'Parcel contents','Adresa + kontaktní osoba příjemce (popř. tel.)':'Address + recipient contact (incl. phone)',
+  'Skladové č.':'Stock no.','Závada':'Fault','Nákup. požadavek':'Purchase request','Vytvořeno':'Created',
+  'Povinné pole':'Required field','Pole s':'Fields with','jsou povinná.':'are required.','Zatím žádné záznamy.':'No records yet.',
+  'Doplň povinná pole.':'Fill in the required fields.','Smazáno.':'Deleted.','Změny uloženy.':'Changes saved.',
+  'Uložení selhalo: ':'Save failed: ','Nákupní požadavek už existuje.':'Purchase request already exists.',
+  'Vyplň e-mail i heslo.':'Fill in e-mail and password.','Přihlášení selhalo.':'Sign-in failed.',
+  'Vygenerovat nákupní požadavek z této opravy? Přenesou se vyplněná data a poběží standardní cestou.':'Generate a purchase request from this repair? The filled data is carried over and follows the standard flow.',
+  'Nákupní požadavek ':'Purchase request ',' vytvořen.':' created.',' založena.':' created.','Díl: ':'Part: ','Skl. č.: ':'Stock no.: ',
+  'Založit':'Create','Uložit změny':'Save changes',
+  'nepovinné — nový díl nemusí mít':'optional — a new part may not have one','linka nemá stroje':'line has no machines',
+  'nejdřív vyber linku':'select a line first','co je poškozené / co opravit':'what is damaged / what to repair',
+  'firma, ulice, město, PSČ':'company, street, city, postcode','jméno':'name','karton / paleta / bublinková fólie…':'box / pallet / bubble wrap…'
+});
 const today = () => new Date().toISOString().slice(0,10);
 const dateCz = s => { if(!s) return ''; const p=String(s).slice(0,10).split('-'); return p.length===3?`${+p[2]}. ${+p[1]}. ${p[0]}.`:s; };
 const badge = (v,defs)=>{const d=defs.find(x=>x.k===v);const t=(d&&d.label)?d.label:v;return `<span class="badge ${d?d.cls:'b-grey'}">${esc(t||'—')}</span>`;};
@@ -198,7 +226,7 @@ function subscribe(){
   try{
     unsubO=onSnapshot(query(collection(db,'opravy'),orderBy('createdTs','desc')), snap=>{
       rows=snap.docs.map(d=>Object.assign({_id:d.id}, d.data())); dataReady=true; if(!editing) render();
-    }, err=>{ fatal='Nemám přístup k datům: '+err.message; render(); });
+    }, err=>{ fatal=T('Nemám přístup k datům: ')+err.message; render(); });
     unsubR=onSnapshot(collection(db,'requests'), snap=>{
       reqRows=snap.docs.map(d=>Object.assign({_id:d.id}, d.data())); reqReady=true; if(!editing) render();
     }, ()=>{});
@@ -224,11 +252,11 @@ async function nextNakupNumber(){
 function toast(m,k=''){ toastMsg=m; toastKind=k; render(); clearTimeout(toast._t); toast._t=setTimeout(()=>{toastMsg=null;render();},4200); }
 function render(){
   const app=document.getElementById('app');
-  if(!me){ app.innerHTML=loginView(); bind(); return; }
-  if(!isOwner(me.email)){ app.innerHTML=shell(`<div class="notice">Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.</div>`); bind(); return; }
-  if(fatal){ app.innerHTML=shell(`<div class="notice">${esc(fatal)}</div>`); bind(); return; }
+  if(!me){ app.innerHTML=loginView(); bind(); window.i18nApply&&window.i18nApply(app); return; }
+  if(!isOwner(me.email)){ app.innerHTML=shell(`<div class="notice">Tento modul je zatím v přípravě a testuje ho jen správce. Nemáte sem přístup.</div>`); bind(); window.i18nApply&&window.i18nApply(app); return; }
+  if(fatal){ app.innerHTML=shell(`<div class="notice">${esc(fatal)}</div>`); bind(); window.i18nApply&&window.i18nApply(app); return; }
   app.innerHTML = shell(listView()) + (editing?modalView():'') + (toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:'');
-  bind();
+  bind(); window.i18nApply&&window.i18nApply(app);
 }
 function loginView(){
   return `<div class="login-wrap"><form class="login" id="loginForm">
@@ -426,7 +454,7 @@ const URG2PRIO = {'kritická':'kritická','vysoká':'vysoká','běžná':'běžn
 async function genNakup(o){
   const poradove=await nextNakupNumber();
   const rec={ poradove, status:'nový', typ:'Nový požadavek',
-    sklad:o.sklad||'', popis:[o.typ,o.popisdilu].filter(Boolean).join(' — ')+(o.serial?(' · SN '+o.serial):''), duvod:'Externí oprava dílu — '+(o.poradove||'')+(o.zavada?(' · '+o.zavada):''),
+    sklad:o.sklad||'', popis:[o.typ,o.popisdilu].filter(Boolean).join(' — ')+(o.serial?(' · SN '+o.serial):''), duvod:T('Externí oprava dílu — ')+(o.poradove||'')+(o.zavada?(' · '+o.zavada):''),
     priorita:URG2PRIO[o.urgentnost]||'běžná', mnozstvi:Number(o.ks)||1, cena:0, mena:'CZK',
     dodavatel:o.firma||'', vyrobce:'', ucet:'', costcenter:'', usek:o.linka||'', stroj:o.stroj||'', datum:'',
     min:0, max:0, newStock:false, url:'', notifyEmail:'', poznamka:'Vzniklo z opravy '+(o.poradove||''),
@@ -457,16 +485,16 @@ async function act(a,v,el,ev){
     case 'mtab': collect(); modalTab=v; break;
     case 'save':{ if(!canEdit())return; collect();
       if(!validate()){footMsg='Doplň povinná pole.';modalTab='oprava';render();return;}
-      try{ if(!editing._id){ const no=await createOprava(); editing=null; toast('Oprava '+no+' založena.','ok'); }
+      try{ if(!editing._id){ const no=await createOprava(); editing=null; toast('Oprava '+no+T(' založena.'),'ok'); }
         else{ await updateOprava(); editing=null; toast('Změny uloženy.','ok'); } }
-      catch(e){ footMsg='Uložení selhalo: '+e.message; render(); return; } break; }
+      catch(e){ footMsg=T('Uložení selhalo: ')+e.message; render(); return; } break; }
     case 'del':{ if(!P().del)return; const o=rows.find(x=>x._id===v);
       if(confirm(`Smazat požadavek na opravu ${o.poradove}?`)){ try{ await deleteDoc(doc(db,'opravy',v)); editing=null; toast('Smazáno.','ok'); }catch(e){ toast(e.message,'err'); } } break; }
     case 'word':{ collect(); genWord(editing); return; }
     case 'gen-nakup':{ if(!canEdit())return; const o=rows.find(x=>x._id===v); if(!o)return;
       if(linkedReq(o)){ toast('Nákupní požadavek už existuje.','err'); return; }
       if(!confirm('Vygenerovat nákupní požadavek z této opravy? Přenesou se vyplněná data a poběží standardní cestou.'))return;
-      try{ const no=await genNakup(o); toast('Nákupní požadavek '+no+' vytvořen.','ok'); editing=rows.find(x=>x._id===v)||editing; }
+      try{ const no=await genNakup(o); toast(T('Nákupní požadavek ')+no+T(' vytvořen.'),'ok'); editing=rows.find(x=>x._id===v)||editing; }
       catch(e){ toast('Nepovedlo se: '+e.message,'err'); } break; }
   }
   render();
