@@ -684,6 +684,14 @@ if(window.registerI18N) window.registerI18N({
   'Všechny účty':'All accounts','nevyřízené':'open','Jen doplnění skladu':'Stock replenishment only',
   'Jen nákupní požadavky':'Purchase requests only','Doplnění i požadavky':'Replenishment and requests',
   'Doplnění skladu':'Stock replenishment','Ukazatele za období:':'Indicators for the period:',
+  'Tento rok':'This year','z':'of','požadavků':'requests','záznamů':'records','celá historie':'full history',
+  'Filtr stavu:':'Status filter:','Otevřené požadavky':'Open requests','Uzavřené požadavky':'Closed requests','Od':'From',
+  'K poptání u dodavatele':'For inquiry with supplier','Hodnota požadavků':'Request value',
+  'poptáno · nový · ve schvalování':'inquired · new · in approval','nové požadavky bez ceny':'new requests without price',
+  'za období, bez zamítnutých · kurz ':'for the period, excluding rejected · rate ',
+  '📥 Import z Maxima':'📥 Import from Maxima','🧩 Sloupce':'🧩 Columns','⚙ Administrace':'⚙ Administration',
+  'Máš plná práva. Povinná pole, uživatele a účty spravuješ v záložce Administrace.':'You have full rights. You manage required fields, users and accounts in the Administration tab.',
+  'Hledat v popisu, skladovém čísle, výrobci…':'Search in description, stock number, manufacturer…',
   'Zrušit filtry':'Clear filters','Zrušit výběr':'Clear selection',
   /* tlačítka a akce */
   '+ Nový požadavek':'+ New request','+ Import požadavků':'+ Import requests','+ Přidat řádek':'+ Add row',
@@ -1095,8 +1103,8 @@ function listView(){
   const crit=dashRows.filter(r=>r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status)).length;
   const critRows=dashRows.filter(r=>r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status)).sort((a,b)=>String(a.created).localeCompare(String(b.created)));
   const sumEur=dashRows.filter(r=>r.status!=='zamítnuto').reduce((a,r)=>a+totalEur(r),0);
-  const card=(l,v,n,c)=>`<div class="kcard" style="border-left-color:${c}"><div class="lbl">${l}</div><div class="val" style="color:${c}">${v}</div><div class="note">${n}</div></div>`;
-  const th=(c,l)=>`<th data-col="${c}" data-a="sort" data-v="${c}">${l}${sort.col===c?(sort.dir===1?' ▲':' ▼'):''}</th>`;
+  const card=(l,v,n,c)=>`<div class="kcard" style="border-left-color:${c}"><div class="lbl">${T(l)}</div><div class="val" style="color:${c}">${v}</div><div class="note">${T(n)}</div></div>`;
+  const th=(c,l)=>`<th data-col="${c}" data-a="sort" data-v="${c}">${T(l)}${sort.col===c?(sort.dir===1?' ▲':' ▼'):''}</th>`;
   const shorten=(t,n=42)=>t&&t.length>n?t.slice(0,n-1).trim()+'…':t;
   const critCard=`<div class="kcard" style="border-left-color:${crit?'#c0392b':'#6b7a90'}">
     <div class="lbl">Kritická priorita</div><div class="val" style="color:${crit?'#c0392b':'#6b7a90'}">${crit}</div>
@@ -1119,26 +1127,26 @@ function listView(){
     <button class="dchip ${dashActive('month')}" data-a="dash-month">Tento měsíc</button>
     <button class="dchip ${dashActive('year')}" data-a="dash-year">Tento rok</button>
     <span class="datefilter">Od <input type="date" id="d-od" value="${esc(dashRange.od)}">–<input type="date" id="d-do" value="${esc(dashRange.do)}"></span>
-    <span class="dnote">${dashRows.length} z ${rows.length} požadavků · ${esc(periodTxt)}</span>
+    <span class="dnote">${dashRows.length} ${T('z')} ${rows.length} ${T('požadavků')} · ${esc(T(periodTxt))}</span>
   </div>
   <div class="cards">
     ${card('Otevřené požadavky',open,'poptáno · nový · ve schvalování','#16355f')}
     ${card('K poptání u dodavatele',toAsk,'nové požadavky bez ceny',toAsk?'#b7791f':'#6b7a90')}
     ${critCard}
-    ${card('Hodnota požadavků',num(sumEur,0)+' €','za období, bez zamítnutých · kurz '+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
+    ${card('Hodnota požadavků',num(sumEur,0)+' €',T('za období, bez zamítnutých · kurz ')+num(cfg.rates.CZK,2)+' CZK/EUR','#6b46c1')}
   </div>
   ${roleNotice()}
   ${isNakupRO()?'<div class="notice">👁️ Tento modul máte <b>jen pro čtení</b> – požadavky vidíte, ale nemůžete je zakládat ani upravovat.</div>':`<div class="newbar"><button class="btn-new" data-a="new">+ Nový požadavek</button><button class="btn-imp" data-a="ireq-open" title="Nahraj nabídku a založ z ní víc požadavků najednou">+ Import požadavků</button>${P().edit?`<button class="btn-manage ${manage.on?'on':''}" data-a="toggle-manage" title="Hromadné doplňování údajů a změna stavu">⚙ Správa požadavků</button><label class="btn-manage" id="import-drop" style="cursor:pointer" title="Import podlimitních položek z Maxima — klikni a vyber Excel, nebo sem přetáhni soubor">📥 Import z Maxima<input type="file" data-a="import-file" accept=".xlsx,.xls" hidden></label>`:''}<button class="btn-manage ${colPanel?'on':''}" data-a="toggle-cols" title="Vyber, které sloupce zobrazit, a jejich šířku">🧩 Sloupce</button></div>`}
   ${colPanel?colsPanel():''}
   ${(manage.on&&P().edit)?mgrPanel():''}
   <div class="panel">
-    <h2>Přehled požadavků <span class="right">${rr.length} z ${rows.length} záznamů</span></h2>
+    <h2>${T('Přehled požadavků')} <span class="right">${rr.length} ${T('z')} ${rows.length} ${T('záznamů')}</span></h2>
     ${(canApr&&aprSel.size)?`<div class="aprbar"><span>Zaškrtnuto ke schválení: <b>${aprSel.size}</b></span><button class="btn-ok" data-a="apr-bulk">✔ Schválit vybrané (${aprSel.size})</button><button class="btn-ghost" data-a="apr-clear">Zrušit výběr</button></div>`:''}
     <div class="legend">
       <span class="lg-h">Filtr stavu:</span>
-      <button class="stchip grp ${(!filters.grp&&!filters.status)?'on':''}" data-a="flt-all" title="Zobrazit všechny">Vše (${rows.length})</button>
-      <button class="stchip grp ${filters.grp==='open'?'on':''}" data-a="flt-grp" data-v="open"><i style="background:#e7eefb"></i>Otevřené požadavky (${openCount})</button>
-      <button class="stchip grp ${filters.grp==='closed'?'on':''}" data-a="flt-grp" data-v="closed"><i style="background:#eef1f5"></i>Uzavřené požadavky (${closedCount})</button>
+      <button class="stchip grp ${(!filters.grp&&!filters.status)?'on':''}" data-a="flt-all" title="Zobrazit všechny">${T('Vše')} (${rows.length})</button>
+      <button class="stchip grp ${filters.grp==='open'?'on':''}" data-a="flt-grp" data-v="open"><i style="background:#e7eefb"></i>${T('Otevřené požadavky')} (${openCount})</button>
+      <button class="stchip grp ${filters.grp==='closed'?'on':''}" data-a="flt-grp" data-v="closed"><i style="background:#eef1f5"></i>${T('Uzavřené požadavky')} (${closedCount})</button>
       <span class="lg-sep"></span>
       ${STATUSES.map(x=>`<button class="stchip ${filters.status===x.k?'on':''}" data-a="flt-status" data-v="${x.k}" title="Filtrovat stav ${esc(x.label||x.k)}"><i style="background:${ROW_TINT[x.k]}"></i>${esc(x.label||x.k)}</button>`).join('')}
     </div>
