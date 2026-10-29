@@ -189,6 +189,25 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   nepřekreslovalo při každém stisku klávesy a nevyskakoval kurzor z políčka.
 - Každý požadavek z importu vzniká ve stavu `nový`, stejně jako přes „+ Nový požadavek".
 
+### Čtení nabídek AI — Claude, NE Gemini
+PDF a obrázky čte **Claude** (model `claude-opus-5-5`) přes serverovou funkci
+`readOffer` ve `functions/index.js`. Excel a CSV se čtou dál v prohlížeči (SheetJS),
+AI na ně není potřeba.
+- **Klíč k Anthropicu NIKDY nedávej do stránky.** Na rozdíl od Firebase config, který
+  v kódu být musí, je tohle placený klíč — v prohlížeči by si ho přečetl kdokoliv.
+  Je v Secret Manageru jako `ANTHROPIC_API_KEY`, nastavuje se příkazem
+  `firebase functions:secrets:set ANTHROPIC_API_KEY`.
+- Prohlížeč posílá soubor v base64 přes `httpsCallable(getFunctions(fbApp,'europe-west1'),'readOffer')`
+  a dostává zpátky `{items:[{popis,mnozstvi,jednotka,cena,mena}]}`. Region musí sedět
+  s nasazením funkcí.
+- Tvar odpovědi hlídá structured output (`output_config.format` = JSON schéma), takže
+  se neparsuje volný text. Funkce navíc řeší odmítnutí modelem (`stop_reason:'refusal'`)
+  a překládá chyby Anthropicu do češtiny (neplatný klíč, došlý kredit, přetížení).
+- Když AI selže, u PDF naskočí **záložní odhadové čtení** přes pdf.js a v hlášce je
+  vidět původní důvod. Tenhle řetěz neruš — bez něj by výpadek AI zastavil celý import.
+- Firebase AI Logic / Vertex / Gemini se tu **už nepoužívá** (Firebase AI Logic umí
+  jen Gemini, Claude přes něj nejde). Nevracej se k němu.
+
 ## Modul Engineering (`engineering.html`)
 Prostoje na linkách, KPI a import týdenního reportu z interního systému Symestic.
 - Report (Downtimes) má sloupce `Segment`, `Reason`, `Start time`, `End time`,
