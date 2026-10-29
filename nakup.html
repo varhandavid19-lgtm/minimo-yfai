@@ -415,6 +415,8 @@ import { getStorage, ref as sref, uploadBytes, getDownloadURL, deleteObject }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
+import { getFunctions, httpsCallable }
+  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
 
 /* ====== FIREBASE KONFIGURACE (David / projekt nakupni-pozadavky) ====== */
 const firebaseConfig = {
@@ -443,49 +445,13 @@ try{
   });
 }catch(e){ console.warn('App Check se nepodařilo zapnout:', e&&e.message||e); }
 
-/* ===== AI čtení nabídek (Gemini přes Firebase AI Logic) =====
-   Účtuje se přes VERTEX AI backend = standardní Google Cloud / Blaze (platí na něj
-   i free-trial kredit), ne oddělená peněženka Developer API. Modely se zkoušejí
-   v pořadí – kdyby se název změnil, použije se další. Knihovna se načítá až při
-   prvním použití. */
-const AI_MODELS = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-001','gemini-flash-latest'];
-let _aiReadyP = null;
-async function aiReady(){
-  if(_aiReadyP) return _aiReadyP;
-  _aiReadyP = (async()=>{
-    const mod = await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js");
-    const { getAI, VertexAIBackend, Schema } = mod;
-    const schema = Schema.object({ properties:{
-      polozky: Schema.array({ items: Schema.object({
-        properties:{
-          popis:     Schema.string(),
-          mnozstvi:  Schema.number(),
-          jednotka:  Schema.string(),
-          cena:      Schema.number(),
-          mena:      Schema.string()
-        },
-        optionalProperties:['mnozstvi','jednotka','cena','mena']
-      }) })
-    }});
-    const backend = getAI(fbApp, { backend: new VertexAIBackend() });
-    return { getGenerativeModel: mod.getGenerativeModel, backend, schema };
-  })();
-  return _aiReadyP;
-}
-const AI_OFFER_PROMPT =
-`Jsi asistent nákupního oddělení. V přiloženém souboru je cenová NABÍDKA od dodavatele.
-Vypiš POUZE skutečné položky k objednání (každý produkt = jedna položka). Pro každou vrať:
-- popis: název/označení položky (klidně včetně kódu dílu od dodavatele)
-- mnozstvi: objednávané množství jako číslo (když není uvedené, dej 1)
-- jednotka: ks / m / kg (když nevíš, dej ks)
-- cena: cena za JEDNU jednotku (cena/ks) BEZ DPH jako číslo (ne celková cena řádku, ne s DPH)
-- mena: CZK / EUR / USD
-Pravidla:
-- NEVYPLŇUJ skladové číslo.
-- Přeskoč souhrnné řádky (mezisoučet, DPH, celkem), hlavičky, patičky, adresy, bankovní údaje.
-- Čísla vracej jako čísla (desetinná tečka), bez měny a mezer uvnitř.
-- Když je cena uvedená jen jako celková za řádek, přepočti ji na cenu za jednotku (celkem ÷ množství).
-Vrať výsledek přesně podle zadaného JSON schématu.`;
+/* ===== AI čtení nabídek (Claude přes naši serverovou funkci) =====
+   Klíč k Anthropicu je na serveru (Secret Manager), v téhle stránce není a být
+   nesmí — kdokoliv by si ho přečetl ze zdroje stránky. Prohlížeč jen pošle soubor
+   funkci `readOffer` (functions/index.js) a dostane zpátky hotový seznam položek.
+   Region musí sedět s tím, kde jsou funkce nasazené. */
+const fns = getFunctions(fbApp, 'europe-west1');
+const readOfferFn = httpsCallable(fns, 'readOffer', { timeout: 300000 });
 function logoSvg(){
   return `<svg viewBox="0 0 300 138" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YFAI minimo">
     <defs>
@@ -2040,7 +2006,7 @@ function ireqPdfItemsFlat(lines){
   return items;
 }
 
-/* ---------- AI čtení nabídky (Gemini přes Firebase AI Logic) ---------- */
+/* ---------- AI čtení nabídky (Claude, přes serverovou funkci) ---------- */
 function fileToBase64(file){
   return file.arrayBuffer().then(buf=>{
     const bytes=new Uint8Array(buf); let bin=''; const CH=0x8000;
@@ -2054,39 +2020,27 @@ function ireqMime(file){
   const e=(file.name.split('.').pop()||'').toLowerCase();
   return e==='pdf'?'application/pdf':(e==='png'?'image/png':(/jpe?g/.test(e)?'image/jpeg':'application/octet-stream'));
 }
-/* Pošle nabídku (PDF/obrázek) přímo Gemini a vrátí rozpoznané položky.
-   Zkusí modely v pořadí AI_MODELS; neznámý/zrušený model přeskočí, jiné chyby
-   (účtování, oprávnění) vyhodí hned. */
+/* Pošle nabídku (PDF/obrázek) serverové funkci a vrátí rozpoznané položky.
+   Hodnoty ještě projedeme přes vlastní kontrolu — do tabulky nesmí nic nesmyslného,
+   i kdyby model vrátil něco mimo očekávání. */
 async function ireqAiExtract(file){
-  const { getGenerativeModel, backend, schema } = await aiReady();
-  const data=await fileToBase64(file);
-  const parts=[ { inlineData:{ mimeType: ireqMime(file), data } }, { text: AI_OFFER_PROMPT } ];
-  let lastErr=null;
-  for(const name of AI_MODELS){
-    try{
-      const model=getGenerativeModel(backend, { model:name,
-        generationConfig:{ responseMimeType:'application/json', responseSchema: schema } });
-      const res=await model.generateContent(parts);
-      let txt=''; try{ txt=res.response.text(); }catch(_){ txt=''; }
-      let parsed=null;
-      try{ parsed=JSON.parse(txt); }
-      catch(_){ const m=txt&&txt.match(/[\[{][\s\S]*[\]}]/); if(m){ try{ parsed=JSON.parse(m[0]); }catch(e){} } }
-      const arr=(parsed&&(parsed.polozky||parsed.items))||(Array.isArray(parsed)?parsed:[]);
-      return (arr||[]).filter(x=>x&&String(x.popis||'').trim()).map(x=>{
-        const q=Number(x.mnozstvi), c=Number(x.cena), mena=String(x.mena||'').toUpperCase();
-        return { sklad:'', popis:String(x.popis).trim(),
-          mnozstvi:(isFinite(q)&&q>0)?q:1, jednotka:ireqUnit(x.jednotka),
-          cena:(isFinite(c)&&c>0)?Math.round(c*100)/100:'',
-          mena:['CZK','EUR','USD'].includes(mena)?mena:'CZK',
-          vyrobce:'', dodavatel:'', poznamka:'' };
-      });
-    }catch(e){
-      lastErr=e; const msg=String(e&&e.message||'');
-      if(/not found|not available|no longer available|unsupported|not supported|404/i.test(msg)) continue;
-      throw e;
-    }
+  const data = await fileToBase64(file);
+  let res;
+  try{
+    res = await readOfferFn({ data, mime: ireqMime(file), name: file.name });
+  }catch(e){
+    // callable vrací srozumitelnou českou hlášku rovnou v e.message
+    throw new Error((e && e.message) ? String(e.message) : 'čtení nabídky selhalo');
   }
-  throw lastErr||new Error('žádný dostupný model');
+  const arr = (res && res.data && Array.isArray(res.data.items)) ? res.data.items : [];
+  return arr.filter(x => x && String(x.popis||'').trim()).map(x => {
+    const q = Number(x.mnozstvi), c = Number(x.cena), mena = String(x.mena||'').toUpperCase();
+    return { sklad:'', popis:String(x.popis).trim(),
+      mnozstvi:(isFinite(q)&&q>0)?q:1, jednotka:ireqUnit(x.jednotka),
+      cena:(isFinite(c)&&c>0)?Math.round(c*100)/100:'',
+      mena:['CZK','EUR','USD'].includes(mena)?mena:'CZK',
+      vyrobce:'', dodavatel:'', poznamka:'' };
+  });
 }
 
 /* ---------- načtení nabídky ---------- */
@@ -2109,9 +2063,16 @@ async function ireqTakeFile(file){
       }catch(aiErr){
         console.warn('AI čtení nabídky selhalo:', aiErr);
         if(ext==='pdf'){
-          const lines=await ireqPdfLines(file); impReq.pdfText=lines.join('\n');
-          items=ireqPdfItems(lines);
-          note='AI teď nebyla dostupná (<b>'+esc(aiErr&&aiErr.message||'neznámá chyba')+'</b>), nabídku jsem přečetl náhradním (odhadovým) způsobem — <b>pečlivě překontroluj</b>.';
+          // Náhradní čtení PDF může selhat taky (třeba bez internetu). Pak musí být
+          // vidět PŮVODNÍ důvod od AI, ne jen hláška o nenačtené knihovně.
+          try{
+            const lines=await ireqPdfLines(file); impReq.pdfText=lines.join('\n');
+            items=ireqPdfItems(lines);
+            note='AI teď nebyla dostupná (<b>'+esc(aiErr&&aiErr.message||'neznámá chyba')+'</b>), nabídku jsem přečetl náhradním (odhadovým) způsobem — <b>pečlivě překontroluj</b>.';
+          }catch(pdfErr){
+            impReq.parseMsg=`AI se nepodařilo nabídku přečíst: <b>${esc(aiErr&&aiErr.message||'chyba')}</b> Ani náhradní čtení PDF nevyšlo (${esc(pdfErr&&pdfErr.message||'chyba')}). Soubor zůstane připnutý, řádky přidej ručně tlačítkem <b>+ Přidat řádek</b>.`;
+            render(); return;
+          }
         }else{
           impReq.parseMsg=`AI se nepodařilo nabídku přečíst: ${esc(aiErr&&aiErr.message||'chyba')} Soubor zůstane připnutý, řádky přidej ručně tlačítkem <b>+ Přidat řádek</b>.`;
           render(); return;
