@@ -355,13 +355,22 @@ function analyze(aoa, opt={}){
   // sloupec s ¼h intervalem ("00:00-00:14") — kvůli přesnému času maxima
   let ivalCol = header.findIndex(h=>/interval/i.test(h));
   if(ivalCol<0){ let best=-1,bn=0; for(let c=0;c<nc;c++){ if(ivalHits[c]>bn){bn=ivalHits[c];best=c;} } ivalCol=best; }
-  // sloupec s hodnotou: nejdřív „činná" (ne „jalová"), pak obecně, jinak nejvíc čísel
+  // sloupec s hodnotou: jen sloupce s reálnými čísly (vynechá #NUM!/prázdné a Status),
+  // priorita podle názvu (činná > spotřeba/odběr > ostatní), při shodě sloupec s víc čísly.
+  // Řeší i plyn, kde je sloupec „Spotřeba" dvakrát a první je celý #NUM!.
   let valCol = opt.valCol;
   if(valCol==null){
-    valCol = header.findIndex(h=>/[čc]inn/i.test(h));
-    if(valCol<0) valCol = header.findIndex(h=>reVal.test(h) && !/jalov|reactive|status/i.test(h));
-    if(valCol<0) valCol = header.findIndex(h=>reVal.test(h));
-    if(valCol<0){ let best=-1,bn=-1; for(let c=0;c<nc;c++){ if(c===timeCol||c===ivalCol) continue; if(numHits[c]>bn){bn=numHits[c];best=c;} } valCol=best; }
+    let best=-1, bestScore=-1;
+    for(let c=0;c<nc;c++){
+      if(c===timeCol || c===ivalCol || numHits[c]===0) continue;   // musí mít reálná čísla
+      const h=header[c]||'';
+      const pr = /[čc]inn/i.test(h) ? 3
+               : (reVal.test(h) && !/jalov|reactive|status/i.test(h)) ? 2
+               : reVal.test(h) ? 1 : 0;
+      const score = pr*1e7 + numHits[c];
+      if(score>bestScore){ bestScore=score; best=c; }
+    }
+    valCol = best;
   }
   const hasDates = timeCol>=0 && dateHits[timeCol]>0;
   // posbírej řádky (hodnota + datum + interval); řádky bez data (souhrny dole) vynech
