@@ -147,10 +147,26 @@ const canEnter = () => energyAccess(me)!=='none';
 const canWrite = () => energyAccess(me)==='write';
 
 /* ===== číselníky ===== */
+/* Elektřina: ve sloupci je čtvrthodinový VÝKON v kW. Měsíční spotřeba = Σ(kW)/4/1000 MWh,
+   max ¼h = max(kW) v kW. (Volitelně jde hodnotu brát i jako energii kWh za ¼h.)
+   Plyn: ve sloupci je m³. Měsíční odběr = Σ(m³), max = max(m³) (denní). */
 const MEDIA = {
-  el:   {k:'el',   nm:'Elektřina',  unit:'MWh', dec:3, color:'#2563a8', cls:'el',  rate:'kW',   rateMul:4000},
-  plyn: {k:'plyn', nm:'Zemní plyn', unit:'m³',  dec:0, color:'#b7791f', cls:'gas', rate:'m³/h', rateMul:4},
+  el:   {k:'el',   nm:'Elektřina',  color:'#2563a8', cls:'el',
+         totUnit:'MWh', totDec:3, maxUnit:'kW', maxDec:0, maxLabel:'Max ¼h'},
+  plyn: {k:'plyn', nm:'Zemní plyn', color:'#b7791f', cls:'gas',
+         totUnit:'m³',  totDec:0, maxUnit:'m³', maxDec:0, maxLabel:'Max denní'},
 };
+/* Z „surového" součtu/maxima sloupce udělá uložené hodnoty podle média a typu hodnoty.
+   el + 'kW'  : total = Σ/4/1000 MWh, max = max kW
+   el + 'kWh' : total = Σ/1000 MWh,   max = max*4 kW (výkon z energie)
+   plyn       : total = Σ m³,         max = max m³ */
+function computeTotals(med, rawSum, rawMax, valType){
+  if(med==='el'){
+    if(valType==='kWh') return {total:rawSum/1000, max:rawMax*4};
+    return {total:rawSum/4/1000, max:rawMax};   // výchozí: hodnota je výkon kW
+  }
+  return {total:rawSum, max:rawMax};
+}
 const MONTHS = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
 const MONTHS_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -178,7 +194,14 @@ if(window.registerI18N) window.registerI18N({
   'Čtu soubor…':'Reading the file…','Zpracovávám…':'Processing…',
   'Kontrola importu':'Import check','Médium':'Medium','Jednotka':'Unit','Rok':'Year',
   'Sloupec s hodnotou':'Value column','Sloupec s časem':'Time column','— bez času —':'— no time —',
-  'Nalezeno ¼h hodnot':'¼h values found','Měsíční součet':'Monthly total','Maximum ¼h':'Maximum ¼h',
+  'Nalezeno ¼h hodnot':'¼h values found','Nalezeno hodnot':'Values found','Měsíční součet':'Monthly total','Maximum ¼h':'Maximum ¼h',
+  'Sloupec s datem':'Date column','Max denní':'Max daily','Max ¼h':'Max ¼h',
+  'Hodnota ve sloupci je':'The column value is','výkon kW (¼h)':'power kW (¼h)','energie kWh (¼h)':'energy kWh (¼h)',
+  'Max ¼h el. (kW)':'Max ¼h el. (kW)','Denní max plyn (m³)':'Daily max gas (m³)',
+  'sjednáno':'contracted','Sjednané ¼h maximum el. (kW)':'Contracted ¼h maximum el. (kW)',
+  'Dobrý den,':'Hello,','Zasílám odečet spotřeb energií za měsíc':'Please find the energy consumption reading for','1/4hod max':'¼h max',
+  'odběr':'consumption','denní max':'daily max','oproti sjednaným':'against the contracted','Díky':'Thanks','Energie':'Energy',
+  'V souboru jsem nenašel žádné hodnoty za tento měsíc.':'I found no values for this month in the file.',
   'kdy':'when','Uložit import':'Save import','Zrušit':'Cancel','Přepíše se stávající import za tento měsíc.':'This will overwrite the existing import for this month.',
   'E-mail pro finance':'E-mail for finance','Vygenerovat e-mail (Outlook)':'Generate e-mail (Outlook)',
   'Otevře Outlook s předvyplněným e-mailem — příjemce doplníš a odešleš sám.':'Opens Outlook with a pre-filled e-mail — you add the recipient and send it yourself.',
@@ -277,57 +300,84 @@ function toDate(v){
   return null;
 }
 
-/* Z pole řádků najde sloupec s časem a sloupec s hodnotou a spočítá souhrn.
-   valCol / timeCol lze vynutit (indexy); jinak se hádají automaticky. */
+const reInterval = /^\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}$/;   // "00:00-00:14"
+/* Z pole řádků najde sloupec s datem, s hodnotou (a s ¼h intervalem), vynechá
+   souhrnné řádky bez data a spočítá součet + maximum pro vybraný měsíc.
+   valCol / timeCol lze vynutit (indexy); year/month vybírá měsíc. */
 function analyze(aoa, opt={}){
   opt = opt||{};
-  // najdi řádek záhlaví = první řádek, kde je aspoň jedna textová buňka a pod ním čísla
-  let headRow=-1;
-  for(let i=0;i<Math.min(aoa.length,15);i++){
+  // najdi řádek záhlaví = řádek s nejvíc textovými buňkami a bez čísel
+  // (přeskočí titulek typu „Časové razítko:" nahoře, který má jen jednu buňku)
+  let headRow=-1, bestTxt=-1;
+  for(let i=0;i<Math.min(aoa.length,25);i++){
     const r=aoa[i]||[];
-    if(r.some(c=>typeof c==='string'&&c.trim().length)){ headRow=i; break; }
+    const txt=r.filter(c=>typeof c==='string'&&c.trim().length).length;
+    const nums=r.filter(c=>toNum(c)!=null && toDate(c)==null).length;
+    if(txt>=2 && nums===0 && txt>bestTxt){ bestTxt=txt; headRow=i; }
   }
+  if(headRow<0){ for(let i=0;i<Math.min(aoa.length,25);i++){ if((aoa[i]||[]).some(c=>typeof c==='string'&&c.trim().length)){headRow=i;break;} } }
   const header=(headRow>=0?aoa[headRow]:[]).map(c=>String(c==null?'':c).trim());
   const dataRows=aoa.slice(headRow>=0?headRow+1:0);
-  const nc=Math.max(header.length, ...dataRows.slice(0,50).map(r=>r?r.length:0), 1);
-  // skóre sloupců: kolik buněk je číslo (ne datum) a kolik vypadá jako datum/čas
-  const numHits=new Array(nc).fill(0), dateHits=new Array(nc).fill(0);
-  for(const r of dataRows){ if(!r) continue;
+  const nc=Math.max(header.length, ...dataRows.slice(0,80).map(r=>r?r.length:0), 1);
+  const numHits=new Array(nc).fill(0), dateHits=new Array(nc).fill(0), ivalHits=new Array(nc).fill(0);
+  for(const r of dataRows.slice(0,400)){ if(!r) continue;
     for(let c=0;c<nc;c++){ const v=r[c];
-      const isDate = toDate(v)!=null;        // sériové číslo v rozsahu dat, Date, nebo datumový řetězec
-      if(isDate) dateHits[c]++;
-      else if(toNum(v)!=null) numHits[c]++;   // číslo, které NENÍ datum = kandidát na hodnotu
+      if(toDate(v)!=null) dateHits[c]++;
+      else if(toNum(v)!=null) numHits[c]++;
+      if(typeof v==='string' && reInterval.test(v.trim())) ivalHits[c]++;
     }
   }
   const reVal=/spot|consum|odb[ěe]r|kwh|mwh|m3|m³|hodnot|value|energ|množ/i;
-  const reTime=/datum|[čc]as|time|\bod\b|from|start|timestamp|interval|p[ůu]lhod|[čc]tvrt/i;
-  // sloupec času: podle názvu, jinak sloupec s nejvíc datumovými buňkami
+  // sloupec s datem: podle názvu, jinak nejvíc datumových buněk
   let timeCol = opt.timeCol;
   if(timeCol==null){
-    timeCol = header.findIndex(h=>reTime.test(h));
+    timeCol = header.findIndex(h=>/datum|date/i.test(h));
     if(timeCol<0){ let best=-1,bn=0; for(let c=0;c<nc;c++){ if(dateHits[c]>bn){bn=dateHits[c];best=c;} } timeCol=best; }
   }
-  // sloupec hodnoty: podle názvu, jinak sloupec s nejvíc čísly, který NENÍ sloupec času
+  // sloupec s ¼h intervalem ("00:00-00:14") — kvůli přesnému času maxima
+  let ivalCol = header.findIndex(h=>/interval/i.test(h));
+  if(ivalCol<0){ let best=-1,bn=0; for(let c=0;c<nc;c++){ if(ivalHits[c]>bn){bn=ivalHits[c];best=c;} } ivalCol=best; }
+  // sloupec s hodnotou: nejdřív „činná" (ne „jalová"), pak obecně, jinak nejvíc čísel
   let valCol = opt.valCol;
   if(valCol==null){
-    valCol = header.findIndex(h=>reVal.test(h));
-    if(valCol<0){ let best=-1,bn=-1; for(let c=0;c<nc;c++){ if(c===timeCol) continue; if(numHits[c]>bn){bn=numHits[c];best=c;} } valCol=best; }
+    valCol = header.findIndex(h=>/[čc]inn/i.test(h));
+    if(valCol<0) valCol = header.findIndex(h=>reVal.test(h) && !/jalov|reactive|status/i.test(h));
+    if(valCol<0) valCol = header.findIndex(h=>reVal.test(h));
+    if(valCol<0){ let best=-1,bn=-1; for(let c=0;c<nc;c++){ if(c===timeCol||c===ivalCol) continue; if(numHits[c]>bn){bn=numHits[c];best=c;} } valCol=best; }
   }
-  // posbírej hodnoty
-  let total=0, cnt=0, maxV=-Infinity, maxAt=null;
-  const monthCount={};
+  const hasDates = timeCol>=0 && dateHits[timeCol]>0;
+  // posbírej řádky (hodnota + datum + interval); řádky bez data (souhrny dole) vynech
+  const items=[]; const monthCount={};
   for(const r of dataRows){ if(!r) continue;
     const v=toNum(r[valCol]); if(v==null) continue;
-    total+=v; cnt++;
-    if(v>maxV){ maxV=v; maxAt = timeCol>=0 ? toDate(r[timeCol]) : null; }
-    if(timeCol>=0){ const d=toDate(r[timeCol]); if(d){ const k=monthKey(d.getUTCFullYear(),d.getUTCMonth()+1); monthCount[k]=(monthCount[k]||0)+1; } }
+    const d = timeCol>=0 ? toDate(r[timeCol]) : null;
+    if(hasDates && !d) continue;   // řádek bez data = souhrn („1/4 maxima", „P - celkem") → pryč
+    const iv = ivalCol>=0 ? String(r[ivalCol]??'').trim() : '';
+    items.push({v, d, iv});
+    if(d){ const k=monthKey(d.getUTCFullYear(),d.getUTCMonth()+1); monthCount[k]=(monthCount[k]||0)+1; }
   }
   // nejčastější měsíc v datech
   let guessY=null,guessM=null;
   const mk=Object.entries(monthCount).sort((a,b)=>b[1]-a[1])[0];
   if(mk){ const p=mk[0].split('-'); guessY=+p[0]; guessM=+p[1]; }
-  return {header,nc,valCol,timeCol,total,cnt,maxV:isFinite(maxV)?maxV:0,
-    maxAt:maxAt?maxAt.toISOString():null, guessY, guessM};
+  // cílový měsíc: zadaný, jinak hádaný
+  const tgtY = opt.year||guessY, tgtM = opt.month||guessM;
+  // součet a maximum jen pro cílový měsíc (nebo přes vše, když data nemají datum)
+  let rawSum=0, cnt=0, rawMax=-Infinity, maxD=null, maxIv='';
+  for(const it of items){
+    if(hasDates && tgtY && tgtM){ if(!it.d) continue;
+      if(it.d.getUTCFullYear()!==tgtY || (it.d.getUTCMonth()+1)!==tgtM) continue; }
+    rawSum+=it.v; cnt++;
+    if(it.v>rawMax){ rawMax=it.v; maxD=it.d; maxIv=it.iv; }
+  }
+  // čas maxima = datum + začátek ¼h intervalu
+  let maxAt=null;
+  if(maxD){ let hh=maxD.getUTCHours(), mm=maxD.getUTCMinutes();
+    const m=maxIv.match(/^(\d{1,2}):(\d{2})/); if(m){ hh=+m[1]; mm=+m[2]; }
+    maxAt=new Date(Date.UTC(maxD.getUTCFullYear(),maxD.getUTCMonth(),maxD.getUTCDate(),hh,mm)).toISOString();
+  }
+  return {header,nc,valCol,timeCol,ivalCol,hasDates,
+    rawSum, cnt, rawMax:isFinite(rawMax)?rawMax:0, maxAt, guessY, guessM};
 }
 
 /* ===== auth ===== */
@@ -363,6 +413,11 @@ const allKeys = () => [...new Set(rows.map(r=>monthKey(r.year,r.month)))].sort()
 const latestKey = () => allKeys()[0] || '';
 const rowFor = (key,med) => rows.find(r=>monthKey(r.year,r.month)===key && r.medium===med) || null;
 const monthsSorted = () => allKeys();   // nejnovější první
+/* Sjednotí uložený dokument na pole pro zobrazení (i starší importy bez nových polí). */
+function rd(r, med){ if(!r) return null; const M=MEDIA[med];
+  return { total:r.total, totUnit:r.totUnit||r.unit||M.totUnit,
+    max:(r.maxVal!=null?r.maxVal:r.maxQh), maxUnit:r.maxUnit||M.maxUnit,
+    maxLabel:r.maxLabel||M.maxLabel, maxAt:r.maxAt||r.maxQhAt||null, importedBy:r.importedBy||'' }; }
 
 /* ===== render ===== */
 function render(){
@@ -431,11 +486,12 @@ function cardsView(){
     const M=MEDIA[med];
     if(!r) return `<div class="kcard ${M.cls}"><div class="lbl">${esc(T(M.nm))}</div>
       <div class="val muted" style="font-size:16px">—</div><div class="note">${T('za měsíc')} ${esc(monthName(+m))} ${y}</div></div>`;
-    const rate = r.maxQh*M.rateMul;
+    const D=rd(r,med);
+    const lim=(med==='el'&&cfg.elLimit)?` / ${T('sjednáno')} ${num(cfg.elLimit,0)} kW`:'';
     return `<div class="kcard ${M.cls}">
       <div class="lbl">${esc(T(M.nm))} — ${T('Měsíční spotřeba')}</div>
-      <div class="val">${num(r.total,M.dec)} <span class="unit">${M.unit}</span></div>
-      <div class="note">${T('Max ¼h')}: <b>${num(r.maxQh,M.dec)} ${M.unit}</b> (≈ ${num(rate, med==='el'?0:1)} ${M.rate})${r.maxQhAt?` · ${esc(dtCz(r.maxQhAt))}`:''}</div>
+      <div class="val">${num(D.total,M.totDec)} <span class="unit">${D.totUnit}</span></div>
+      <div class="note">${esc(T(D.maxLabel))}: <b>${num(D.max,M.maxDec)} ${D.maxUnit}</b>${lim}${D.maxAt?` · ${esc(dtCz(D.maxAt))}`:''}</div>
     </div>`;
   };
   return `<div class="cards">${card('el',el)}${card('plyn',gas)}</div>
@@ -452,9 +508,9 @@ function chartsView(){
   const chart=(med)=>{
     const M=MEDIA[med];
     const data=keys.map(k=>{const r=rowFor(k,med);const [y,m]=k.split('-');
-      return {k, label:`${monthName(+m).slice(0,3)}`, y, val:r?r.total:0, has:!!r};});
-    return `<div class="chart"><h3><span class="sw" style="background:${M.color}"></span>${esc(T(M.nm))} (${M.unit})</h3>
-      ${barSvg(data,M.color,M.dec)}</div>`;
+      return {k, label:`${monthName(+m).slice(0,3)}`, y, val:r?(r.total||0):0, has:!!r};});
+    return `<div class="chart"><h3><span class="sw" style="background:${M.color}"></span>${esc(T(M.nm))} (${M.totUnit})</h3>
+      ${barSvg(data,M.color,M.totDec)}</div>`;
   };
   return `<div class="panel"><h2>${T('Vývoj spotřeby')}<span class="right">${T('posledních 12 měsíců')||''}</span></h2>
     <div class="body"><div class="charts">${chart('el')}${chart('plyn')}</div></div></div>`;
@@ -478,8 +534,8 @@ function barSvg(data,color,dec){
 function tableView(){
   const keys=monthsSorted();
   const r=(key)=>{
-    const [y,m]=key.split('-'); const el=rowFor(key,'el'), gas=rowFor(key,'plyn');
-    const cell=(v,M,cls)=>v?`<td class="num ${cls}">${num(v.total,M.dec)}</td><td class="num ${cls} muted">${num(v.maxQh,M.dec)}</td>`
+    const [y,m]=key.split('-'); const el=rd(rowFor(key,'el'),'el'), gas=rd(rowFor(key,'plyn'),'plyn');
+    const cell=(D,M,cls)=>D?`<td class="num ${cls}">${num(D.total,M.totDec)}</td><td class="num ${cls} muted">${num(D.max,M.maxDec)}</td>`
                           :`<td class="num ${cls} muted">—</td><td class="num ${cls} muted">—</td>`;
     const who = (el&&el.importedBy)||(gas&&gas.importedBy)||'';
     return `<tr>
@@ -487,49 +543,47 @@ function tableView(){
       ${cell(el,MEDIA.el,'el')}
       ${cell(gas,MEDIA.plyn,'gas')}
       <td class="muted">${esc(who)}</td>
-      ${canWrite()?`<td>${el||gas?`<button class="btn-ghost" data-a="delmonth" data-v="${key}" title="${T('Smazat')}">🗑</button>`:''}</td>`:''}
+      ${canWrite()?`<td>${(el||gas)?`<button class="btn-ghost" data-a="delmonth" data-v="${key}" title="${T('Smazat')}">🗑</button>`:''}</td>`:''}
     </tr>`;
   };
   return `<div class="panel"><h2>${T('Přehled po měsících')}</h2>
     <div class="body" style="padding:0;overflow:auto">
     <table><thead><tr>
       <th>${T('Měsíc')}</th>
-      <th class="num">${T('Elektřina (MWh)')}</th><th class="num">${T('Max ¼h el.')}</th>
-      <th class="num">${T('Plyn (m³)')}</th><th class="num">${T('Max ¼h plyn')}</th>
+      <th class="num">${T('Elektřina (MWh)')}</th><th class="num">${T('Max ¼h el. (kW)')}</th>
+      <th class="num">${T('Plyn (m³)')}</th><th class="num">${T('Denní max plyn (m³)')}</th>
       <th>${T('Importoval')}</th>${canWrite()?'<th></th>':''}
     </tr></thead><tbody>${keys.map(r).join('')}</tbody></table></div></div>`;
 }
 
 /* ===== e-mail pro finance ===== */
 function reportText(key){
-  const [y,m]=key.split('-'); const el=rowFor(key,'el'), gas=rowFor(key,'plyn');
+  const [y,m]=key.split('-'); const el=rd(rowFor(key,'el'),'el'), gas=rd(rowFor(key,'plyn'),'plyn');
   const L=[];
-  L.push(`${T('Report o spotřebě energií')} — ${monthName(+m)} ${y}`);
-  L.push('');
-  if(el){ L.push(`${T('Elektřina')}:`);
-    L.push(`  • ${T('Měsíční spotřeba')}: ${num(el.total,MEDIA.el.dec)} MWh`);
-    L.push(`  • ${T('Maximum ¼h')}: ${num(el.maxQh,MEDIA.el.dec)} MWh (≈ ${num(el.maxQh*MEDIA.el.rateMul,0)} kW)${el.maxQhAt?` — ${dtCz(el.maxQhAt)}`:''}`);
-    L.push(''); }
-  if(gas){ L.push(`${T('Zemní plyn')}:`);
-    L.push(`  • ${T('Měsíční spotřeba')}: ${num(gas.total,MEDIA.plyn.dec)} m³`);
-    L.push(`  • ${T('Maximum ¼h')}: ${num(gas.maxQh,MEDIA.plyn.dec)} m³ (≈ ${num(gas.maxQh*MEDIA.plyn.rateMul,1)} m³/h)${gas.maxQhAt?` — ${dtCz(gas.maxQhAt)}`:''}`);
-    L.push(''); }
+  L.push(T('Dobrý den,')); L.push('');
+  L.push(`${T('Zasílám odečet spotřeb energií za měsíc')} ${monthName(+m)} ${y}.`); L.push('');
+  if(el){ const lim=cfg.elLimit?`, ${T('oproti sjednaným')} ${num(cfg.elLimit,0)} kW`:'';
+    L.push(`${T('Elektřina')}: ${num(el.total,MEDIA.el.totDec)} MWh, ${T('1/4hod max')}: ${num(el.max,MEDIA.el.maxDec)} kW${lim}`); }
+  if(gas){ L.push(`${T('Zemní plyn')}: ${T('odběr')} = ${num(gas.total,MEDIA.plyn.totDec)} m³, ${T('denní max')} = ${num(gas.max,MEDIA.plyn.maxDec)} m³.`); }
+  L.push(''); L.push(T('Díky'));
   return L.join('\r\n');
 }
 function reportSubject(key){
   const [y,m]=key.split('-');
-  return `${T('Report o spotřebě energií')} — ${monthName(+m)} ${y}`;
+  return `${T('Energie')} ${monthName(+m)} ${y}`;
 }
 function emailPanel(){
   const subj=reportSubject(selKey), body=reportText(selKey);
   const to=esc(cfg.recipients||'');
   return `<div class="panel mailbox"><h2>📧 ${T('E-mail pro finance')}</h2><div class="body">
     <div class="notice">${T('Otevře Outlook s předvyplněným e-mailem — příjemce doplníš a odešleš sám.')}</div>
-    <div class="fgrid" style="grid-template-columns:1fr">
+    <div class="fgrid">
       <div><label>${T('Komu (nepovinné, uloží se)')}</label>
         <input id="mail-to" value="${to}" placeholder="finance@…; controlling@…" ${canWrite()?'':'disabled'}></div>
-      <div><label>${T('Předmět')}</label><input id="mail-subj" value="${esc(subj)}"></div>
-      <div><label>${T('Text e-mailu')}</label><textarea id="mail-body">${esc(body)}</textarea></div>
+      <div><label>${T('Sjednané ¼h maximum el. (kW)')}</label>
+        <input id="mail-ellimit" type="number" value="${esc(cfg.elLimit!=null?cfg.elLimit:'')}" placeholder="2500" ${canWrite()?'':'disabled'}></div>
+      <div style="grid-column:1/-1"><label>${T('Předmět')}</label><input id="mail-subj" value="${esc(subj)}"></div>
+      <div style="grid-column:1/-1"><label>${T('Text e-mailu')}</label><textarea id="mail-body">${esc(body)}</textarea></div>
     </div>
     <div class="foot" style="justify-content:flex-start;margin-top:12px">
       <button class="btn-ok" data-a="mail-open">✉️ ${T('Vygenerovat e-mail (Outlook)')}</button>
@@ -554,6 +608,7 @@ function importPanel(){
 function impModal(){
   if(!imp||!imp.a) return '';
   const a=imp.a, M=MEDIA[imp.med];
+  const t=computeTotals(imp.med, a.rawSum, a.rawMax, imp.valType);
   const colOpts=(sel,allowNone)=>{
     let o = allowNone?`<option value="-1" ${sel<0?'selected':''}>${T('— bez času —')}</option>`:'';
     for(let c=0;c<a.nc;c++){ const h=(a.header[c]||('#'+(c+1))); o+=`<option value="${c}" ${c===sel?'selected':''}>${esc(h)}</option>`; }
@@ -561,20 +616,24 @@ function impModal(){
   };
   const years=[]; const cy=new Date().getFullYear();
   for(let y=cy+1;y>=cy-5;y--) years.push(y);
+  const valTypeSel = imp.med==='el' ? `<div><label>${T('Hodnota ve sloupci je')}</label>
+        <select id="imp-valtype">
+          <option value="kW"  ${imp.valType!=='kWh'?'selected':''}>${T('výkon kW (¼h)')}</option>
+          <option value="kWh" ${imp.valType==='kWh'?'selected':''}>${T('energie kWh (¼h)')}</option>
+        </select></div>` : '';
   return `<div class="modal-bg" data-a="imp-bg"><div class="modal"><h3>${T('Kontrola importu')} — ${esc(T(M.nm))}<button class="x" data-a="imp-cancel">✕</button></h3>
     <div class="body">
       <div class="fgrid">
-        <div><label>${T('Médium')}</label><input value="${esc(T(M.nm))} (${M.unit})" disabled></div>
-        <div><label>${T('Jednotka')}</label><input value="${M.unit}" disabled></div>
         <div><label>${T('Měsíc')}</label><select id="imp-month">${MONTHS.map((mn,i)=>`<option value="${i+1}" ${(i+1)===imp.month?'selected':''}>${esc(monthName(i+1))}</option>`).join('')}</select></div>
         <div><label>${T('Rok')}</label><select id="imp-year">${years.map(y=>`<option ${y===imp.year?'selected':''}>${y}</option>`).join('')}</select></div>
         <div><label>${T('Sloupec s hodnotou')}</label><select id="imp-valcol">${colOpts(a.valCol,false)}</select></div>
-        <div><label>${T('Sloupec s časem')}</label><select id="imp-timecol">${colOpts(a.timeCol,true)}</select></div>
+        <div><label>${T('Sloupec s datem')}</label><select id="imp-timecol">${colOpts(a.timeCol,true)}</select></div>
+        ${valTypeSel}
       </div>
       <div class="sumbox">
-        ${T('Nalezeno ¼h hodnot')}: <b>${num(a.cnt,0)}</b><br>
-        ${T('Měsíční součet')}: <b>${num(a.total,M.dec)} ${M.unit}</b><br>
-        ${T('Maximum ¼h')}: <b>${num(a.maxV,M.dec)} ${M.unit}</b> (≈ ${num(a.maxV*M.rateMul, imp.med==='el'?0:1)} ${M.rate})${a.maxAt?`<br><span class="muted">${T('kdy')}: ${esc(dtCz(a.maxAt))}</span>`:''}
+        ${T('Nalezeno hodnot')} (${esc(monthName(imp.month))} ${imp.year}): <b>${num(a.cnt,0)}</b><br>
+        ${T('Měsíční spotřeba')}: <b>${num(t.total,M.totDec)} ${M.totUnit}</b><br>
+        ${esc(T(M.maxLabel))}: <b>${num(t.max,M.maxDec)} ${M.maxUnit}</b>${a.maxAt?`<br><span class="muted">${T('kdy')}: ${esc(dtCz(a.maxAt))}</span>`:''}
       </div>
       ${rowFor(monthKey(imp.year,imp.month),imp.med)?`<div class="notice warn">${T('Přepíše se stávající import za tento měsíc.')}</div>`:''}
       <div class="foot">
@@ -587,9 +646,9 @@ function impModal(){
 /* přepočítá souhrn po změně sloupců/měsíce v okně kontroly */
 function recalcImp(){
   if(!imp||!imp.aoa) return;
-  const a=analyze(imp.aoa,{valCol:imp.valCol,timeCol:imp.timeCol<0?undefined:imp.timeCol});
-  // respektuj ruční volbu času "bez času"
-  if(imp.timeCol<0){ a.timeCol=-1; a.maxAt=null; }
+  const a=analyze(imp.aoa,{valCol:imp.valCol, timeCol:imp.timeCol<0?undefined:imp.timeCol,
+    year:imp.year, month:imp.month});
+  if(imp.timeCol<0){ a.timeCol=-1; a.maxAt=null; }   // respektuj ruční „bez času"
   imp.a=a;
 }
 
@@ -639,7 +698,8 @@ async function handleFile(file, med){
     const d=new Date(); let gm=a.guessM, gy=a.guessY;
     if(!gm){ // výchozí = minulý měsíc (report se dělá 1. v měsíci)
       const pm=new Date(d.getFullYear(), d.getMonth()-1, 1); gm=pm.getMonth()+1; gy=pm.getFullYear(); }
-    imp={med, aoa, a, valCol:a.valCol, timeCol:a.timeCol, month:gm, year:gy, fileName:file.name, busy:''};
+    imp={med, aoa, a, valCol:a.valCol, timeCol:a.timeCol, month:gm, year:gy, valType:'kW', fileName:file.name, busy:''};
+    recalcImp();   // ať součet sedí přesně na vybraný měsíc
     render();
   }catch(e){ imp=null; toast((e&&e.message)||T('Nepodařilo se načíst soubor.'),'err'); }
 }
@@ -647,9 +707,13 @@ async function handleFile(file, med){
 async function saveImport(){
   if(!imp||!imp.a) return;
   const M=MEDIA[imp.med], a=imp.a;
+  const t=computeTotals(imp.med, a.rawSum, a.rawMax, imp.valType);
+  if(!a.cnt){ toast(T('V souboru jsem nenašel žádné hodnoty za tento měsíc.'),'err'); return; }
   const id=`${monthKey(imp.year,imp.month)}_${imp.med}`;
-  const data={ year:imp.year, month:imp.month, medium:imp.med, unit:M.unit,
-    total:round(a.total,6), maxQh:round(a.maxV,6), maxQhAt:a.maxAt||null, intervals:a.cnt,
+  const data={ year:imp.year, month:imp.month, medium:imp.med,
+    total:round(t.total,6), totUnit:M.totUnit,
+    maxVal:round(t.max,6), maxUnit:M.maxUnit, maxLabel:M.maxLabel, maxAt:a.maxAt||null,
+    valType:imp.med==='el'?(imp.valType||'kW'):'', intervals:a.cnt,
     fileName:imp.fileName||'', importedBy:me.name, importedAt:nowIso() };
   try{
     await setDoc(doc(db,'energy',id), data);
@@ -658,8 +722,8 @@ async function saveImport(){
 }
 const round=(v,d)=>{const p=Math.pow(10,d);return Math.round((Number(v)||0)*p)/p;};
 
-async function saveRecipients(v){
-  try{ await setDoc(doc(db,'meta','energycfg'),{recipients:v},{merge:true}); }catch(e){}
+async function saveCfg(obj){
+  try{ await setDoc(doc(db,'meta','energycfg'),obj,{merge:true}); }catch(e){}
 }
 
 function openMail(){
@@ -697,15 +761,19 @@ function bind(){
 
   // okno kontroly importu — změna voleb přepočítá souhrn
   const vc=document.getElementById('imp-valcol'), tc=document.getElementById('imp-timecol'),
-        mo=document.getElementById('imp-month'), yr=document.getElementById('imp-year');
+        mo=document.getElementById('imp-month'), yr=document.getElementById('imp-year'),
+        vt=document.getElementById('imp-valtype');
   if(vc) vc.onchange=()=>{ imp.valCol=+vc.value; recalcImp(); render(); };
   if(tc) tc.onchange=()=>{ imp.timeCol=+tc.value; recalcImp(); render(); };
-  if(mo) mo.onchange=()=>{ imp.month=+mo.value; render(); };
-  if(yr) yr.onchange=()=>{ imp.year=+yr.value; render(); };
+  if(mo) mo.onchange=()=>{ imp.month=+mo.value; recalcImp(); render(); };
+  if(yr) yr.onchange=()=>{ imp.year=+yr.value; recalcImp(); render(); };
+  if(vt) vt.onchange=()=>{ imp.valType=vt.value; render(); };
 
-  // uložení příjemců e-mailu (při opuštění pole)
+  // uložení nastavení e-mailu (při opuštění pole)
   const mt=document.getElementById('mail-to');
-  if(mt && canWrite()) mt.onchange=()=>saveRecipients(mt.value.trim());
+  if(mt && canWrite()) mt.onchange=()=>saveCfg({recipients:mt.value.trim()});
+  const ml=document.getElementById('mail-ellimit');
+  if(ml && canWrite()) ml.onchange=()=>{ const v=parseFloat(ml.value); saveCfg({elLimit:isFinite(v)?v:null}); };
 }
 
 async function delMonth(key){
