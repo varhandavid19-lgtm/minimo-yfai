@@ -68,9 +68,14 @@
   .chart .sw{width:15px;height:15px;border-radius:4px;display:inline-block}
   .chart svg{width:100%;height:auto;display:block}
 
-  /* přetažení souborů */
-  .drops{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  @media(max-width:620px){.drops{grid-template-columns:1fr}}
+  /* rozložení: obsah vlevo, import vpravo (přilepený nahoře) */
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px;align-items:start}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}}
+  .col-side{position:sticky;top:14px}
+  @media(max-width:900px){.col-side{position:static}}
+
+  /* přetažení souborů — ve sloupci vpravo pod sebou */
+  .drops{display:grid;grid-template-columns:1fr;gap:14px}
   .dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
     border:2.5px dashed;border-radius:14px;padding:30px 20px;text-align:center;cursor:pointer;
     font-weight:800;font-size:17px;transition:background .12s,border-color .12s,transform .12s;min-height:140px}
@@ -202,6 +207,7 @@ if(window.registerI18N) window.registerI18N({
   'Import dat':'Data import','Nahrát elektřinu (MWh)':'Upload electricity (MWh)','Nahrát plyn (m³)':'Upload gas (m³)',
   'Nahraj měsíční export z měřáku (.xlsx nebo .csv) se čtvrthodinovými hodnotami. Spočítám maximum ¼h a měsíční součet.':'Upload the monthly meter export (.xlsx or .csv) with quarter-hour values. I will calculate the ¼h maximum and the monthly total.',
   'Přetáhni sem stažený report (.xlsx nebo .csv), nebo klikni a vyber soubor. Spočítám max ¼h a měsíční spotřebu.':'Drag the downloaded report here (.xlsx or .csv), or click to pick a file. I will calculate the ¼h max and the monthly consumption.',
+  'Přetáhni report na Elektřinu nebo Plyn (.xlsx / .csv), nebo klikni a vyber soubor.':'Drag the report onto Electricity or Gas (.xlsx / .csv), or click to pick a file.',
   'přetáhni .xlsx / .csv sem':'drag .xlsx / .csv here',
   'Čtu soubor…':'Reading the file…','Zpracovávám…':'Processing…',
   'Kontrola importu':'Import check','Médium':'Medium','Jednotka':'Unit','Rok':'Year',
@@ -475,12 +481,17 @@ function logoSvg(){
 }
 
 function mainView(){
+  // import je sloupec vpravo (přilepený nahoře), ať se k němu nemusí scrollovat
+  const side = canWrite() ? `<aside class="col-side">${importPanel()}</aside>` : '';
+  let left;
   if(!rows.length){
-    return importPanel() + `<div class="panel"><div class="empty">${T('Zatím žádná data. Začni importem Excelu.')}</div></div>`;
+    left = `<div class="panel"><div class="empty">${T('Zatím žádná data. Začni importem Excelu.')}</div></div>`;
+  } else {
+    const keys=monthsSorted();
+    if(!selKey||!keys.includes(selKey)) selKey=keys[0];
+    left = dashbar(keys) + cardsView() + chartsView() + tableView() + emailPanel();
   }
-  const keys=monthsSorted();
-  if(!selKey||!keys.includes(selKey)) selKey=keys[0];
-  return dashbar(keys) + cardsView() + chartsView() + tableView() + emailPanel() + importPanel();
+  return `<div class="layout"><div class="col-main">${left}</div>${side}</div>`;
 }
 
 function dashbar(keys){
@@ -608,7 +619,7 @@ function emailPanel(){
 function importPanel(){
   if(!canWrite()) return `<div class="notice">👁️ ${T('👁️ Tento modul máte jen pro čtení.')}</div>`;
   return `<div class="panel"><h2>⬆️ ${T('Import dat')}</h2><div class="body">
-    <div class="notice">${T('Přetáhni sem stažený report (.xlsx nebo .csv), nebo klikni a vyber soubor. Spočítám max ¼h a měsíční spotřebu.')}</div>
+    <div class="notice" style="font-size:13px">${T('Přetáhni report na Elektřinu nebo Plyn (.xlsx / .csv), nebo klikni a vyber soubor.')}</div>
     <div class="drops">
       <label class="dropzone el" data-a="drop" data-med="el">
         <span class="ic">⚡</span><span>${T('Elektřina')}</span>
