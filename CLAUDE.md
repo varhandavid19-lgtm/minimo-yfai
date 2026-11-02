@@ -104,9 +104,11 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   `rotRowView`). **Do minulosti JDE** (David, 11/2026 — „potřebujeme měnit historii"), ale
   `assignRotation`/`clearRotation` se nejdřív zeptají (`confirmHistory`) a lišta ukáže oranžové
   varování: zpětná změna rytmu přepočítá uplynulé dny včetně bonusů a přesčasů. Od zvoleného dne
-  dál platí nové nastavení i do budoucna. „Vymazat plánování" v okně jména zůstává jen od dneška.
+  dál platí nové nastavení i do budoucna.
   Tlačítko **„Vymazat plánování"** v okně jména (`clearPlanning`, David, 10/2026) smaže
-  od dneška dál rytmus I ručně zadané směny; minulost, nepřítomnosti a poznámky zůstanou.
+  od zvoleného dne dál rytmus I ručně zadané směny; co bylo předtím, nepřítomnosti a poznámky
+  zůstanou. Den se volí v oranžovém potvrzení (políčko „Vymazat od", `pdlg.clearFrom`, výchozí
+  dnešek) — i zpětně (11/2026), pak okénko varuje, že se přepočítají bonusy a přesčasy.
   Nevracej horní formuláře.
   **Státní svátky se plánují jen ručně** (David, 10/2026): směnový rytmus na svátek
   nic nedosazuje (`rotCodeOn` místo `rotationCodeFor` v kalendáři, bonusech i náhledu
