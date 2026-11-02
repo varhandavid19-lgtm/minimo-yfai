@@ -165,6 +165,9 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   v Roku aktuální měsíc letošního roku) a „⏱ rok" (`showOt`, `personOvertime` — stejný výpočet
   jako záložka). Jen kdo v sekci zapisuje všechny, ne na mobilu. Rohová buňka a řádky skupin mají
   pak colspan 3 — při úpravách sloupců kalendáře na to pamatuj.
+  **Červené „P" nad směnou** = ten den se počítá jako přesčas (`isOtDay` — stejná pravidla jako
+  `personOvertime`; třída `ot`, `.otmark`). Vidí ho kdo v sekci zapisuje všechny. Když se mění
+  pravidla přesčasů, uprav `isOtDay` i `personOvertime` stejně.
   Nad kalendářem je přepínač **Rok / Měsíc** (`calView`, pamatuje si ho prohlížeč
   v `localStorage` 'plan-view'). V měsíci se dny roztáhnou na šířku obrazovky
   a šipky posouvají po měsících (`calMonth`), v roce po letech.

@@ -175,6 +175,11 @@
   .cal tbody tr[data-prow]:hover td,.cal tbody tr.active td{background-color:#fff1c7}
   .cal tbody tr[data-prow]:hover td.name,.cal tbody tr.active td.name{background:#fff1c7;box-shadow:inset 4px 0 0 #f6821f,2px 0 0 #e6ebf2}
   .cal td.d{cursor:pointer;user-select:none}
+  /* ⏱ přesčas: červené tučné P nad označením směny, označení se o kousek posune dolů */
+  .cal td.d.ot{position:relative}
+  .cal td.d .otmark{position:absolute;top:1px;left:0;right:0;text-align:center;font-size:10px;line-height:1;
+    font-weight:900;color:#dc2626;pointer-events:none}
+  .cal td.d.ot .lab{position:relative;top:4px}
   /* zrušená směna z rytmu (SHIFT_OFF): prázdný den s jemným šrafováním */
   .cal td.d.rotoff{background-image:repeating-linear-gradient(135deg,rgba(100,116,139,.18) 0 2px,transparent 2px 7px)}
   /* označené dny (tažením) — oranžový rámeček a lehký přeliv přes barvu záznamu */
@@ -1475,6 +1480,15 @@ function exportBonusCsv(){
 const SHIFT_HOURS = {R:8, O:8, N:8, DEN:8, SAL:8, D12:12, O12:12, N12:12};
 const shiftH = c => SHIFT_HOURS[c] || 0;
 const otSections = () => SECTIONS.filter(s=>secPerm(s.key)==='all');
+/* Je ruční směna man v den ds přesčas? Stejná pravidla jako personOvertime (bez nepřítomnosti —
+   tu řeší volající): člověk má ten den rytmus, ruční směna není OFF a rytmus má volno,
+   nebo jde o ruční 12h místo 8h z rytmu. Kalendář podle toho kreslí červené „P". */
+function isOtDay(pid, ds, man){
+  const seg=activeSeg(pid, ds);
+  if(!(seg && seg.plan) || !man || isOff(man)) return false;
+  const rc=rotCodeOn(pid, ds);
+  return !rc || (shiftH(man.shift)===12 && shiftH(rc)===8);
+}
 /* Přesčasy jednoho člověka za období od–do (abs/sm = absenceMap/shiftMap pokrývající období). */
 function personOvertime(p, from, to, abs, sm){
   const r={rhythm:false, extra:0, ext:0, hours:0, days:[]};
@@ -1781,6 +1795,10 @@ function calendarView(){
       const a=pm[dd.ds], s=eff(dd.ds);
       let cls='d', style='', tt=`${p.name} • ${dCz(dd.ds)}`, inner='';
       if(isOff(sp[dd.ds]) && !a){ cls+=' rotoff'; tt+=' • směna z rytmu zrušena'; }
+      // ⏱ přesčas: červené P nad označením směny (vidí kdo vidí přesčasy — zapisuje v sekci všechny)
+      const otDay = canEditAll() && !!sp[dd.ds] && (!a || a.days===0.5) && isOtDay(p.id, dd.ds, sp[dd.ds]);
+      const otMark = otDay ? '<span class="otmark">P</span>' : '';
+      if(otDay){ cls+=' ot'; tt+=' • ⏱ počítá se jako přesčas'; }
       if(dd.holiday)cls+=' hol'; else if(dd.weekend)cls+=' we'; else if(dd.alt)cls+=' malt';
       if(dd.first)cls+=' mstart'; if(dd.mcur)cls+=' mcur';
       if(dd.today)cls+=' today';
@@ -1797,7 +1815,7 @@ function calendarView(){
           if(nx && !nx.first && pm[nx.ds] && pm[nx.ds].id===a.id) style+=`;border-right-color:${T.fill}`;
         }
         if(dd.holiday)cls+=' holmark'; else if(dd.weekend)cls+=' wemark';
-        inner=`<span class="lab">${T.short}</span>`;   // slabé písmeno typu v každé buňce
+        inner=`${otMark}<span class="lab">${T.short}</span>`;   // slabé písmeno typu v každé buňce
         tt+=` • ${a.type}${a.days?(' ('+dayLabel(a.days)+')'):''}${a.note?(' — '+a.note):''}`;
         if(s){ cls+=' hasshift'; tt+=` • plánovaná směna: ${SHIFT_BY[s.code]?SHIFT_BY[s.code].name:s.code}`; }
       }else if(s){                            // směna (přítomnost) – jen když tu není nepřítomnost
@@ -1807,7 +1825,7 @@ function calendarView(){
         const nx=allDays[i+1], ns=(nx && !nx.first)?eff(nx.ds):null;   // souvislý pruh stejné směny
         if(ns && ns.code===s.code) style+=`;border-right-color:${S.fill}`;
         if(dd.holiday)cls+=' holmark'; else if(dd.weekend)cls+=' wemark';
-        inner = `<span class="lab lab-sh">${esc(S.lab||s.code)}</span>`;   // Salaried zobrazí R (ranní)
+        inner = `${otMark}<span class="lab lab-sh">${esc(S.lab||s.code)}</span>`;   // Salaried zobrazí R (ranní)
         tt+=` • směna ${S.name}${S.hours?(' ('+S.hours+')'):''}${s.rot?' (rotace)':''}`;
       }else if(dd.holiday){                   // svátek bez ručního záznamu: celý fialový „SV"
         cls+=' holday';
