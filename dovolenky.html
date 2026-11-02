@@ -468,6 +468,37 @@ const ROT_GROUPS = [
   {label:'Pevná 12h směna',                         plans:['FIXD12','FIXO12','FIXN12']},
   {label:'1směnný provoz (8h)',                     plans:['FIXR']},
 ];
+/* Seskupení 3směnného provozu podle AKTUÁLNÍ směny (David, 11/2026): lidé s rytmy R→N→O,
+   O→R→N, N→O→R (i starší TS-*) se v kalendáři neřadí podle rytmu, ale do skupin Ranní /
+   Odpolední / Noční podle směny, která v TOMTO týdnu (po–ne) převažuje — ruční změny se
+   počítají, zrušená směna ne. Při shodě rozhodne dnešní směna. Přepočítá se každý den
+   v 00:00:01 (scheduleMidnight). */
+const SHIFT3_PLANS = ['3SM-R','3SM-O','3SM-N','TS-R','TS-O','TS-N'];
+const SHIFT3_GROUPS = [
+  {k:'SH:R', label:'Ranní směna (R) — 3směnný provoz'},
+  {k:'SH:O', label:'Odpolední směna (O) — 3směnný provoz'},
+  {k:'SH:N', label:'Noční směna (N) — 3směnný provoz'},
+  {k:'SH:-', label:'3směnný provoz — tento týden bez směny'}
+];
+function shift3Group(pid){
+  const t=today(), dow=new Date(t+'T00:00:00').getDay(), mon=addDays(t, dow===0?-6:1-dow);
+  const cnt={R:0,O:0,N:0}; let todayCode='';
+  for(let i=0;i<7;i++){
+    const ds=addDays(mon,i);
+    const man=shifts.find(x=>x.personId===pid && x.from<=ds && x.to>=ds);
+    const c = man ? (man.shift===SHIFT_OFF ? '' : man.shift) : (rotCodeOn(pid, ds)||'');
+    if(cnt[c]!==undefined){ cnt[c]++; if(ds===t) todayCode=c; }
+  }
+  const best=Math.max(cnt.R,cnt.O,cnt.N);
+  if(!best) return 'SH:-';
+  if(todayCode && cnt[todayCode]===best) return 'SH:'+todayCode;
+  return 'SH:'+['R','O','N'].find(k=>cnt[k]===best);
+}
+/* O půlnoci (00:00:01) překresli, ať se skupiny přepočítají podle nového dne. */
+(function scheduleMidnight(){
+  const n=new Date(), t=new Date(n.getFullYear(), n.getMonth(), n.getDate()+1, 0, 0, 1);
+  setTimeout(()=>{ try{ if(me) render(); }catch(e){} scheduleMidnight(); }, t-n);
+})();
 const daysSince = (anchor,ds) => Math.round((Date.parse(ds+'T00:00:00Z')-Date.parse(anchor+'T00:00:00Z'))/86400000);
 /* Historie rotací osoby jako segmenty {plan, from} seřazené vzestupně.
    Podporuje i starý formát {plan, from} (jeden segment). */
@@ -1813,8 +1844,13 @@ function calendarView(){
   // Rozdělení tabulky podle SMĚNY (směnového rytmu platného dnes), ne podle pozice —
   // pozice je za jménem (David, 10/2026). Pořadí skupin jako v nabídce rytmů,
   // kdo rytmus nemá, je dole ve skupině „Bez směnového rytmu".
-  const planOrder=ROT_GROUPS.flatMap(g=>g.plans).concat(Object.keys(ROT_PLANS)).filter((k,i,a)=>a.indexOf(k)===i);
-  const planOf = p => { const s=activeSeg(p.id, today()); return (s && s.plan && ROT_PLANS[s.plan]) ? s.plan : ''; };
+  // 3směnné rytmy nahradí skupiny podle aktuální směny (na místě, kde byly v nabídce rytmů)
+  const planOrder=[].concat(...ROT_GROUPS.flatMap(g=>g.plans).concat(Object.keys(ROT_PLANS))
+    .filter((k,i,a)=>a.indexOf(k)===i)
+    .map(k=>k===SHIFT3_PLANS[0] ? SHIFT3_GROUPS.map(g=>g.k) : (SHIFT3_PLANS.includes(k) ? [] : [k])));
+  const planOf = p => { const s=activeSeg(p.id, today());
+    if(!(s && s.plan && ROT_PLANS[s.plan])) return '';
+    return SHIFT3_PLANS.includes(s.plan) ? shift3Group(p.id) : s.plan; };
   const groupsByPlan={};
   people.forEach(p=>{ const k=planOf(p); (groupsByPlan[k]||(groupsByPlan[k]=[])).push(p); });
   // uvnitř skupiny po úsecích/pozicích (pořadí jako v SECTIONS), pak podle jména
@@ -1828,7 +1864,7 @@ function calendarView(){
   planOrder.concat(['']).forEach(k=>{
     const grp=(groupsByPlan[k]||[]).sort(byPos);
     if(!grp.length) return;
-    const title = k ? ROT_PLANS[k].label : 'Bez směnového rytmu';
+    const title = !k ? 'Bez směnového rytmu' : k.startsWith('SH:') ? SHIFT3_GROUPS.find(g=>g.k===k).label : ROT_PLANS[k].label;
     rowsHtml.push(`<tr class="grp"><td class="name grp-name"${showOt?' colspan="3"':''} title="${esc(title)}">${esc(title)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
     grp.forEach(p=>rowsHtml.push(personRow(p)));
   });

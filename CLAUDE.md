@@ -125,6 +125,11 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   směnového rytmu". Pozice je šedě za jménem; uvnitř skupiny jsou lidé seřazení
   podle pozice (pořadí jako v `SECTIONS`), pak podle jména (`byPos`). Do sekcí (Engineering/Maintenance/
   Toolsetters) se lidé dál řadí podle pozice.
+  **Výjimka: 3směnný provoz** (rytmy R→N→O, O→R→N, N→O→R a starší TS-*, `SHIFT3_PLANS`, David 11/2026)
+  se neřadí podle rytmu, ale do skupin **Ranní / Odpolední / Noční** podle směny, která v TOMTO týdnu
+  (po–ne) převažuje (`shift3Group`; ruční změny se počítají, OFF ne, při shodě rozhodne dnešek).
+  Víkend tak zůstává ve skupině svého týdne. Každý den v 00:00:01 se stránka sama překreslí
+  (`scheduleMidnight`) a skupiny se přepočítají.
   **Poznámka ke dni** (nezávislá na směně i nepřítomnosti): řádek Poznámka v liště
   + „💾 Uložit poznámku" (`saveDayNote`) → v dokumentu jména v `people` pole
   `notes:{'RRRR-MM-DD':'text'}`, prázdná poznámku smaže (`deleteField`). Den
