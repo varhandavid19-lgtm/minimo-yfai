@@ -1795,8 +1795,8 @@ function calendarView(){
       const a=pm[dd.ds], s=eff(dd.ds);
       let cls='d', style='', tt=`${p.name} • ${dCz(dd.ds)}`, inner='';
       if(isOff(sp[dd.ds]) && !a){ cls+=' rotoff'; tt+=' • směna z rytmu zrušena'; }
-      // ⏱ přesčas: červené P nad označením směny (vidí kdo vidí přesčasy — zapisuje v sekci všechny)
-      const otDay = canEditAll() && !!sp[dd.ds] && (!a || a.days===0.5) && isOtDay(p.id, dd.ds, sp[dd.ds]);
+      // ⏱ přesčas: červené P nad označením směny (vidí všichni, David 11/2026)
+      const otDay = !!sp[dd.ds] && (!a || a.days===0.5) && isOtDay(p.id, dd.ds, sp[dd.ds]);
       const otMark = otDay ? '<span class="otmark">P</span>' : '';
       if(otDay){ cls+=' ot'; tt+=' • ⏱ počítá se jako přesčas'; }
       if(dd.holiday)cls+=' hol'; else if(dd.weekend)cls+=' we'; else if(dd.alt)cls+=' malt';
