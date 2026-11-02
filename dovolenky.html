@@ -566,7 +566,12 @@ try{ if(localStorage.getItem('plan-view')==='month') calView='month'; }catch(e){
 let alignedYear=null;              // pomocník pro jednorázové zarovnání na aktuální měsíc
 let loginBusy=false, loginErr='';
 let dlg=null;              // {personName, dateStr, items:[...]} – náhled dne pro toho, kdo jen čte
-let sel=null;              // označené dny v kalendáři {personId, a, b} (a = kde výběr začal)
+/* Výběr buněk jako v Excelu (David, 11/2026): sel = {blocks:[{r1,r2,a,b}]} — každý blok je
+   obdélník od řádku r1 do r2 (id lidí, pořadí podle rowOrder) a ode dne a do b. Tažení
+   označí obdélník (i dolů přes víc lidí), Ctrl+klik/tažení přidá další blok, Shift+klik
+   rozšíří poslední. Akce z lišty se provedou po lidech a souvislých úsecích dnů (selRuns). */
+let sel=null;
+let rowOrder=[];           // id lidí v pořadí, jak jsou v kalendáři (nastaví calendarView)
 let selNote='';            // poznámka k nepřítomnosti z lišty výběru
 let selPlan='';            // rytmus vybraný v liště výběru
 let selNoteKey='', selNoteFor=null;   // pro který výběr (a rozsah) je selNote předvyplněná
@@ -632,7 +637,7 @@ if(window.registerI18N) window.registerI18N({
   'Přesčasy = ručně zadané směny navíc proti směnovému rytmu (a prodloužení 8h na 12h).':'Overtime = manually added shifts beyond the shift rhythm (and 8h-to-12h extensions).',
   'Požadavky na správce — stejné jako v modulu LAMA, ale vlastní seznam pro Plánování.':'Requests to the administrator — same as in the LAMA module, but a separate list for Planning.',
   '1. klik označí řádek, pak v něm tažením označ dny (na mobilu ťukni na první a pak na poslední den)':'First click selects the row, then drag to mark days (on mobile tap the first and then the last day)',
-  'Shift+klik rozšíří výběr · Esc výběr zruší · směny z rytmu Vymazat neumí — přepiš je nebo rytmus ukonči':'Shift+click extends the selection · Esc clears it · rhythm shifts cannot be cleared — overwrite them or end the rhythm',
+  'Tažením označíš i víc lidí pod sebou · Ctrl+klik přidá další buňky · Shift+klik rozšíří · Esc zruší · směny z rytmu Vymazat neumí — přepiš je nebo rytmus ukonči':'Shift+click extends the selection · Esc clears it · rhythm shifts cannot be cleared — overwrite them or end the rhythm',
   /* prázdná sekce */
   'V sekci':'In section','Přidej je tlačítkem':'Add them with the button','nad kalendářem.':'above the calendar.',
   'Lidi do plánu přidává ten, kdo má v sekci právo zapisovat.':'People are added to the plan by someone with write permission in the section.',
@@ -835,7 +840,36 @@ function loginErrMsg(code){
    ========================================================== */
 const addDays = (ds,n) => { const d=new Date(ds+'T00:00:00'); d.setDate(d.getDate()+n);
   return iso(d.getFullYear(),d.getMonth(),d.getDate()); };
-const selRange = () => sel ? (sel.a<=sel.b ? [sel.a,sel.b] : [sel.b,sel.a]) : null;
+/* Označené buňky: Map id člověka → seřazené dny (RRRR-MM-DD). */
+function selMap(){
+  const m=new Map(); if(!sel) return m;
+  sel.blocks.forEach(bl=>{
+    let i1=rowOrder.indexOf(bl.r1), i2=rowOrder.indexOf(bl.r2);
+    if(i1<0) i1=i2; if(i2<0) i2=i1; if(i1<0) return;
+    const [a,b]=bl.a<=bl.b?[bl.a,bl.b]:[bl.b,bl.a];
+    rowOrder.slice(Math.min(i1,i2), Math.max(i1,i2)+1).forEach(pid=>{
+      if(!canEditPerson(pid)) return;
+      const set=m.get(pid)||new Set(); eachDay(a,b,ds=>set.add(ds)); m.set(pid,set);
+    });
+  });
+  const out=new Map(); m.forEach((set,pid)=>out.set(pid,[...set].sort())); return out;
+}
+/* Souvislé úseky výběru: [{pid, from, to}] — po lidech, po sobě jdoucí dny dohromady. */
+function selRuns(){
+  const runs=[];
+  selMap().forEach((days,pid)=>{
+    let st=null, prev=null;
+    days.forEach(ds=>{
+      if(st && addDays(prev,1)===ds){ prev=ds; return; }
+      if(st) runs.push({pid, from:st, to:prev});
+      st=ds; prev=ds;
+    });
+    if(st) runs.push({pid, from:st, to:prev});
+  });
+  return runs;
+}
+const selPersons = () => [...new Set(selRuns().map(r=>r.pid))];
+const runText = rs => rs.map(r=>r.from===r.to?dCz(r.from):dCz(r.from)+' – '+dCz(r.to)).join(', ');
 
 /* Uvolní dny od–do v kolekci (absences / shifts): záznamy, které do rozsahu
    zasahují, se smažou a jejich části mimo rozsah se znovu uloží. */
@@ -858,38 +892,44 @@ async function clearRange(col, person, from, to){
 }
 /* Nepřítomnost do vybraných dnů. half = půl dne (jen u jednoho dne). */
 async function applyAbsence(type, half, bypass){
-  const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
-  if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
-  const [from,to]=r;
-  const days = half ? 0.5 : plannableDays(p,from,to);
-  if(!(days>0)){ toast('Ve vybraných dnech nejsou žádné plánovatelné dny (víkend / svátek).','err'); return; }
+  const runs=selRuns().map(r=>Object.assign(r,{p:personById(r.pid)})).filter(r=>r.p && canEditPerson(r.pid));
+  if(!runs.length) return;
+  runs.forEach(r=>{ r.days = half ? 0.5 : plannableDays(r.p, r.from, r.to); });
+  const ok=runs.filter(r=>r.days>0);
+  if(!ok.length){ toast('Ve vybraných dnech nejsou žádné plánovatelné dny (víkend / svátek).','err'); return; }
   if(!bypass && type==='Dovolená'){
-    const list=findCollisions(p, from, to);
-    if(list.length){ collision={list, from, to, onOk:()=>applyAbsence(type, half, true)}; render(); return; }
+    const list=[].concat(...ok.map(r=>findCollisions(r.p, r.from, r.to)));
+    if(list.length){ collision={list, from:ok.map(r=>r.from).sort()[0], to:ok.map(r=>r.to).sort().pop(),
+      onOk:()=>applyAbsence(type, half, true)}; render(); return; }
   }
   busySel=true; render();
   try{
-    await clearRange('absences', p, from, to);
-    await addDoc(collection(db,'absences'),{ personId:p.id, personName:p.name, type,
-      from, to:half?from:to, note:selNote.trim(), days, createdBy:me.email, createdAt:serverTimestamp() });
-    toast(`${type}: ${p.name}, ${from===to?dCz(from):dCz(from)+' – '+dCz(to)}.`,'ok');
+    for(const r of ok){
+      await clearRange('absences', r.p, r.from, r.to);
+      await addDoc(collection(db,'absences'),{ personId:r.p.id, personName:r.p.name, type,
+        from:r.from, to:half?r.from:r.to, note:selNote.trim(), days:r.days, createdBy:me.email, createdAt:serverTimestamp() });
+    }
+    const ppl=[...new Set(ok.map(r=>r.p.name))];
+    toast(ppl.length===1 ? `${type}: ${ppl[0]}, ${runText(ok)}.` : `${type}: ${ppl.length} lidí, ${ok.length} úseků.`,'ok');
     sel=null; selNote='';
   }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
   busySel=false; render();
 }
 /* Směna do vybraných dnů. Přebije i nepřítomnost — co označím, to tam má být. */
 async function applyShift(code){
-  const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
-  if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
-  const [from,to]=r;
-  if(plannableDays(p,from,to)<=0){ toast('Ve vybraných dnech nejsou žádné plánovatelné dny (víkend / svátek).','err'); return; }
+  const ok=selRuns().map(r=>Object.assign(r,{p:personById(r.pid)}))
+    .filter(r=>r.p && canEditPerson(r.pid) && plannableDays(r.p, r.from, r.to)>0);
+  if(!ok.length){ toast('Ve vybraných dnech nejsou žádné plánovatelné dny (víkend / svátek).','err'); return; }
   busySel=true; render();
   try{
-    await clearRange('absences', p, from, to);
-    await clearRange('shifts', p, from, to);
-    await addDoc(collection(db,'shifts'),{ personId:p.id, personName:p.name, shift:code,
-      from, to, createdBy:me.email, createdAt:serverTimestamp() });
-    toast(`Směna ${SHIFT_BY[code]?SHIFT_BY[code].name:code}: ${p.name}.`,'ok');
+    for(const r of ok){
+      await clearRange('absences', r.p, r.from, r.to);
+      await clearRange('shifts', r.p, r.from, r.to);
+      await addDoc(collection(db,'shifts'),{ personId:r.p.id, personName:r.p.name, shift:code,
+        from:r.from, to:r.to, createdBy:me.email, createdAt:serverTimestamp() });
+    }
+    const ppl=[...new Set(ok.map(r=>r.p.name))];
+    toast(`Směna ${SHIFT_BY[code]?SHIFT_BY[code].name:code}: ${ppl.length===1?ppl[0]:ppl.length+' lidí'}.`,'ok');
     sel=null; selNote='';
   }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
   busySel=false; render();
@@ -899,25 +939,29 @@ async function applyShift(code){
 /* Poznámka ke dni — nezávislá na směně i nepřítomnosti. Ukládá se do jména
    v kolekci people jako notes:{'RRRR-MM-DD':'text'}; prázdná poznámku smaže. */
 async function saveDayNote(){
-  const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
-  if(!canEditPerson(p.id)) return;
+  const m=selMap(); if(!m.size) return;
   const sn=document.getElementById('sb-note'); if(sn) selNote=sn.value;
-  const note=selNote.trim(), upd={};
-  eachDay(r[0], r[1], ds=>{ upd['notes.'+ds]= note ? note : deleteField(); });
+  const note=selNote.trim();
   busySel=true; render();
   try{
-    await updateDoc(doc(db,'people',p.id), upd);
+    for(const [pid,days] of m){
+      if(!canEditPerson(pid)) continue;
+      const upd={}; days.forEach(ds=>{ upd['notes.'+ds]= note ? note : deleteField(); });
+      await updateDoc(doc(db,'people',pid), upd);
+    }
     toast(note ? 'Poznámka uložena.' : 'Poznámka smazána.','ok'); sel=null; selNote='';
   }catch(e){ toast('Poznámku se nepodařilo uložit: '+e.message,'err'); }
   busySel=false; render();
 }
 async function clearSelection(){
-  const p=personById(sel&&sel.personId); const r=selRange(); if(!p||!r) return;
-  if(!canEditPerson(p.id)) return;
+  const ok=selRuns().map(r=>Object.assign(r,{p:personById(r.pid)})).filter(r=>r.p && canEditPerson(r.pid));
+  if(!ok.length) return;
   busySel=true; render();
   try{
-    await clearRange('absences', p, r[0], r[1]);
-    await clearRange('shifts', p, r[0], r[1]);
+    for(const r of ok){
+      await clearRange('absences', r.p, r.from, r.to);
+      await clearRange('shifts', r.p, r.from, r.to);
+    }
     toast('Vybrané dny vymazány.','ok'); sel=null; selNote='';
   }catch(e){ toast('Nepodařilo se vymazat: '+e.message,'err'); }
   busySel=false; render();
@@ -1492,17 +1536,22 @@ function rotRowView(p, from){
 }
 /* Lišta dole: co se má stát s označenými dny. */
 function selBarView(){
-  const p=personById(sel.personId); const r=selRange(); if(!p||!r) return '';
-  const [from,to]=r, single=from===to;
-  const n=plannableDays(p,from,to);
+  const runs=selRuns(); if(!runs.length) return '';
+  const pids=[...new Set(runs.map(r=>r.pid))], onePerson=pids.length===1, p=personById(pids[0]);
+  if(!p) return '';
+  const cells=runs.reduce((a,r)=>{ let n=0; eachDay(r.from,r.to,()=>n++); return a+n; },0);
+  const single = cells===1, from=runs[0].from;
+  const n=runs.reduce((a,r)=>{ const q=personById(r.pid); return a+(q?plannableDays(q,r.from,r.to):0); },0);
   const sh=sectionShifts(section);
-  // nový výběr → předvyplň uloženou poznámku dne (u jednoho dne), ať jde upravit
-  const key=p.id+'|'+from+'|'+to;
+  // nový výběr → předvyplň uloženou poznámku dne (u jedné buňky), ať jde upravit
+  const key=runs.map(r=>r.pid+'|'+r.from+'|'+r.to).join(';');
   if(key!==selNoteKey || selNoteFor!==sel){ selNoteKey=key; selNoteFor=sel; selNote = single ? ((p.notes||{})[from]||'') : ''; }
+  const head = onePerson ? `<b>${esc(p.name)}</b> · ${esc(runText(runs))}`
+    : `<b>${pids.length} lidí</b> · ${cells} buněk`;
   const btn=(attr,fill,label,title)=>`<button class="sb-btn" ${attr} title="${esc(title||label)}" ${busySel?'disabled':''}>
     <span class="sw" style="background:${fill}"></span>${esc(label)}</button>`;
   return `<div class="selbar" id="selbar">
-    <div class="sb-head"><b>${esc(p.name)}</b> · ${single?dCz(from):dCz(from)+' – '+dCz(to)}
+    <div class="sb-head">${head}
       <span class="muted">(${dayLabel(n)})</span>
       <button class="sb-x" id="sb-cancel" title="Zrušit výběr (Esc)">✕</button></div>
     <div class="sb-row"><span class="sb-lbl">Nepřítomnost</span>
@@ -1514,7 +1563,7 @@ function selBarView(){
       <button class="sb-btn" id="sb-savenote" ${busySel?'disabled':''} title="Uložit poznámku k označeným dnům (prázdná poznámku smaže)">💾 Uložit poznámku</button></div>
     ${sh.length?`<div class="sb-row"><span class="sb-lbl">Směna</span>
       ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?T(s.name):(s.k+' · '+T(s.name)), T(s.name)+(s.hours?' ('+T(s.hours)+')':''))).join('')}</div>`:''}
-    ${rotRowView(p, from)}
+    ${onePerson ? rotRowView(p, from) : ''}
     <div class="sb-row"><span class="sb-lbl"></span>
       <button class="sb-btn sb-clear" id="sb-clear" ${busySel?'disabled':''}>🗑 Vymazat vybrané dny</button>
       <span class="hintmini">${busySel?'Ukládám…':'Shift+klik rozšíří výběr · Esc výběr zruší · směny z rytmu Vymazat neumí — přepiš je nebo rytmus ukonči'}</span></div>
@@ -1631,7 +1680,7 @@ function calendarView(){
   const yearMonths=buildYear(calYear), months=monthView?[yearMonths[calMonth]]:yearMonths;
   const by=absenceMap(iso(calYear,0,1),iso(calYear,11,31)), sm=shiftMap(iso(calYear,0,1),iso(calYear,11,31));
   const allDays=months.flatMap(mo=>mo.days);
-  const sr=selRange();                       // označené dny (tažením)
+  let selM=new Map();                        // označené buňky (spočítá se, až je známé pořadí řádků)
   // měsíc: sloupce dnů se rozdělí o šířku obrazovky (bez pevné šířky), na úzkém displeji aspoň DC
   const colgroup=`<colgroup><col style="width:${NC}px">${showOt?`<col style="width:${OTW}px"><col style="width:${OTW}px">`:''}${allDays.map(()=>monthView?'<col>':`<col style="width:${DC}px">`).join('')}</colgroup>`;
   const tblStyle=monthView?` style="width:100%;min-width:${NC+(showOt?2*OTW:0)+allDays.length*DC}px"`:'';
@@ -1693,7 +1742,7 @@ function calendarView(){
       }
       const dn=(p.notes||{})[dd.ds];
       if(dn){ cls+=' hasnote'; tt+=` • 📝 ${dn}`; }
-      if(sr && sel.personId===p.id && dd.ds>=sr[0] && dd.ds<=sr[1]) cls+=' sel';
+      if(selM.has(p.id) && selM.get(p.id).includes(dd.ds)) cls+=' sel';
       return `<td class="${cls}" style="${style}" data-person="${p.id}" data-date="${dd.ds}" title="${esc(tt)}">${inner}</td>`;
     }).join('');
     // pozice za jménem (skupiny jsou podle směny, ne podle pozice)
@@ -1728,6 +1777,9 @@ function calendarView(){
   const posRank = p => { const i=secPos.indexOf((p.positions||[]).find(x=>secPos.includes(x))); return i<0?999:i; };
   const byPos = (a,b) => posRank(a)-posRank(b) || bySurname(a,b);
   const rowsHtml=[];
+  // pořadí řádků (kvůli označování tažením dolů) a teprve pak výběr
+  rowOrder=[]; planOrder.concat(['']).forEach(k=>(groupsByPlan[k]||[]).sort(byPos).forEach(p=>rowOrder.push(p.id)));
+  selM=selMap();
   planOrder.concat(['']).forEach(k=>{
     const grp=(groupsByPlan[k]||[]).sort(byPos);
     if(!grp.length) return;
@@ -1874,12 +1926,14 @@ function wireApp(){
     applyAbsence(b.getAttribute('data-abs'), b.hasAttribute('data-half'))));
   document.querySelectorAll('[data-shift]').forEach(b=>b.addEventListener('click',()=>applyShift(b.getAttribute('data-shift'))));
   document.getElementById('sb-clear')?.addEventListener('click',()=>{
-    const r=selRange(); if(r && confirm(`Vymazat nepřítomnosti a ručně naplánované směny ve vybraných dnech (${r[0]===r[1]?dCz(r[0]):dCz(r[0])+' – '+dCz(r[1])})?`)) clearSelection(); });
+    const rs=selRuns(), np=new Set(rs.map(r=>r.pid)).size;
+    if(rs.length && confirm(`Vymazat nepřítomnosti a ručně naplánované směny ve vybraných dnech (${np===1?runText(rs):np+' lidí'})?`)) clearSelection(); });
   document.getElementById('sb-cancel')?.addEventListener('click',()=>{sel=null;render();});
   document.getElementById('sb-plan')?.addEventListener('change',e=>{selPlan=e.target.value;});
-  document.getElementById('sb-rot')?.addEventListener('click',()=>{ const r=selRange(); if(r) assignRotation(sel.personId, selPlan, r[0]); });
-  document.getElementById('sb-rotclear')?.addEventListener('click',()=>{ const r=selRange();
-    if(r && confirm(`Ukončit směnový rytmus od ${dCz(r[0])}? Co bylo předtím, zůstane.`)) clearRotation(sel.personId, r[0]); });
+  // rytmus jen při výběru jednoho člověka — od prvního označeného dne
+  document.getElementById('sb-rot')?.addEventListener('click',()=>{ const rs=selRuns(); if(rs.length) assignRotation(rs[0].pid, selPlan, rs[0].from); });
+  document.getElementById('sb-rotclear')?.addEventListener('click',()=>{ const rs=selRuns();
+    if(rs.length && confirm(`Ukončit směnový rytmus od ${dCz(rs[0].from)}? Co bylo předtím, zůstane.`)) clearRotation(rs[0].pid, rs[0].from); });
   const sn=document.getElementById('sb-note'); sn?.addEventListener('input',()=>{selNote=sn.value;});
   document.getElementById('sb-savenote')?.addEventListener('click',saveDayNote);
 
@@ -1896,16 +1950,20 @@ function wireApp(){
     const td=e.target.closest('td.d'); if(!td) return;
     const pid=td.getAttribute('data-person'), ds=td.getAttribute('data-date');
     if(!canEditPerson(pid)) return;                     // jen čtení → řeší klik (náhled)
-    if(!rowWasActive){ if(sel && sel.personId!==pid){ sel=null; render(); } return; }   // 1. klik jen označí řádek
+    const add = e.ctrlKey || e.metaKey;                 // Ctrl (na Macu Cmd) = přidat k výběru
+    if(!rowWasActive && !add && !e.shiftKey){ if(sel){ sel=null; render(); } return; }   // 1. klik jen označí řádek
     e.preventDefault();                                 // ať se při tažení neoznačuje text
-    if(e.shiftKey && sel && sel.personId===pid) sel.b=ds;
-    else sel={personId:pid, a:ds, b:ds};
+    let bl;
+    if(e.shiftKey && sel && sel.blocks.length){ bl=sel.blocks[sel.blocks.length-1]; bl.r2=pid; bl.b=ds; }
+    else{ bl={r1:pid, r2:pid, a:ds, b:ds}; if(add && sel) sel.blocks.push(bl); else sel={blocks:[bl]}; }
     dragging=true; paintSel();
     const move=ev=>{
       const el=document.elementFromPoint(ev.clientX, ev.clientY);
       const c=el && el.closest && el.closest('td.d');
-      if(c && c.getAttribute('data-person')===sel.personId && c.getAttribute('data-date')!==sel.b){
-        sel.b=c.getAttribute('data-date'); paintSel(); }
+      if(!c) return;
+      const cp=c.getAttribute('data-person'), cd=c.getAttribute('data-date');
+      if(!canEditPerson(cp) || (cp===bl.r2 && cd===bl.b)) return;
+      bl.r2=cp; bl.b=cd; paintSel();
     };
     const up=()=>{ document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up);
       dragging=false; pendingRender=false; render(); };
@@ -1920,8 +1978,9 @@ function wireApp(){
     if(!canEditPerson(pid)){ openDay(pid, ds); return; }
     if(e.pointerType==='mouse' || (e.detail>0 && !lastTouch)) return;   // myš už vyřešilo tažení
     // dotyk: 1. ťuknutí = začátek, 2. ťuknutí ve stejném řádku = konec
-    if(sel && sel.personId===pid && sel.a===sel.b && ds!==sel.a) sel.b=ds;
-    else sel={personId:pid, a:ds, b:ds};
+    const b0=sel && sel.blocks.length===1 ? sel.blocks[0] : null;
+    if(b0 && b0.r1===pid && b0.r2===pid && b0.a===b0.b && ds!==b0.a) b0.b=ds;
+    else sel={blocks:[{r1:pid, r2:pid, a:ds, b:ds}]};
     render();
   });
 }
@@ -1937,9 +1996,9 @@ document.addEventListener('keydown',e=>{
 /* Překreslí jen označení vybraných dnů (při tažení bez celého renderu). */
 function paintSel(){
   document.querySelectorAll('.cal td.d.sel').forEach(td=>td.classList.remove('sel'));
-  const r=selRange(); if(!r) return;
-  document.querySelectorAll(`.cal td.d[data-person="${sel.personId}"]`).forEach(td=>{
-    const ds=td.getAttribute('data-date'); if(ds>=r[0] && ds<=r[1]) td.classList.add('sel'); });
+  selMap().forEach((days,pid)=>{ const set=new Set(days);
+    document.querySelectorAll(`.cal td.d[data-person="${pid}"]`).forEach(td=>{
+      if(set.has(td.getAttribute('data-date'))) td.classList.add('sel'); }); });
 }
 
 /* Klik na políčko u toho, kdo plán jen prohlíží → náhled dne bez úprav. */

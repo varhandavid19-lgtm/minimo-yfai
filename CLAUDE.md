@@ -89,7 +89,14 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   1. klik do řádku ho jen označí (žlutě, `activeRow`/`rowWasActive`), teprve v označeném
   řádku tažením myší označíš dny / 2. klik na jméno otevře okno jména (na dotyku dvě ťuknutí, Shift+klik
   rozšíří), dole se objeví lišta (`selBarView`) s druhy nepřítomnosti, ½ dne
-  dovolené, směnami sekce a „Vymazat". Zápis nejdřív uvolní vybrané dny
+  dovolené, směnami sekce a „Vymazat".
+  **Výběr jako v Excelu** (David, 11/2026): `sel={blocks:[{r1,r2,a,b}]}` — tažení označí obdélník
+  (dny doprava i lidi dolů, pořadí řádků `rowOrder` z `calendarView`), **Ctrl+klik/tažení** přidá
+  další blok (nemusí sousedit, Ctrl jde i bez předchozího označení řádku), Shift+klik rozšíří
+  poslední blok. `selMap()` = lidé → dny, `selRuns()` = souvislé úseky po lidech; každá akce lišty
+  (`applyAbsence`, `applyShift`, `saveDayNote`, `clearSelection`) projde všechny úseky. Řádek
+  Rytmus v liště jen při výběru jednoho člověka, ½ dne dovolené jen u jedné buňky.
+  Zápis nejdřív uvolní vybrané dny
   (`clearRange` — přesahující záznamy se rozdělí), pak uloží nový záznam. Směna
   přebije i nepřítomnost, nepřítomnost směnu jen překryje. Během tažení se
   nepřekresluje (`dragging`). Směnový rytmus na rok (rotace) jde nastavit v okně
