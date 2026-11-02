@@ -101,7 +101,10 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   přebije i nepřítomnost, nepřítomnost směnu jen překryje. Během tažení se
   nepřekresluje (`dragging`). Směnový rytmus na rok (rotace) jde nastavit v okně
   jména (od dneška) i v liště výběru (řádek Rytmus, od prvního označeného dne,
-  `rotRowView`). Do minulosti NE — `assignRotation`/`clearRotation` to odmítnou.
+  `rotRowView`). **Do minulosti JDE** (David, 11/2026 — „potřebujeme měnit historii"), ale
+  `assignRotation`/`clearRotation` se nejdřív zeptají (`confirmHistory`) a lišta ukáže oranžové
+  varování: zpětná změna rytmu přepočítá uplynulé dny včetně bonusů a přesčasů. Od zvoleného dne
+  dál platí nové nastavení i do budoucna. „Vymazat plánování" v okně jména zůstává jen od dneška.
   Tlačítko **„Vymazat plánování"** v okně jména (`clearPlanning`, David, 10/2026) smaže
   od dneška dál rytmus I ručně zadané směny; minulost, nepřítomnosti a poznámky zůstanou.
   Nevracej horní formuláře.

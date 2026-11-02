@@ -653,6 +653,7 @@ if(window.registerI18N) window.registerI18N({
   '🔁 Směnový rytmus na celý rok':'🔁 Shift rhythm for the whole year','🔁 Směnový rytmus na celý rok':'🔁 Shift rhythm for the whole year',
   'Bez směnového rytmu — přesčasy se nepočítají':'No shift rhythm — overtime is not counted','bez směnového rytmu':'no shift rhythm',
   'Rytmus nejde nastavit do minulosti — označ jako první den dnešek nebo později.':'The rhythm cannot be set in the past — mark today or later as the first day.',
+  '⚠️ Měníte historii — rytmus se změní zpětně, přepočítají se i uplynulé bonusy a přesčasy.':'⚠️ You are changing history — the rhythm changes retroactively, past bonuses and overtime are recalculated too.',
   '1směnný provoz (8h)':'1-shift operation (8h)','2směnný provoz (8h, ranní/odpolední)':'2-shift operation (8h, morning/afternoon)',
   '3směnný provoz (8h, týdenní rotace)':'3-shift operation (8h, weekly rotation)','4směnný provoz (12h, 24/7 – dle týmu)':'4-shift operation (12h, 24/7 – per team)',
   'Pevná 12h směna':'Fixed 12h shift','Prodloužení 8h→12h':'Extension 8h→12h',
@@ -994,15 +995,19 @@ function rotAnchor(planKey, from){
   return dow===0 ? addDays(from,1) : dow===6 ? addDays(from,2) : addDays(from,1-dow);
 }
 /* Rytmus se nastavuje od zvoleného dne dál (z okna jména od dneška, z lišty výběru
-   od prvního označeného dne). Do minulosti nejde — co už proběhlo, se nepřepisuje.
-   Segmenty před tímto dnem zůstanou, ty od něj dál nahradí nový rytmus. */
+   od prvního označeného dne). Segmenty před tímto dnem zůstanou, ty od něj dál nahradí nový rytmus.
+   Do minulosti JDE (David, 11/2026 — „potřebujeme měnit historii"), ale jen po potvrzení:
+   zpětná změna rytmu přepočítá uplynulé dny včetně bonusů a přesčasů. */
+const confirmHistory = (from, what) => from>=today() || confirm(
+  `Měníte historii: ${what} zpětně od ${dCz(from)}.\n\nPřepočítají se i uplynulé dny včetně bonusů a přesčasů. `
+  + 'Od tohoto dne dál platí nové nastavení (i do budoucna). Ručně zadané směny a nepřítomnosti zůstanou.\n\nPokračovat?');
 async function assignRotation(personId, plan, from){
   from=from||today();
   const p=allUsers.find(x=>x.id===personId);
   if(!p){ toast('Vyberte zaměstnance.','err'); return; }
   if(!canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
   if(!ROT_PLANS[plan]){ toast('Vyberte směnový rytmus.','err'); return; }
-  if(from<today()){ toast('Rytmus nejde nastavit do minulosti — začni nejdřív dneškem.','err'); return; }
+  if(!confirmHistory(from, 'rytmus se nastaví')) return;
   try{
     const past=rotSegments(p.id).filter(s=>s.from<from);
     const anchor=rotAnchor(plan, from);
@@ -1015,7 +1020,7 @@ async function clearRotation(personId, from){
   from=from||today();
   const p=allUsers.find(x=>x.id===personId);
   if(p && !canEditPerson(p.id)){ toast('Tady můžeš plán jen prohlížet.','err'); return; }
-  if(from<today()){ toast('Rytmus nejde ukončit v minulosti.','err'); return; }
+  if(!confirmHistory(from, 'rytmus se ukončí')) return;
   try{
     const past=rotSegments(personId).filter(s=>s.from<from);
     if(past.length){   // ponech, co bylo před tímto dnem, od něj rytmus ukonči
@@ -1520,19 +1525,19 @@ function headerView(){
 }
 
 /* Řádek „Rytmus" v liště: rozplánovat / ukončit rytmus od prvního označeného dne.
-   Do minulosti nejde — tlačítka se zamknou a řádek řekne proč. */
+   Do minulosti jde, řádek na to upozorní a uložení se ještě zeptá (confirmHistory). */
 function rotRowView(p, from){
   const allPlanKeys=ROT_GROUPS.flatMap(g=>g.plans);
   const cur=activeSeg(p.id, from);
   if(!allPlanKeys.includes(selPlan)) selPlan=(cur&&allPlanKeys.includes(cur.plan))?cur.plan:allPlanKeys[0];
-  const past=from<today(), dis=(past||busySel)?'disabled':'';
+  const past=from<today(), dis=busySel?'disabled':'';
   const pOpts=ROT_GROUPS.map(g=>`<optgroup label="${esc(g.label)}">${g.plans.map(k=>
     `<option value="${k}" ${selPlan===k?'selected':''}>${esc(ROT_PLANS[k].label)}</option>`).join('')}</optgroup>`).join('');
   return `<div class="sb-row"><span class="sb-lbl">Rytmus</span>
     <select id="sb-plan" ${dis}>${pOpts}</select>
     <button class="sb-btn" id="sb-rot" ${dis}>🔁 Rozplánovat od ${dCz(from)}</button>
     ${rotSegments(p.id).length?`<button class="sb-btn" id="sb-rotclear" ${dis}>Ukončit rytmus od ${dCz(from)}</button>`:''}
-    ${past?'<span class="hintmini" style="color:var(--red)">Rytmus nejde nastavit do minulosti — označ jako první den dnešek nebo později.</span>':''}</div>`;
+    ${past?'<span class="hintmini" style="color:#b45309;font-weight:700">⚠️ Měníte historii — rytmus se změní zpětně, přepočítají se i uplynulé bonusy a přesčasy.</span>':''}</div>`;
 }
 /* Lišta dole: co se má stát s označenými dny. */
 function selBarView(){
