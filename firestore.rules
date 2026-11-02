@@ -19,9 +19,17 @@ service cloud.firestore {
     function myPositions() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('positions', []);
     }
+    function myMod(key) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+             .get('modules', {}).get(key, '');
+    }
+    // Engineering: ručně nastavené právo u uživatele má přednost před pozicemi.
+    // „write" pustí k zápisu i někoho bez PE pozice, „none" ho naopak odřízne.
     function isEngineer() {
-      return signedIn() && myPositions().hasAny(
-        ['IMM PE','SLUSH PE','FOAM PE','ASSY PE','GB/DP PE','PE coordinator']);
+      return signedIn() && (
+        myMod('engineering') == 'write'
+        || (myMod('engineering') == '' &&
+            myPositions().hasAny(['IMM PE','SLUSH PE','FOAM PE','ASSY PE','GB/DP PE','PE coordinator'])));
     }
     // Kdo smí zakládat a upravovat problem solving, opatření a tasky.
     function canEng()         { return isAdmin() || isEngineer(); }
@@ -29,10 +37,7 @@ service cloud.firestore {
     // který David nastavuje v Nastavení. Když tam nic není, platí výchozí stav —
     // správci podle e-mailu a PE koordinátoři zapisují, ostatní modul nevidí.
     // Stejná logika je v index.html, header.js, nastaveni.html a shopfloor.html.
-    function sfwSet() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data
-             .get('modules', {}).get('shopfloor', '');
-    }
+    function sfwSet() { return myMod('shopfloor'); }
     function sfwAccess() {
       return !signedIn() ? 'none'
            : sfwSet() in ['none','read','write'] ? sfwSet()

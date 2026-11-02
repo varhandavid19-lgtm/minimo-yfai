@@ -226,6 +226,7 @@ const MODULES_LIST = [
   {key:'shopfloor', label:'Shopfloor walk'},
   {key:'lama',      label:'Úkoly pro LAMA AGENCY'},
   {key:'energie',   label:'Spotřeba energií'},
+  {key:'engineering', label:'Engineering (prostoje a KPI)'},
 ];
 const MODSTATES = [
   {key:'none',  label:'Skryté'},
@@ -239,6 +240,13 @@ const OPRAVY_OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhanda
    kohokoli dalšího, nebo naopak přístup koordinátorovi odebrat.
    Stejná logika je v index.html, header.js, shopfloor.html a v pravidlech Firestore. */
 const SFW_POSITIONS = ['PE coordinator'];
+/* Engineering: výchozí přístup mají správci a lidé s pozicí PE nebo PE coordinator. */
+const ENG_POSITIONS = ['IMM PE','SLUSH PE','FOAM PE','ASSY PE','GB/DP PE','PE coordinator'];
+const engDefault = u => {
+  const mail=String((u&&u.email)||'').trim().toLowerCase();
+  if(OPRAVY_OWNERS.includes(mail)) return 'write';
+  return ((u&&u.positions)||[]).some(p=>ENG_POSITIONS.includes(String(p).trim())) ? 'write' : 'none';
+};
 const sfwDefault = u => {
   const mail=String((u&&u.email)||'').trim().toLowerCase();
   if(OPRAVY_OWNERS.includes(mail)) return 'write';
@@ -247,6 +255,7 @@ const sfwDefault = u => {
 const resolveModule = (mods, level, key, u) => { const p=mods&&mods[key];
   if(MODSTATE_BY[p]) return p;
   if(key==='shopfloor') return sfwDefault(u);
+  if(key==='engineering') return engDefault(u);
   // Úkoly pro LAMA AGENCY: bez ručního nastavení zapisují jen správci, ostatní modul nevidí.
   // Stejná logika je v index.html, header.js, lama.html a v pravidlech Firestore.
   if(key==='lama') return OPRAVY_OWNERS.includes(String((u&&u.email)||'').trim().toLowerCase()) ? 'write' : 'none';

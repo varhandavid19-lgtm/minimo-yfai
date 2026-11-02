@@ -130,8 +130,15 @@
     function engineeringLink(){
       var who = String(o.email||o.user||'').trim().toLowerCase();
       var pos = o.positions || [];
-      var ok = OPRAVY_OWNERS.indexOf(who)>=0;
-      for(var i=0;i<pos.length && !ok;i++) if(ENG_POSITIONS.indexOf(String(pos[i]).trim())>=0) ok=true;
+      // ruční nastavení u uživatele (o.mods.engineering) má přednost před pozicemi
+      var set = (o.mods || {}).engineering;
+      var ok;
+      if(set==='none') return '';
+      else if(set==='read' || set==='write') ok = true;
+      else {
+        ok = OPRAVY_OWNERS.indexOf(who)>=0;
+        for(var i=0;i<pos.length && !ok;i++) if(ENG_POSITIONS.indexOf(String(pos[i]).trim())>=0) ok=true;
+      }
       if(!ok) return '';
       return '<a class="'+(o.cur==='engineering'?'cur':'')+'" href="engineering.html">🏭 '+tr('Engineering')+'</a>';
     }

@@ -219,8 +219,12 @@ const isOpravyOwner = () => OPRAVY_OWNERS.includes(String((me&&me.email)||'').tr
 /* Engineering vidí správci a lidé s pozicí PE nebo PE coordinator.
    Stejný seznam je v header.js, engineering.html i v pravidlech Firestore. */
 const ENG_POSITIONS = ['IMM PE','SLUSH PE','FOAM PE','ASSY PE','GB/DP PE','PE coordinator'];
-const isEngPerson = () => isOpravyOwner()
-  || (myPositions||[]).some(p=>ENG_POSITIONS.includes(String(p).trim()));
+/* Engineering: ruční nastavení u uživatele má přednost před pozicemi.
+   Stejná logika je v engineering.html, header.js, nastaveni.html a firestore.rules. */
+const engAccess = () => { const set=(myModules||{}).engineering;
+  if(set==='none'||set==='read'||set==='write') return set;
+  return (isOpravyOwner() || (myPositions||[]).some(p=>ENG_POSITIONS.includes(String(p).trim()))) ? 'write' : 'none'; };
+const isEngPerson = () => engAccess()!=='none';
 /* Shopfloor walk: výchozí přístup mají správci a PE koordinátoři, ostatní ho nevidí.
    Ruční nastavení u uživatele (Skryté/Jen číst/Zapisovat) má VŽDY přednost —
    takže jde přístup i koordinátorovi odebrat, nebo přidat komukoli dalšímu.

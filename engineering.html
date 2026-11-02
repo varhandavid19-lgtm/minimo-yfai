@@ -473,7 +473,21 @@ const OWNERS = ['david.varhan@yanfeng.com','varhan@minimo.yfai','varhandavid19@g
 const ENG_POSITIONS = ['IMM PE','SLUSH PE','FOAM PE','ASSY PE','GB/DP PE','PE coordinator'];
 const isOwner = e => OWNERS.includes(String(e||'').trim().toLowerCase());
 const hasEngPosition = pos => (pos||[]).some(p=>ENG_POSITIONS.includes(String(p).trim()));
-const canEnter = u => !!u && (isOwner(u.email) || hasEngPosition(u.positions));
+/* Kdo do Engineeringu smí.
+   Výchozí stav: správci podle e-mailu a lidé s pozicí PE nebo PE coordinator
+   zapisují, ostatní modul nevidí. Ručně nastavené právo v Nastavení
+   (users.modules.engineering = none/read/write) má VŽDY přednost — tak se
+   přístup dá dát komukoli dalšímu, nebo naopak odebrat.
+   Stejná logika je v index.html, header.js, nastaveni.html a ve firestore.rules. */
+const engAccess = u => {
+  if(!u) return 'none';
+  const set=(u.modules||{}).engineering;
+  if(set==='none'||set==='read'||set==='write') return set;
+  return (isOwner(u.email) || hasEngPosition(u.positions)) ? 'write' : 'none';
+};
+const canEnter = u => engAccess(u)!=='none';
+/* Smí zapisovat? „Jen číst" si modul prohlédne, ale nic nezaloží ani neuloží. */
+const canEdit = () => engAccess(me)==='write';
 /* Stejný seznam jako isEmailAdmin v firestore.rules — kdyby se lišily, správci by
    se v aplikaci nabídl import, který by mu server zamítl (nebo naopak). */
 const ADMIN_EMAILS = ['varhan@minimo.yfai','norkova@minimo.yfai','david.varhan@yanfeng.com','varhandavid19@gmail.com'];
@@ -484,7 +498,7 @@ const LEVEL_LABEL = {basic:'Basic',warehouse:'Warehouse',approver:'Approver',wad
 const canImport = () => !!me && me.role==='admin';
 /* Report prostojů ze Symesticu nahraje kdokoli, kdo do modulu vůbec smí —
    tedy procesní inženýr, koordinátor i správce. Import scrapu zůstal správci. */
-const canImportDt = () => canEnter(me);
+const canImportDt = () => canEdit();
 
 /* ==========================================================
    Čtení reportu prostojů ze Symesticu
@@ -3333,7 +3347,7 @@ function mgmtView(){
   ${missing.length?`<div class="notice warn" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <b>Standard vyžaduje analýzu:</b>
     <span>${missing.length} ${missing.length===1?'linka je':'linek je'} v ${weekShort(cur)} pod ${engcfg.threshold} % a nemá založený problem solving.</span>
-    <button class="btn-danger" style="margin-left:auto" data-a="mg-createall" data-v="${cur}">Vytvořit A3 pro všechny</button>
+    ${canEdit()?`<button class="btn-danger" style="margin-left:auto" data-a="mg-createall" data-v="${cur}">Vytvořit A3 pro všechny</button>`:''}
   </div>`:''}
 
   <div class="panel">
@@ -3355,7 +3369,7 @@ function mgmtView(){
           <td data-label="Dní dat" class="num">${l.dayCount}</td>
           <td data-label="Problem solving">${p
             ? `<button class="btn-ghost" data-a="mg-open" data-v="${p._id}">${p.no} · ${p.status}</button>`
-            : (low?`<button class="btn-danger" data-a="mg-create" data-v="${cur}|${l.slug}">Vytvořit A3 problem solving</button>`:'<span class="muted">—</span>')}</td>
+            : ((low&&canEdit())?`<button class="btn-danger" data-a="mg-create" data-v="${cur}|${l.slug}">Vytvořit A3 problem solving</button>`:'<span class="muted">—</span>')}</td>
         </tr>`;}).join('')}
       </tbody></table></div>
   </div>
@@ -3589,7 +3603,7 @@ function problemModal(){
                   <span class="dd">${dueValid(t)?dateCz(dueValid(t)):'—'}</span>
                   <span class="badge ${stDef(t.status).cls}">${esc(t.status)}</span>
                 </div>`).join(''):'<div class="muted" style="font-size:12px;padding:2px 0">Zatím žádný úkol.</div>'}</div>
-              <button class="btn-primary" data-a="ps-newtask" style="align-self:flex-start">+ Přidat úkol do akčního plánu</button>
+              ${canEdit()?`<button class="btn-primary" data-a="ps-newtask" style="align-self:flex-start">+ Přidat úkol do akčního plánu</button>`:''}
               <div class="pslastact">Poslední akce uzavřena:
                 <b>${lastActionClosed(p._id)?dateCz(lastActionClosed(p._id)):'zatím žádná'}</b></div>
             </div></div>
@@ -3635,8 +3649,8 @@ function problemModal(){
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         ${!closed?`<button class="btn-ghost" data-a="mg-escalate" data-v="${p._id}">${p.escalated?'Zrušit eskalaci':'Eskalovat<span class="wide"> na manažera</span>'}</button>`:''}
         ${canImport()?`<button class="btn-del" data-a="mg-del" data-v="${p._id}">Smazat</button>`:''}
-        ${(!closed&&!waiting&&coord)?`<button class="btn-teal" data-a="ps-submit">Uzavřít<span class="wide"> a poslat ke schválení</span></button>`:''}
-        ${(waiting&&mgr)?`<button class="btn-ghost" data-a="ps-reject">Vrátit<span class="wide"> k dopracování</span></button>
+        ${(!closed&&!waiting&&coord&&canEdit())?`<button class="btn-teal" data-a="ps-submit">Uzavřít<span class="wide"> a poslat ke schválení</span></button>`:''}
+        ${(waiting&&mgr&&canEdit())?`<button class="btn-ghost" data-a="ps-reject">Vrátit<span class="wide"> k dopracování</span></button>
           <button class="btn-ok" data-a="ps-approve">Schválit<span class="wide"> a uzavřít</span></button>`:''}
         ${!closed?'<button class="btn-ok" data-a="mg-save">Uložit</button>':''}
         <button class="btn-ghost" data-a="mg-close">Zavřít</button>
@@ -3677,7 +3691,7 @@ function psView(){
       <p class="muted" style="max-width:560px;margin:0 auto 14px">Nový A3 si otevřeš tlačítkem níž na jakýkoli problém.
         Sám se taky nabídne na <b>Hlavní stránce</b> u linky, která spadla pod práh výkonu.</p>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn-primary" data-a="ps-new">+ Nový A3 problem solving</button>
+        ${canEdit()?`<button class="btn-primary" data-a="ps-new">+ Nový A3 problem solving</button>`:''}
         <button class="btn-ghost" data-a="tab" data-v="mgmt">Přejít na hlavní stránku</button></div>
     </div></div>`;
   }
@@ -3712,7 +3726,7 @@ function psView(){
   <div class="panel">
     <h2>Problem solving — A3<span class="right">${rows.length} z ${problems.length} · klikni na řádek pro detail</span></h2>
     <div class="filters">
-      <button class="btn-primary" data-a="ps-new">+ Nový A3 problem solving</button>
+      ${canEdit()?`<button class="btn-primary" data-a="ps-new">+ Nový A3 problem solving</button>`:''}
       <input class="grow" id="ps-q" placeholder="Hledat v problému, lince, příčině…" value="${esc(psF.q)}">
       <select id="ps-fline"><option value="">Všechny linky</option>${lines.map(l=>`<option ${psF.line===l?'selected':''}>${esc(l)}</option>`).join('')}</select>
       <select id="ps-fowner"><option value="">Všichni owneři</option>${owners.map(o=>`<option ${psF.owner===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
@@ -3842,7 +3856,7 @@ function tasksView(){
   <div class="panel">
     <h2>Akční plán managementu<span class="right">${rows.length} z ${tasks.length} · bílé vyplňuješ ty, žluté až při posunu, šedé se dopočítá</span></h2>
     <div class="filters">
-      <button class="btn-new" data-a="tk-new">+ Nový task</button>
+      ${canEdit()?`<button class="btn-new" data-a="tk-new">+ Nový task</button>`:''}
       <input class="grow" id="tk-q" placeholder="Hledat v tasku, výstupu, ownerovi…" value="${esc(tF.q)}">
       <select id="tk-farea"><option value="">Všechna oddělení</option>${TASK_AREAS.map(a=>`<option ${tF.area===a.k?'selected':''}>${esc(a.k)}</option>`).join('')}</select>
       <select id="tk-fowner"><option value="">Všichni owneři</option>${owners.map(o=>`<option ${tF.owner===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
@@ -3989,7 +4003,7 @@ function taskModal(){
             :`<span class="muted" style="font-size:11.5px">${isNew?'Číslo se přidělí po uložení.':'Změny se zapíšou do historie.'}</span>`}
       <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         ${(!isNew && canImport())?`<button class="btn-del" data-a="tk-del" data-v="${t._id}">Smazat</button>`:''}
-        <button class="btn-ok" data-a="tk-save">${isNew?'Založit task':'Uložit'}</button>
+        ${canEdit()?`<button class="btn-ok" data-a="tk-save">${isNew?'Založit task':'Uložit'}</button>`:''}
         <button class="btn-ghost" data-a="tk-close">Zavřít</button>
       </span>
     </div>
@@ -5106,6 +5120,8 @@ function render(){
       </span>
       ${canImportDt()?`<button class="tab tab-imp ${engTab==='imp'?'on':''}" data-a="tab" data-v="imp">Import</button>`:''}
     </div>
+    ${canEdit()?'':`<div class="notice">Do Engineeringu máš přístup <b>jen na čtení</b> — všechno si prohlédneš,
+      ale nic nezaložíš ani neuložíš. O zápis požádej Davida, nastaví ho v Nastavení u tvého jména.</div>`}
     ${errMsg?`<div class="notice warn">${esc(errMsg)}</div>`:''}
     ${busy?`<div class="notice">${esc(busy)}</div>`:''}
     ${inner}`) + (openPs?problemModal():'') + (openTask?taskModal():'') + psNewModal() + parPickModal() + parDetailModal()
@@ -5264,7 +5280,18 @@ function bind(){
     });
   }
 }
+/* Akce, které něco zapisují. Když má člověk jen čtení, zastaví se tady —
+   je to jedno místo navíc k poschovávaným tlačítkům, aby se nedalo nic uložit
+   oklikou (třeba zpátky přes historii prohlížeče). */
+const WRITE_ACTIONS = new Set(['tk-new','tk-save','tk-del','tk-addmove','tk-delfile','tk-ownadd','tk-ownrm',
+  'ps-new','ps-newgo','ps-newtask','ps-submit','ps-approve','ps-reject','ps-delfile',
+  'mg-save','mg-addaction','mg-adone','mg-escalate','mg-del','mg-create','mg-createall',
+  'ph-add','ph-del','cl-find','imp-run','imp-kind','imp-reset']);
 async function act(a,v){
+  if(WRITE_ACTIONS.has(a) && !canEdit()){
+    toast('Do Engineeringu máš přístup jen na čtení. O zápis požádej Davida.','err');
+    return;
+  }
   collectPsNew();
   if(imp.kind==='photo' && imp.step===2 && a!=='ph-del' && a!=='ph-add') collectPhoto();
   switch(a){

@@ -259,7 +259,19 @@ Prostoje na linkách, KPI a import týdenního reportu z interního systému Sym
   importuje. Když se nestáhne, aplikace nabídne CSV, které umí přečíst sama.
 - Časy z Excelu se počítají v UTC (`fromSerial`), aby se prostoj neposunul
   o hodinu podle nastavení počítače. Nepřepisuj na `new Date(...)` s místním časem.
-- **Kdo do modulu smí:** správci podle e-mailu (`OWNERS`) a lidé s pozicí
+- **Kdo do modulu smí (od 11/2026 se to nastavuje i ručně):** výchozí stav
+  je, že zapisují správci podle e-mailu (`OWNERS`) a lidé s pozicí procesního
+  inženýra nebo PE koordinátora (`ENG_POSITIONS`). **Ruční nastavení
+  `users.modules.engineering` (Skryté / Jen číst / Zapisovat) má VŽDY přednost** —
+  v Nastavení je na to sloupec „Engineering (prostoje a KPI)". Tak se přístup dá
+  dát komukoli dalšímu, nebo naopak PE odebrat.
+  `engAccess()` vrací `none` / `read` / `write`, `canEnter()` pustí dovnitř,
+  `canEdit()` povoluje zápis. Při „jen čtení" se schovají všechna zakládací
+  a ukládací tlačítka a navíc je v `act()` seznam `WRITE_ACTIONS`, který zápis
+  zastaví, i kdyby se tlačítko objevilo oklikou.
+  **Tahle logika je na pěti místech a musí zůstat shodná:** `engineering.html`,
+  `index.html`, `header.js`, `nastaveni.html` a `firestore.rules` (`isEngineer()`).
+- **Kdo do modulu smí (původní znění):** správci podle e-mailu (`OWNERS`) a lidé s pozicí
   procesního inženýra nebo PE koordinátora (`ENG_POSITIONS` = IMM PE, SLUSH PE,
   FOAM PE, ASSY PE, GB/DP PE, PE coordinator). Pozice nastavuje David v Nastavení.
   **Tentýž seznam je na čtyřech místech a musí zůstat shodný:** `engineering.html`
