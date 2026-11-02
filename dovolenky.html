@@ -175,6 +175,8 @@
   .cal tbody tr[data-prow]:hover td,.cal tbody tr.active td{background-color:#fff1c7}
   .cal tbody tr[data-prow]:hover td.name,.cal tbody tr.active td.name{background:#fff1c7;box-shadow:inset 4px 0 0 #f6821f,2px 0 0 #e6ebf2}
   .cal td.d{cursor:pointer;user-select:none}
+  /* zrušená směna z rytmu (SHIFT_OFF): prázdný den s jemným šrafováním */
+  .cal td.d.rotoff{background-image:repeating-linear-gradient(135deg,rgba(100,116,139,.18) 0 2px,transparent 2px 7px)}
   /* označené dny (tažením) — oranžový rámeček a lehký přeliv přes barvu záznamu */
   .cal td.d.sel{box-shadow:inset 0 0 0 2px #e8590c !important;
     background-image:linear-gradient(rgba(246,130,31,.32),rgba(246,130,31,.32)) !important}
@@ -637,7 +639,7 @@ if(window.registerI18N) window.registerI18N({
   'Přesčasy = ručně zadané směny navíc proti směnovému rytmu (a prodloužení 8h na 12h).':'Overtime = manually added shifts beyond the shift rhythm (and 8h-to-12h extensions).',
   'Požadavky na správce — stejné jako v modulu LAMA, ale vlastní seznam pro Plánování.':'Requests to the administrator — same as in the LAMA module, but a separate list for Planning.',
   '1. klik označí řádek, pak v něm tažením označ dny (na mobilu ťukni na první a pak na poslední den)':'First click selects the row, then drag to mark days (on mobile tap the first and then the last day)',
-  'Tažením označíš i víc lidí pod sebou · Ctrl+klik přidá další buňky · Shift+klik rozšíří · Esc zruší · směny z rytmu Vymazat neumí — přepiš je nebo rytmus ukonči':'Shift+click extends the selection · Esc clears it · rhythm shifts cannot be cleared — overwrite them or end the rhythm',
+  'Tažením označíš i víc lidí pod sebou · Ctrl+klik přidá další buňky · Shift+klik rozšíří · Esc zruší · Vymazat zruší i směny z rytmu (↩ Vrátit rytmus je vrátí)':'Shift+click extends the selection · Esc clears it · rhythm shifts cannot be cleared — overwrite them or end the rhythm',
   /* prázdná sekce */
   'V sekci':'In section','Přidej je tlačítkem':'Add them with the button','nad kalendářem.':'above the calendar.',
   'Lidi do plánu přidává ten, kdo má v sekci právo zapisovat.':'People are added to the plan by someone with write permission in the section.',
@@ -872,10 +874,16 @@ function selRuns(){
 const selPersons = () => [...new Set(selRuns().map(r=>r.pid))];
 const runText = rs => rs.map(r=>r.from===r.to?dCz(r.from):dCz(r.from)+' – '+dCz(r.to)).join(', ');
 
+/* Zrušená směna z rytmu (David, 11/2026 — „mazat i dny standardního rytmu"): záznam v kolekci
+   shifts se směnou SHIFT_OFF. Jako každá ruční směna má přednost před rytmem, jen znamená
+   „ten den žádná směna". V kalendáři je den prázdný a šrafovaný, do bonusů ani přesčasů se
+   nepočítá. Vzniká tlačítkem Vymazat (jen na dny, kde rytmus směnu má), ruší ho „Vrátit rytmus". */
+const SHIFT_OFF = 'OFF';
+const isOff = m => !!m && m.shift===SHIFT_OFF;
 /* Uvolní dny od–do v kolekci (absences / shifts): záznamy, které do rozsahu
-   zasahují, se smažou a jejich části mimo rozsah se znovu uloží. */
-async function clearRange(col, person, from, to){
-  const list=(col==='absences'?absences:shifts).filter(r=>r.personId===person.id && r.from<=to && r.to>=from);
+   zasahují, se smažou a jejich části mimo rozsah se znovu uloží. only = volitelný filtr záznamů. */
+async function clearRange(col, person, from, to, only){
+  const list=(col==='absences'?absences:shifts).filter(r=>r.personId===person.id && r.from<=to && r.to>=from && (!only || only(r)));
   for(const r of list){
     await deleteDoc(doc(db,col,r.id));
     if(r.days===0.5) continue;                       // půlden leží celý v rozsahu
@@ -959,14 +967,38 @@ async function clearSelection(){
   if(!ok.length) return;
   busySel=true; render();
   try{
+    let offN=0;
     for(const r of ok){
       await clearRange('absences', r.p, r.from, r.to);
       await clearRange('shifts', r.p, r.from, r.to);
+      // dny, kdy má člověk směnu z rytmu → značka „zrušená směna z rytmu" (po souvislých úsecích)
+      let st=null, prev=null; const pieces=[];
+      eachDay(r.from, r.to, ds=>{
+        if(rotCodeOn(r.pid, ds)){ if(st && addDays(prev,1)===ds) prev=ds; else { if(st) pieces.push([st,prev]); st=ds; prev=ds; } }
+      });
+      if(st) pieces.push([st,prev]);
+      for(const [a,b] of pieces){
+        await addDoc(collection(db,'shifts'),{ personId:r.p.id, personName:r.p.name, shift:SHIFT_OFF,
+          from:a, to:b, createdBy:me.email, createdAt:serverTimestamp() });
+        eachDay(a,b,()=>offN++);
+      }
     }
-    toast('Vybrané dny vymazány.','ok'); sel=null; selNote='';
+    toast('Vybrané dny vymazány.'+(offN?` Zrušeno i ${offN} dnů směn z rytmu (vrátí je „↩ Vrátit rytmus").`:''),'ok'); sel=null; selNote='';
   }catch(e){ toast('Nepodařilo se vymazat: '+e.message,'err'); }
   busySel=false; render();
 }
+/* ↩ Vrátit rytmus: ve vybraných dnech smaže značky „zrušená směna z rytmu" — rytmus se tam vrátí. */
+async function restoreRhythm(){
+  const ok=selRuns().map(r=>Object.assign(r,{p:personById(r.pid)})).filter(r=>r.p && canEditPerson(r.pid));
+  if(!ok.length) return;
+  busySel=true; render();
+  try{
+    for(const r of ok) await clearRange('shifts', r.p, r.from, r.to, isOff);
+    toast('Směny z rytmu ve vybraných dnech vráceny.','ok'); sel=null; selNote='';
+  }catch(e){ toast('Nepodařilo se vrátit: '+e.message,'err'); }
+  busySel=false; render();
+}
+const selHasOff = () => selRuns().some(r=>shifts.some(x=>isOff(x) && x.personId===r.pid && x.from<=r.to && x.to>=r.from));
 /* Najde kolegy, kteří umí ALESPOŇ JEDNU stejnou pozici a mají v termínu dovolenou
    (kontrola zastupitelnosti napříč sekcemi). */
 function findCollisions(person, from, to){
@@ -1339,7 +1371,7 @@ function bonusRows(y, m){
         const a=(abs[p.id]||{})[ds];
         if(a && a.days!==0.5) return;                  // celý den nepřítomen → žádná směna
         const man=(sm[p.id]||{})[ds];
-        const code = man ? man.shift : rotCodeOn(p.id, ds);
+        const code = man ? (isOff(man) ? null : man.shift) : rotCodeOn(p.id, ds);
         if(!code) return;
         // Týmy H1–H4 (David, 10/2026): víkendy i 12h směny z rytmu jsou jejich standard — bonus
         // jen za směnu NAD rytmus = ručně zadanou na den, kdy mají podle rytmu volno.
@@ -1420,7 +1452,7 @@ function personOvertime(p, from, to, abs, sm){
     if(seg && seg.plan) r.rhythm=true; else return;          // bez rytmu ten den → nepočítá se
     const a=(abs[p.id]||{})[ds];
     if(a && a.days!==0.5) return;                            // celý den nepřítomen
-    const man=(sm[p.id]||{})[ds]; if(!man) return;           // jen ručně zadané směny
+    const man=(sm[p.id]||{})[ds]; if(!man || isOff(man)) return;   // jen ručně zadané směny (zrušená = nic)
     const rc=rotCodeOn(p.id, ds);
     if(!rc){ const h=shiftH(man.shift); r.extra++; r.hours+=h; r.days.push(`${dCz(ds)} ${man.shift} navíc (+${h} h)`); }
     else if(shiftH(man.shift)===12 && shiftH(rc)===8){ r.ext++; r.hours+=4; r.days.push(`${dCz(ds)} ${rc}→${man.shift} (+4 h)`); }
@@ -1577,6 +1609,7 @@ function selBarView(){
     ${onePerson ? rotRowView(p, from) : ''}
     <div class="sb-row"><span class="sb-lbl"></span>
       <button class="sb-btn sb-clear" id="sb-clear" ${busySel?'disabled':''}>🗑 Vymazat vybrané dny</button>
+      ${selHasOff()?`<button class="sb-btn" id="sb-restore" ${busySel?'disabled':''} title="Vrátí do vybraných dnů směny ze směnového rytmu">↩ Vrátit rytmus</button>`:''}
       <span class="hintmini">${busySel?'Ukládám…':'Shift+klik rozšíří výběr · Esc výběr zruší · směny z rytmu Vymazat neumí — přepiš je nebo rytmus ukonči'}</span></div>
   </div>`;
 }
@@ -1711,11 +1744,12 @@ function calendarView(){
   const personRow = p => {
     const pm=by[p.id]||{}, sp=sm[p.id]||{};
     // efektivní směna dne: ručně zadaná směna má přednost před rotací
-    const eff = ds2 => { const mm=sp[ds2]; if(mm) return {code:mm.shift, id:mm.id};
+    const eff = ds2 => { const mm=sp[ds2]; if(mm) return isOff(mm) ? null : {code:mm.shift, id:mm.id};
       const rc=rotCodeOn(p.id,ds2); return rc?{code:rc, rot:true}:null; };
     const cells=allDays.map((dd,i)=>{
       const a=pm[dd.ds], s=eff(dd.ds);
       let cls='d', style='', tt=`${p.name} • ${dCz(dd.ds)}`, inner='';
+      if(isOff(sp[dd.ds]) && !a){ cls+=' rotoff'; tt+=' • směna z rytmu zrušena'; }
       if(dd.holiday)cls+=' hol'; else if(dd.weekend)cls+=' we'; else if(dd.alt)cls+=' malt';
       if(dd.first)cls+=' mstart'; if(dd.mcur)cls+=' mcur';
       if(dd.today)cls+=' today';
@@ -1937,9 +1971,10 @@ function wireApp(){
   document.querySelectorAll('[data-abs]').forEach(b=>b.addEventListener('click',()=>
     applyAbsence(b.getAttribute('data-abs'), b.hasAttribute('data-half'))));
   document.querySelectorAll('[data-shift]').forEach(b=>b.addEventListener('click',()=>applyShift(b.getAttribute('data-shift'))));
+  document.getElementById('sb-restore')?.addEventListener('click',restoreRhythm);
   document.getElementById('sb-clear')?.addEventListener('click',()=>{
     const rs=selRuns(), np=new Set(rs.map(r=>r.pid)).size;
-    if(rs.length && confirm(`Vymazat nepřítomnosti a ručně naplánované směny ve vybraných dnech (${np===1?runText(rs):np+' lidí'})?`)) clearSelection(); });
+    if(rs.length && confirm(`Vymazat nepřítomnosti, ručně naplánované směny i směny z rytmu ve vybraných dnech (${np===1?runText(rs):np+' lidí'})?`)) clearSelection(); });
   document.getElementById('sb-cancel')?.addEventListener('click',()=>{sel=null;render();});
   document.getElementById('sb-plan')?.addEventListener('change',e=>{selPlan=e.target.value;});
   // rytmus jen při výběru jednoho člověka — od prvního označeného dne
@@ -2020,7 +2055,7 @@ function openDay(personId,dateStr){
   const hol=holsOf(+dateStr.slice(0,4)).get(dateStr)||'';
   // směna toho dne: ručně naplánovaná má přednost před rytmem
   const man=shifts.find(s=>s.personId===personId && s.from<=dateStr && s.to>=dateStr);
-  const code=man ? man.shift : rotCodeOn(personId, dateStr);
+  const code=man ? (isOff(man) ? '' : man.shift) : rotCodeOn(personId, dateStr);
   dlg={personName:p.name, dateStr, items, holiday:hol, shift:code||'', shiftRot:!man&&!!code,
        note:(p.notes||{})[dateStr]||'', readonly:true};
   render();

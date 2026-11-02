@@ -96,6 +96,11 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   poslední blok. `selMap()` = lidé → dny, `selRuns()` = souvislé úseky po lidech; každá akce lišty
   (`applyAbsence`, `applyShift`, `saveDayNote`, `clearSelection`) projde všechny úseky. Řádek
   Rytmus v liště jen při výběru jednoho člověka, ½ dne dovolené jen u jedné buňky.
+  **Mazání dnů rytmu** (11/2026): „Vymazat vybrané dny" na dny, kdy rytmus směnu má, uloží do
+  `shifts` značku `shift:'OFF'` (`SHIFT_OFF`, `isOff`) — přebije rytmus jako ruční směna, ale znamená
+  „žádná směna". Kalendář den šrafuje (`rotoff`), bonusy, přesčasy i náhled dne ji berou jako volno.
+  „↩ Vrátit rytmus" (`restoreRhythm`) smaže jen tyhle značky ve výběru. Každé nové místo, které čte
+  `shifts`, MUSÍ `isOff` ošetřit, jinak by z „OFF" udělalo směnu.
   Zápis nejdřív uvolní vybrané dny
   (`clearRange` — přesahující záznamy se rozdělí), pak uloží nový záznam. Směna
   přebije i nepřítomnost, nepřítomnost směnu jen překryje. Během tažení se
