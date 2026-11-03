@@ -69,10 +69,12 @@
   .chart svg{width:100%;height:auto;display:block}
 
   /* rozložení: obsah vlevo, import vpravo (přilepený nahoře) */
-  .layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px;align-items:start}
-  @media(max-width:900px){.layout{grid-template-columns:1fr}}
-  .col-side{position:sticky;top:14px}
-  @media(max-width:900px){.col-side{position:static}}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
+  @media(max-width:980px){.layout{grid-template-columns:1fr}}
+  .col-side{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto}
+  .col-side::-webkit-scrollbar{width:9px}
+  .col-side::-webkit-scrollbar-thumb{background:#c7d2e0;border-radius:6px}
+  @media(max-width:980px){.col-side{position:static;max-height:none;overflow:visible}}
 
   /* přetažení souborů — ve sloupci vpravo pod sebou */
   .drops{display:grid;grid-template-columns:1fr;gap:14px}
@@ -490,15 +492,19 @@ function logoSvg(){
 }
 
 function mainView(){
-  // import je sloupec vpravo (přilepený nahoře), ať se k němu nemusí scrollovat
-  const side = canWrite() ? `<aside class="col-side">${importPanel()}</aside>` : '';
+  // pravý sloupec (přilepený, s vlastním scrollováním): import + generátor e-mailu pod ním
+  const hasData = rows.length>0;
+  let sideInner='';
+  if(canWrite()) sideInner += importPanel();
+  if(hasData)    sideInner += emailPanel();
+  const side = sideInner ? `<aside class="col-side">${sideInner}</aside>` : '';
   let left;
-  if(!rows.length){
+  if(!hasData){
     left = `<div class="panel"><div class="empty">${T('Zatím žádná data. Začni importem Excelu.')}</div></div>`;
   } else {
     const keys=monthsSorted();
     if(!selKey||!keys.includes(selKey)) selKey=keys[0];
-    left = dashbar(keys) + cardsView() + chartsView() + tableView() + emailPanel();
+    left = dashbar(keys) + cardsView() + chartsView() + tableView();
   }
   return `<div class="layout"><div class="col-main">${left}</div>${side}</div>`;
 }
@@ -609,7 +615,7 @@ function emailPanel(){
   const to=esc(cfg.recipients||'');
   return `<div class="panel mailbox"><h2>📧 ${T('E-mail pro finance')}</h2><div class="body">
     <div class="notice">${T('Otevře Outlook s předvyplněným e-mailem — příjemce doplníš a odešleš sám.')}</div>
-    <div class="fgrid">
+    <div class="fgrid" style="grid-template-columns:1fr">
       <div><label>${T('Komu (nepovinné, uloží se)')}</label>
         <input id="mail-to" value="${to}" placeholder="finance@…; controlling@…" ${canWrite()?'':'disabled'}></div>
       <div><label>${T('Sjednané ¼h maximum el. (kW)')}</label>
