@@ -286,6 +286,8 @@ if(window.registerI18N) window.registerI18N({
   'Zatím žádná data. Začni importem Excelu.':'No data yet. Start by importing an Excel file.',
   'Do modulu Spotřeba energií nemáš přístup — přecházím na hlavní stránku…':'You do not have access to the Energy consumption module — going to the home page…',
   'Nepodařilo se načíst soubor.':'Could not read the file.','V souboru jsem nenašel žádné ¼h hodnoty.':'I found no ¼h values in the file.',
+  'Tohle vypadá jako report PLYNU, ne elektřiny. Nahraj ho přes dlaždici Zemní plyn.':'This looks like a GAS report, not electricity. Upload it via the Natural gas tile.',
+  'Tohle vypadá jako report ELEKTŘINY, ne plynu. Nahraj ho přes dlaždici Elektřina.':'This looks like an ELECTRICITY report, not gas. Upload it via the Electricity tile.',
   'Nepodařilo se uložit: ':'Could not save: ','Nepodařilo se stáhnout knihovnu pro čtení Excelu. Ulož soubor jako CSV a nahraj ho znovu.':'Could not download the Excel-reading library. Save the file as CSV and upload it again.',
   'jen pro čtení':'read-only','👁️ Tento modul máte jen pro čtení.':'👁️ You have this module as read-only.',
   'Přihlásit se':'Sign in','Přihlašuji…':'Signing in…','Heslo':'Password','Připojuji se k Firebase…':'Connecting to Firebase…',
@@ -461,6 +463,20 @@ function analyze(aoa, opt={}){
   }
   return {header,nc,valCol,timeCol,ivalCol,hasDates,
     rawSum, cnt, rawMax:isFinite(rawMax)?rawMax:0, maxAt, guessY, guessM};
+}
+
+/* Z obsahu souboru pozná, jestli jde o elektřinu nebo plyn — ať nejde nahrát
+   elektřinu do plynu a naopak. Vrací 'el' / 'plyn' / null (když to nejde určit). */
+function detectMedium(aoa, a, fileName){
+  const hdr = (a.header||[]).join(' ').toLowerCase();
+  const name = String(fileName||'').toLowerCase();
+  // jasné znaky elektřiny: činná/jalová spotřeba, čtvrthodinový interval, tisíce hodnot
+  if(/[čc]inn/.test(hdr) || /jalov/.test(hdr) || a.ivalCol>=0 || a.cnt>=400) return 'el';
+  if(/elektřin|elektrin|elektr/.test(hdr) || /elektřin|elektrin/.test(name)) return 'el';
+  // plyn: denní data bez intervalu, případně podle názvu
+  if(/plyn|zemn[íi]\s*plyn|gas/.test(hdr) || /plyn|gas/.test(name)) return 'plyn';
+  if(a.cnt>0 && a.cnt<=60 && a.ivalCol<0) return 'plyn';
+  return null;
 }
 
 /* ===== auth ===== */
@@ -810,6 +826,15 @@ async function handleFile(file, med){
   try{
     const aoa=await readFileAoa(file);
     const a=analyze(aoa);
+    // kontrola, že soubor odpovídá dlaždici (ať nejde elektřina do plynu a naopak)
+    const detected=detectMedium(aoa, a, file.name);
+    if(detected && detected!==med){
+      imp=null;
+      toast(med==='el'
+        ? T('Tohle vypadá jako report PLYNU, ne elektřiny. Nahraj ho přes dlaždici Zemní plyn.')
+        : T('Tohle vypadá jako report ELEKTŘINY, ne plynu. Nahraj ho přes dlaždici Elektřina.'), 'err');
+      return;
+    }
     if(!a.cnt){ imp=null; toast(T('V souboru jsem nenašel žádné ¼h hodnoty.'),'err'); return; }
     const d=new Date(); let gm=a.guessM, gy=a.guessY;
     if(!gm){ // výchozí = minulý měsíc (report se dělá 1. v měsíci)
