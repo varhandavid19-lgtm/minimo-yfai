@@ -121,6 +121,13 @@
   td.act{text-align:center}
   .xbtn{background:transparent;border:none;padding:4px 7px;border-radius:6px;font-size:14px;opacity:.55}
   .xbtn:hover{background:#fdecea;opacity:1}
+  /* coal ekvivalent + sales */
+  thead th.cg{background:#eef3ee}
+  td.coal{background:#f1f6f1} td.coal b{color:#1f6b3f;font-weight:800}
+  td.salescol{background:#f1f6f1;padding:5px 10px}
+  tbody tr:hover td.coal,tbody tr:hover td.salescol{background:#e7f1e8}
+  .sales-in{width:116px;padding:5px 8px;font-size:13px;text-align:right;border:1px solid #cdddce;border-radius:7px;background:#fff}
+  .sales-in::placeholder{color:#9fb0a2}
 
   /* pravý sloupec (import + e-mail), vlastní scroll */
   .rail{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding-right:3px}
@@ -258,6 +265,7 @@ if(window.registerI18N) window.registerI18N({
   'Měsíční přehled — elektřina a zemní plyn':'Monthly overview — electricity and natural gas',
   'Zatím žádná data. Přetáhni report vpravo.':'No data yet. Drag a report on the right.',
   'měsíců':'months','Denní max':'Daily max','Plyn':'Gas',
+  'Uhlí':'Coal','Sales':'Sales','Coal ekviv.':'Coal equiv.','Tržby za měsíc v CNY (od financí)':'Monthly sales in CNY (from finance)',
   'Měsíc':'Month','Elektřina (MWh)':'Electricity (MWh)','Max ¼h el.':'Max ¼h el.',
   'Plyn (m³)':'Gas (m³)','Max ¼h plyn':'Max ¼h gas','Importoval':'Imported by','Nahráno':'Uploaded',
   'Import dat':'Data import','Nahrát elektřinu (MWh)':'Upload electricity (MWh)','Nahrát plyn (m³)':'Upload gas (m³)',
@@ -518,6 +526,24 @@ function rd(r, med){ if(!r) return null; const M=MEDIA[med];
     max:(r.maxVal!=null?r.maxVal:r.maxQh), maxUnit:r.maxUnit||M.maxUnit,
     maxLabel:r.maxLabel||M.maxLabel, maxAt:r.maxAt||r.maxQhAt||null, importedBy:r.importedBy||'' }; }
 
+/* Coal ekvivalent — kolik uhlí se muselo spálit na tuhle energii, vůči tržbám.
+   Plyn na MWh: m³ × 0,01055 (výhřevnost ~10,55 kWh/m³).
+   Uhlí v tunách: Celkem MWh ÷ 8,141 (1 t uhelného ekvivalentu = 8,141 MWh).
+   Coal ekvivalent: uhlí(t) × 1000 ÷ Sales(CNY) = kg uhlí na 1 CNY tržeb. */
+const GAS_M3_TO_MWH = 0.01055;
+const MWH_PER_TCE   = 8.141;
+const salesFor = key => { const s=(cfg.sales||{})[key]; return (s!=null&&isFinite(s))?Number(s):null; };
+function monthEnergy(key){
+  const el=rowFor(key,'el'), gas=rowFor(key,'plyn');
+  const elMWh = el?(el.total||0):0;
+  const gasMWh = gas?((gas.total||0)*GAS_M3_TO_MWH):0;
+  const total = elMWh + gasMWh;
+  const coalT = total/MWH_PER_TCE;
+  const sales = salesFor(key);
+  const coalEq = (sales&&total)? (coalT*1000/sales) : null;
+  return {el, gas, elMWh, gasMWh, total, coalT, sales, coalEq, hasAny:!!(el||gas)};
+}
+
 /* ===== render ===== */
 function render(){
   const app=document.getElementById('app');
@@ -662,12 +688,19 @@ function tablePanel(){
   const keys=monthsSorted();
   const row=(key)=>{
     const [y,m]=key.split('-'); const el=rd(rowFor(key,'el'),'el'), gas=rd(rowFor(key,'plyn'),'plyn');
+    const E=monthEnergy(key);
     const cell=(D,M,cls)=>D?`<td class="num ${cls}">${num(D.total,M.totDec)}</td><td class="num ${cls} sub">${num(D.max,M.maxDec)}</td>`
                           :`<td class="num ${cls} sub">—</td><td class="num ${cls} sub">—</td>`;
     const who=(el&&el.importedBy)||(gas&&gas.importedBy)||'';
+    const salesCell = canWrite()
+      ? `<input class="sales-in" data-k="${key}" value="${E.sales!=null?E.sales:''}" inputmode="numeric" placeholder="—" title="${T('Tržby za měsíc v CNY (od financí)')}">`
+      : (E.sales!=null?num(E.sales,0):'—');
     return `<tr class="${key===selKey?'cur':''}">
       <td><b>${esc(monthName(+m))} ${y}</b></td>
       ${cell(el,MEDIA.el,'el')}${cell(gas,MEDIA.plyn,'gas')}
+      <td class="num coal">${E.hasAny?num(E.coalT,0):'—'}</td>
+      <td class="num salescol">${salesCell}</td>
+      <td class="num coal"><b>${E.coalEq!=null?num(E.coalEq,5):'—'}</b></td>
       <td class="sub">${esc(who)}</td>
       ${canWrite()?`<td class="act">${(el||gas)?`<button class="xbtn" data-a="delmonth" data-v="${key}" title="${T('Smazat')}">🗑</button>`:''}</td>`:''}
     </tr>`;
@@ -678,6 +711,9 @@ function tablePanel(){
       <th>${T('Měsíc')}</th>
       <th class="num">${T('Elektřina')}<small>MWh</small></th><th class="num">${T('Max ¼h')}<small>kW</small></th>
       <th class="num">${T('Plyn')}<small>m³</small></th><th class="num">${T('Denní max')}<small>m³</small></th>
+      <th class="num cg">${T('Uhlí')}<small>t</small></th>
+      <th class="num cg">${T('Sales')}<small>CNY</small></th>
+      <th class="num cg">${T('Coal ekviv.')}<small>kg/CNY</small></th>
       <th>${T('Importoval')}</th>${canWrite()?'<th></th>':''}
     </tr></thead><tbody>${keys.map(row).join('')}</tbody></table></div></div>`;
 }
@@ -927,6 +963,11 @@ function bind(){
   if(mt && canWrite()) mt.onchange=()=>saveCfg({recipients:mt.value.trim()});
   const ml=document.getElementById('mail-ellimit');
   if(ml && canWrite()) ml.onchange=()=>{ const v=parseFloat(ml.value); saveCfg({elLimit:isFinite(v)?v:null}); };
+
+  // zadávání tržeb (Sales CNY) v tabulce → coal ekvivalent
+  if(canWrite()) document.querySelectorAll('.sales-in').forEach(inp=>{
+    inp.onchange=()=>{ const v=toNum(inp.value); saveCfg({sales:{[inp.getAttribute('data-k')]:(v!=null?v:null)}}); };
+  });
 }
 
 async function delMonth(key){
