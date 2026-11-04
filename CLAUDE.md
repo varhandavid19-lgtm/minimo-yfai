@@ -731,9 +731,12 @@ Přehled všech 5× proč / A3 z kolekce `problems`.
   přepíše na potvrzený (`canonSupplier`, porovnání `supNorm` bez diakritiky a právní formy). Po potvrzení
   se stejně přepíšou i ostatní NEpotvrzené požadavky (zápis do historie). Žádná zvláštní kolekce.
   **Požadavky založené od 26. 10. 2026** (`RECV2_FROM`, `isRecv2(r)` podle `created`) mají v boxu
-  jiná pole: Nákup = Nabídka (`offerNo`), Req.č. (`reqNo`), Objednávka QAD (`qadOrder`), Order no.
-  (`orderNo`); Příjem = Dodací list/servisní výkaz (`dlNo`), Datum přijetí, Přijímané množství
+  jiná pole: Nákup = Nabídka (`offerNo`), RFQ (`rfqNo`), Req. (`reqNo`), Objednávka QAD (`qadOrder`),
+  Order no. (`orderNo`); Příjem = Dodací list/servisní výkaz (`dlNo`), Datum přijetí, Přijímané množství
   (`receivedQty`), Komentář (`skladComment`). Starší požadavky mají původní pole — neměnit je.
+  Nové rozložení mají (11/2026) i starší požadavky ve stavu **nový**; po uložení boxu nebo Správě
+  požadavků dostanou příznak `recv2:true` (a stačí i vyplněné offerNo/qadOrder/dlNo), aby po změně
+  stavu nepřeskočily zpět na staré rozložení. RFQ no. ve Správě požadavků platí pro staré i nové.
   `collect()` čte jen pole, která jsou na stránce, jinak by uložení smazalo pole druhého rozložení.
 
 ### Když server zamítne zápis
