@@ -12,7 +12,9 @@ modul je vlastní stránka.
 
 ## Struktura — JEDNA STRÁNKA = JEDEN MODUL
 - `index.html` — rozcestník: přihlášení a dlaždice modulů (pole `MODULES`)
-- `nakup.html` — Nákupní požadavky
+- `nakup.html` — Nákupní požadavky. Otevřený PŘÍMO (stará záložka/zástupce, bez referreru
+  z portálu a bez ?/#) se hned přesměruje na `index.html` — systém se má vždy otevírat
+  na hlavní stránce (11/2026). Proklik z portálu i F5 v Nákupu zůstanou.
 - `dovolenky.html` — Plánování směn a přítomnosti
 - `opravy.html` — Externí opravy (zatím vidí jen správce podle e-mailu)
 - `engineering.html` — Engineering: prostoje, KPI, import ze Symesticu
