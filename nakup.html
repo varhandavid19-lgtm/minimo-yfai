@@ -1427,7 +1427,7 @@ function modalView(){
   const recvBody = isRecv2(r) ? ((recvEdit && recvEditable) ? recvCols(`
       <label>Nabídka<input id="e-offer" value="${esc(r.offerNo||'')}"></label>
       <label>RFQ<input id="e-rfqno" value="${esc(r.rfqNo||'')}"></label>
-      <label>Req.<input id="e-reqno" value="${esc(r.reqNo||'')}"></label>
+      <label>Req.č.<input id="e-reqno" value="${esc(r.reqNo||'')}"></label>
       <label>Objednávka QAD<input id="e-qad" value="${esc(r.qadOrder||'')}"></label>
       <label>Order no.<input id="e-orderno" value="${esc(r.orderNo||'')}"></label>`,`
       <label>Dodací list/servisní výkaz<input id="e-dl" value="${esc(r.dlNo||'')}"></label>
@@ -1437,7 +1437,7 @@ function modalView(){
     + `<div class="recvsave"><button class="btn-ok" data-a="recv-save">Uložit nákup/příjem</button></div>` : recvCols(`
       <div><span>Nabídka</span><b>${esc(r.offerNo||'—')}</b></div>
       <div><span>RFQ</span><b>${esc(r.rfqNo||'—')}</b></div>
-      <div><span>Req.</span><b>${esc(r.reqNo||'—')}</b></div>
+      <div><span>Req.č.</span><b>${esc(r.reqNo||'—')}</b></div>
       <div><span>Objednávka QAD</span><b>${esc(r.qadOrder||'—')}</b></div>
       <div><span>Order no.</span><b>${esc(r.orderNo||'—')}</b></div>`,`
       <div><span>Dodací list/servisní výkaz</span><b>${esc(r.dlNo||'—')}</b></div>
