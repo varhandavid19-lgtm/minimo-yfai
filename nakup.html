@@ -1284,8 +1284,22 @@ function bindMgrDnD(){
       if(!f){ toast('Soubor se nepodařilo převzít. Ulož ho nejdřív na plochu a přetáhni odtud (nebo klikni a vyber ho).','err'); return; }
       if(files.length>1) toast('Bere se jen jeden soubor — použil jsem „'+f.name+'".','err');
       if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); return; }
-      mgrFiles[z.dataset.mgdrop]=f; render(); });
+      mgrSetFile(z.dataset.mgdrop,f); });
   });
+}
+/* Soubor do Správy (přetažením i „vložit"). U nabídky se hned přečte číslo do pole Nabídka
+   (je vidět a jde opravit před „Použít"); když to nejde, vyzve k ručnímu zadání. */
+async function mgrSetFile(cat,f){
+  mgrFiles[cat]=f; render();
+  if(cat!=='nabidka' || mgr.offerNo.trim()) return;
+  const selR=rows.filter(r=>mgrSel.has(r._id));
+  if(selR.length && !selR.some(isRecv2)) return;   // vybrané jen staré požadavky — pole Nabídka nemají
+  toast('Čtu nabídku…','ok');
+  const n=await offerNoFromFile(f);
+  if(mgrFiles[cat]!==f || mgr.offerNo.trim()) return;   // mezitím jiný soubor nebo ručně vyplněno
+  if(n){ mgr.offerNo=n; render(); toast(`Číslo nabídky ${n} přečteno z dokumentu — zkontroluj ho v poli Nabídka.`,'ok'); return; }
+  const v=await askText(offerAskText(f.name),{title:'Číslo nabídky',ok:'Uložit',no:'Přeskočit',placeholder:'číslo nabídky'});
+  if(v && v.trim() && !mgr.offerNo.trim()){ mgr.offerNo=v.trim(); render(); }
 }
 function mgrPanel(){
   const n=mgrSel.size;
@@ -1875,7 +1889,21 @@ const offerMatches=(offer,quotes)=>{
 };
 const poMismatchText = list => `Číslo nabídky neodpovídá — je to správně?\n\n`+list.map(x=>`${x.r.poradove||''}: v poli NABÍDKA „${x.offer}“, v PO „${x.quotes.join(', ')}“`).join('\n')
   +`\n\nANO = PO se uloží.  NE = PO se neuloží, oprav data a akci opakuj.`;
-const poRetryInfo = () => info('PO se neuložilo. Oprav číslo nabídky (pole NABÍDKA nebo dokument PO) a nahraj PO znovu.',{title:'PO neuloženo'});
+/* ---------- Nabídka: číslo nabídky z dokumentu ----------
+   Hledá „Nabídka č. …", „Cenová nabídka číslo: …", „Quotation No. …", „Offer …", „Angebot Nr. …"
+   v textu PDF, pak v názvu souboru. Vrátí první nalezené číslo, nebo '' (sken, Excel, nic nenalezeno). */
+async function offerNoFromFile(file){
+  if(!file) return '';
+  const rx=/(?:nab[ií]dk[aeyuy]|nab[ií]dce|ponuk[ay]|quotation|quote|offer|angebot|oferta)\s*(?:no\.?|nr\.?|n°|number|nummer|č\.?|c\.|číslo|cislo|ref\.?)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9\/\-._]*[A-Za-z0-9])/gi;
+  const pick=txt=>{ rx.lastIndex=0; let m; while((m=rx.exec(txt))){ const q=m[1].replace(/[._]+$/,'');
+      if(/\d/.test(q) && q.length>=2 && !/^\d{1,2}\.\d{1,2}\.(\d{2}|\d{4})$/.test(q)) return q; } return ''; };
+  if(/\.pdf$/i.test(file.name||'') || file.type==='application/pdf'){
+    try{ const n=pick((await ireqPdfLines(file)).join('\n')); if(n) return n; }catch(e){}
+  }
+  return pick(String(file.name||'').replace(/\.[a-z0-9]+$/i,'').replace(/_/g,' '));
+}
+const offerAskText = name => `Číslo nabídky se z dokumentu „${name}“ nepodařilo přečíst (sken, Excel nebo neobvyklý formát).\n\nZadej ho prosím ručně:`;
+const poRetryInfo = () =>info('PO se neuložilo. Oprav číslo nabídky (pole NABÍDKA nebo dokument PO) a nahraj PO znovu.',{title:'PO neuloženo'});
 async function handleFiles(fileList,cat){
   const files=[...(fileList||[])].filter(Boolean); if(!files.length) return;
   cat=cat||'ostatni';
@@ -1898,6 +1926,17 @@ async function handleFiles(fileList,cat){
       }
     }
   }
+  // Nabídka: číslo nabídky vyčíst a doplnit do prázdného pole NABÍDKA; když to nejde, zeptat se
+  let offerSrc='z PO';
+  if(cat==='nabidka' && isRecv2(cur) && P().edit && !String(cur.offerNo||'').trim()){
+    toast('Čtu nabídku…','ok');
+    for(const f of files){ fillOffer=await offerNoFromFile(f); if(fillOffer) break; }
+    offerSrc='z nabídky';
+    if(!fillOffer){
+      const v=await askText(offerAskText(files[0].name),{title:'Číslo nabídky',ok:'Uložit',no:'Přeskočit',placeholder:'číslo nabídky'});
+      fillOffer=String(v||'').trim(); offerSrc='zadáno ručně';
+    }
+  }
   uploadBusy=true; render();
   const base=rows.find(x=>x._id===editing._id)||editing;
   const filesArr=(base.files||[]).slice(); const hist=(base.hist||[]).slice(); let ok=0;
@@ -1911,9 +1950,9 @@ async function handleFiles(fileList,cat){
       // nahrané PO → stav „PO odesláno" (jen kdo smí měnit stav; zadavatel smí měnit jen přílohy)
       if(cat==='po' && P().edit && poAdvance(base)){ patch.status='odesláno'; if(isRecv2(base)) patch.recv2=true;
         hist.push(`${today()} · ${me.name} · stav → PO odesláno (nahráno PO)`); }
-      if(fillOffer){ patch.offerNo=fillOffer; patch.recv2=true; hist.push(`${today()} · ${me.name} · nabídka ${fillOffer} (vyčteno z PO)`); }
+      if(fillOffer){ patch.offerNo=fillOffer; patch.recv2=true; hist.push(`${today()} · ${me.name} · nabídka ${fillOffer} (${offerSrc==='zadáno ručně'?offerSrc:'vyčteno '+offerSrc})`); }
       await updateDoc(doc(db,'requests',editing._id),patch); Object.assign(editing,patch);
-      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna z PO.`:''),'ok'); }
+      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna${offerSrc==='zadáno ručně'?'':' '+offerSrc}.`:''),'ok'); }
     catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
   uploadBusy=false; render();
 }
@@ -2792,7 +2831,7 @@ async function act(a,v,el,ev){
     case 'mgr-selall':{ const vis=visibleRows(); if(el.checked) vis.forEach(r=>mgrSel.add(r._id)); else vis.forEach(r=>mgrSel.delete(r._id)); break; }
     case 'mgr-file':{ const f=el.files&&el.files[0]; if(!f) return;
       if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); return; }
-      mgrFiles[v]=f; break; }
+      mgrSetFile(v,f); return; }
     case 'mgr-file-clear': mgrFiles[v]=null; break;
     case 'mgr-clear': mgrFiles={po:null,nabidka:null}; mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''}; break;
     case 'mgr-apply': await mgrApply(false); return;
