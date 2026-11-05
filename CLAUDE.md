@@ -222,6 +222,12 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   (jen když stav ve správě není vybraný ručně) i po jednom v záložce Přílohy (kategorie PO,
   jen uživatel s `P().edit`; zadavatel smí podle pravidel měnit jen `files`/`hist`).
   Jen dopředu: `poAdvance()` vynechá stavy odesláno, doručeno, zamítnuto.
+- **Kontrola čísla nabídky z PO** (jen požadavky s novým rozložením, `isRecv2`):
+  `poQuotes(file)` vyčte z textu PDF (pdf.js, `ireqPdfLines`) čísla za „Quotation“ /
+  „Nabídka“. Prázdné pole NABÍDKA (`offerNo`) se doplní (jen s `P().edit`), vyplněné se
+  porovná přes `offerMatches()` (bez lomítek/teček/mezer, 26/077 = 26077). Při neshodě
+  dialog s volbami ANO / NE (`dlg.no` = popisek tlačítka zrušení); NE = nic se nenahraje,
+  ve správě zůstane výběr i soubor. Sken bez textu → kontrola se neprovede.
 - Políčka řádků importu mají `data-ir="klíč|pole"` (ne `data-a`), aby se okno
   nepřekreslovalo při každém stisku klávesy a nevyskakoval kurzor z políčka.
 - Každý požadavek z importu vzniká ve stavu `nový`, stejně jako přes „+ Nový požadavek".

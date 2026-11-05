@@ -1330,6 +1330,17 @@ async function mgrApply(receiveComplete){
     const anyField = mgr.reqNo!==''||mgr.rfqNo!==''||mgr.orderNo!==''||mgr.dssiItem!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!==''||mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!==''||!!mgrFiles.po||!!mgrFiles.nabidka;
     if(!anyField){ toast('Vyplň aspoň jedno políčko, které se má změnit.','err'); return; }
   }
+  // PO ve správě: vyčíst číslo nabídky — u nových požadavků prázdné doplnit, vyplněné zkontrolovat
+  let poQ=[];
+  if(!receiveComplete && mgrFiles.po){
+    toast('Čtu PO…','ok');
+    poQ=await poQuotes(mgrFiles.po);
+    if(poQ.length){
+      const bad=sel.filter(isRecv2).map(r=>({r,offer:(mgr.offerNo.trim()||String(r.offerNo||'').trim()),quotes:poQ}))
+        .filter(x=>x.offer && !offerMatches(x.offer,poQ));
+      if(bad.length && !await askYes(poMismatchText(bad),{title:'Kontrola PO',ok:'ANO',no:'NE'})){ await poRetryInfo(); return; }
+    }
+  }
   // soubory ze správy: nahrát JEDNOU, pak stejná metadata ke všem vybraným
   const sharedMetas=[];
   if(!receiveComplete){
@@ -1367,7 +1378,10 @@ async function mgrApply(receiveComplete){
         const add=sharedMetas.filter(m=>!have.has(m.path));
         if(add.length){ patch.files=(r.files||[]).concat(add); add.forEach(m=>ch.push(`příloha ${m.name} (${catLabel(m.cat)})`));
           // nahrané PO → „PO odesláno", pokud stav ve správě nikdo nevybral ručně
-          if(mgr.status==='' && add.some(m=>m.cat==='po') && poAdvance(r)){ patch.status='odesláno'; ch.push('stav → PO odesláno (nahráno PO)'); } }
+          if(mgr.status==='' && add.some(m=>m.cat==='po') && poAdvance(r)){ patch.status='odesláno'; ch.push('stav → PO odesláno (nahráno PO)'); }
+          // prázdné pole NABÍDKA doplnit číslem z PO
+          if(v2 && poQ.length && add.some(m=>m.cat==='po') && !patch.offerNo && !String(r.offerNo||'').trim()){
+            patch.offerNo=poQ.join(', '); ch.push(`nabídka ${patch.offerNo} (vyčteno z PO)`); } }
       }
     }
     if(!Object.keys(patch).length) continue;
@@ -1676,8 +1690,8 @@ function adminView(){
 function dlgView(){
   if(!dlg) return '';
   return `<div class="dlg-wrap"><div class="dlg"><div class="t">${esc(dlg.title)}</div>
-    <div class="c">${esc(dlg.text)}${dlg.kind==='prompt'?`<input id="dlg-input" value="${esc(dlg.value||'')}" placeholder="${esc(dlg.placeholder||'')}">`:''}</div>
-    <div class="b">${dlg.kind!=='info'?`<button class="btn-ghost" data-a="dlg-no">Zrušit</button>`:''}
+    <div class="c" style="white-space:pre-line">${esc(dlg.text)}${dlg.kind==='prompt'?`<input id="dlg-input" value="${esc(dlg.value||'')}" placeholder="${esc(dlg.placeholder||'')}">`:''}</div>
+    <div class="b">${dlg.kind!=='info'?`<button class="btn-ghost" data-a="dlg-no">${esc(dlg.no||'Zrušit')}</button>`:''}
       <button class="${dlg.danger?'btn-danger':'btn-primary'}" data-a="dlg-yes">${esc(dlg.ok||'Potvrdit')}</button></div></div></div>`;
 }
 function toastView(){ return toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:''; }
@@ -1840,6 +1854,28 @@ async function uploadOne(reqId,f,cat){
 /* Po nahrání PO se požadavek přepne na „PO odesláno" — jen dopředu: doručené,
    zamítnuté a už odeslané se nemění. */
 const poAdvance = r => !!r && !['odesláno','doručeno','zamítnuto'].includes(r.status);
+
+/* ---------- PO: číslo nabídky z dokumentu ----------
+   Z textu PDF se vyčtou čísla nabídek („Quotation : 26/077", „Nabídka č. …").
+   Porovnává se bez lomítek, teček a mezer (26/077 = 26077 = 26077.YFAI). */
+const normOffer = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+async function poQuotes(file){
+  if(!file || !(/\.pdf$/i.test(file.name||'') || file.type==='application/pdf')) return [];
+  try{
+    const txt=(await ireqPdfLines(file)).join('\n'), out=[];
+    const rx=/(?:quotation|quote|nab[ií]dk[ay])\s*(?:no\.?|nr\.?|number|č\.?|číslo)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9\/\-.]*[A-Za-z0-9])/gi;
+    let m; while((m=rx.exec(txt))){ const q=m[1]; if(/\d/.test(q) && !out.some(x=>normOffer(x)===normOffer(q))) out.push(q); }
+    return out;
+  }catch(e){ return []; }   // sken / nečitelné PDF → kontrola se neprovede
+}
+/* Sedí zapsaná nabídka (může jich být víc oddělených čárkou) s některou z PO? */
+const offerMatches=(offer,quotes)=>{
+  const a=String(offer||'').split(/[,;]+/).map(normOffer).filter(Boolean), b=quotes.map(normOffer).filter(Boolean);
+  return a.some(x=>b.some(y=>x===y||(Math.min(x.length,y.length)>=4&&(x.startsWith(y)||y.startsWith(x)))));
+};
+const poMismatchText = list => `Číslo nabídky neodpovídá — je to správně?\n\n`+list.map(x=>`${x.r.poradove||''}: v poli NABÍDKA „${x.offer}“, v PO „${x.quotes.join(', ')}“`).join('\n')
+  +`\n\nANO = PO se uloží.  NE = PO se neuloží, oprav data a akci opakuj.`;
+const poRetryInfo = () => info('PO se neuložilo. Oprav číslo nabídky (pole NABÍDKA nebo dokument PO) a nahraj PO znovu.',{title:'PO neuloženo'});
 async function handleFiles(fileList,cat){
   const files=[...(fileList||[])].filter(Boolean); if(!files.length) return;
   cat=cat||'ostatni';
@@ -1850,6 +1886,18 @@ async function handleFiles(fileList,cat){
   }
   const cur=rows.find(x=>x._id===editing._id)||editing;
   if(!canAttach(cur)){ toast('Na přidání přílohy nemáš právo.','err'); return; }
+  // PO: vyčíst číslo nabídky — prázdné pole NABÍDKA doplnit, vyplněné zkontrolovat
+  let fillOffer='';
+  if(cat==='po' && isRecv2(cur)){
+    toast('Čtu PO…','ok');
+    const quotes=[]; for(const f of files) for(const q of await poQuotes(f)) if(!quotes.some(x=>normOffer(x)===normOffer(q))) quotes.push(q);
+    if(quotes.length){
+      if(!String(cur.offerNo||'').trim()){ if(P().edit) fillOffer=quotes.join(', '); }
+      else if(!offerMatches(cur.offerNo,quotes)){
+        if(!await askYes(poMismatchText([{r:cur,offer:cur.offerNo,quotes}]),{title:'Kontrola PO',ok:'ANO',no:'NE'})){ await poRetryInfo(); return; }
+      }
+    }
+  }
   uploadBusy=true; render();
   const base=rows.find(x=>x._id===editing._id)||editing;
   const filesArr=(base.files||[]).slice(); const hist=(base.hist||[]).slice(); let ok=0;
@@ -1863,8 +1911,9 @@ async function handleFiles(fileList,cat){
       // nahrané PO → stav „PO odesláno" (jen kdo smí měnit stav; zadavatel smí měnit jen přílohy)
       if(cat==='po' && P().edit && poAdvance(base)){ patch.status='odesláno'; if(isRecv2(base)) patch.recv2=true;
         hist.push(`${today()} · ${me.name} · stav → PO odesláno (nahráno PO)`); }
+      if(fillOffer){ patch.offerNo=fillOffer; patch.recv2=true; hist.push(`${today()} · ${me.name} · nabídka ${fillOffer} (vyčteno z PO)`); }
       await updateDoc(doc(db,'requests',editing._id),patch); Object.assign(editing,patch);
-      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':''),'ok'); }
+      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna z PO.`:''),'ok'); }
     catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
   uploadBusy=false; render();
 }
