@@ -2572,16 +2572,25 @@ function bindImportDnD(){
     const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) startImport(f); });
 }
 /* Přetažení souboru DO dlaždice (nahrání) a přetažení souboru Z appky na plochu (stažení). */
+let attDragInternal=false;   // táhne se řádek přílohy z appky (stažení na plochu) → dlaždice ho nepřijímá
 function bindAttachDnD(){
+  // Cílem je celá dlaždice (i záhlaví), ne jen spodní plocha. Typ přetahovaných dat se při
+  // dragover nekontroluje přísně — Outlook a některé prohlížeče „Files" hlásí až při puštění.
   document.querySelectorAll('.attdrop').forEach(z=>{
     if(z.classList.contains('ro')) return;
-    z.addEventListener('dragover',e=>{ if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){ e.preventDefault(); z.classList.add('drag'); } });
-    z.addEventListener('dragleave',()=>z.classList.remove('drag'));
-    z.addEventListener('drop',e=>{ e.preventDefault(); z.classList.remove('drag');
-      if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length) handleFiles(e.dataTransfer.files, z.dataset.cat); });
+    const tile=z.closest('.attcat')||z;
+    const isOut = e => !(e.dataTransfer&&[...(e.dataTransfer.types||[])].includes('DownloadURL'));   // ne vlastní řádek přílohy
+    tile.addEventListener('dragover',e=>{ if(attDragInternal||!isOut(e)) return; e.preventDefault(); try{e.dataTransfer.dropEffect='copy';}catch(_){} z.classList.add('drag'); });
+    tile.addEventListener('dragleave',e=>{ if(!tile.contains(e.relatedTarget)) z.classList.remove('drag'); });
+    tile.addEventListener('drop',e=>{ if(attDragInternal) return; e.preventDefault(); z.classList.remove('drag');
+      const dt=e.dataTransfer; let files=dt&&dt.files&&dt.files.length?[...dt.files]:[];
+      if(!files.length&&dt&&dt.items) files=[...dt.items].filter(i=>i.kind==='file').map(i=>i.getAsFile()).filter(Boolean);
+      if(files.length) handleFiles(files, z.dataset.cat);
+      else toast('Soubor se nepodařilo převzít. Ulož ho nejdřív na plochu a přetáhni odtud (nebo použij „+ soubor").','err'); });
   });
   document.querySelectorAll('.attrow[data-dl]').forEach(row=>{
-    row.addEventListener('dragstart',e=>{
+    row.addEventListener('dragend',()=>{ attDragInternal=false; });
+    row.addEventListener('dragstart',e=>{ attDragInternal=true;
       const f=(editing&&editing.files||[])[Number(row.dataset.dl)]; if(!f||!e.dataTransfer) return;
       const mime = /\.pdf$/i.test(f.name)?'application/pdf':(/\.(png|jpe?g|gif|webp)$/i.test(f.name)?'image/*':'application/octet-stream');
       try{ e.dataTransfer.setData('DownloadURL', `${mime}:${f.name}:${f.url}`); }catch(_){}
