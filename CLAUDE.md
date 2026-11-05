@@ -218,6 +218,10 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   přetažení obsluhuje `bindMgrDnD()`. Vybraný soubor drží `mgrFiles`, při „Použít na vybrané“ se nahraje
   jednou do `nabidky/sprava_<čas>_<náhoda>/` a připojí se ke všem vybraným řádkům.
   U přílohy se pak v Přílohách ukazuje „🔗 sdíleno s N“.
+- **Nahrané PO přepne stav na `odesláno` („PO odesláno“)** — ve Správě požadavků
+  (jen když stav ve správě není vybraný ručně) i po jednom v záložce Přílohy (kategorie PO,
+  jen uživatel s `P().edit`; zadavatel smí podle pravidel měnit jen `files`/`hist`).
+  Jen dopředu: `poAdvance()` vynechá stavy odesláno, doručeno, zamítnuto.
 - Políčka řádků importu mají `data-ir="klíč|pole"` (ne `data-a`), aby se okno
   nepřekreslovalo při každém stisku klávesy a nevyskakoval kurzor z políčka.
 - Každý požadavek z importu vzniká ve stavu `nový`, stejně jako přes „+ Nový požadavek".

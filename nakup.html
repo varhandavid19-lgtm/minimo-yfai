@@ -1365,7 +1365,9 @@ async function mgrApply(receiveComplete){
       if(sharedMetas.length){
         const have=new Set((r.files||[]).map(f=>f.path));
         const add=sharedMetas.filter(m=>!have.has(m.path));
-        if(add.length){ patch.files=(r.files||[]).concat(add); add.forEach(m=>ch.push(`příloha ${m.name} (${catLabel(m.cat)})`)); }
+        if(add.length){ patch.files=(r.files||[]).concat(add); add.forEach(m=>ch.push(`příloha ${m.name} (${catLabel(m.cat)})`));
+          // nahrané PO → „PO odesláno", pokud stav ve správě nikdo nevybral ručně
+          if(mgr.status==='' && add.some(m=>m.cat==='po') && poAdvance(r)){ patch.status='odesláno'; ch.push('stav → PO odesláno (nahráno PO)'); } }
       }
     }
     if(!Object.keys(patch).length) continue;
@@ -1835,6 +1837,9 @@ async function uploadOne(reqId,f,cat){
 }
 /* Zpracuje vybrané/přetažené soubory: u nového požadavku je zařadí do fronty,
    u existujícího je rovnou nahraje do úložiště. */
+/* Po nahrání PO se požadavek přepne na „PO odesláno" — jen dopředu: doručené,
+   zamítnuté a už odeslané se nemění. */
+const poAdvance = r => !!r && !['odesláno','doručeno','zamítnuto'].includes(r.status);
 async function handleFiles(fileList,cat){
   const files=[...(fileList||[])].filter(Boolean); if(!files.length) return;
   cat=cat||'ostatni';
@@ -1853,7 +1858,13 @@ async function handleFiles(fileList,cat){
     try{ const meta=await uploadOne(editing._id,f,cat); filesArr.push(meta); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name} (${catLabel(cat)})`); ok++; }
     catch(e){ toast(`Nahrání „${f.name}" selhalo: `+e.message,'err'); }
   }
-  if(ok){ try{ await updateDoc(doc(db,'requests',editing._id),{files:filesArr,hist}); editing.files=filesArr; editing.hist=hist; toast(ok===1?'Příloha nahrána.':ok+' přílohy nahrány.','ok'); }
+  if(ok){ try{
+      const patch={files:filesArr,hist};
+      // nahrané PO → stav „PO odesláno" (jen kdo smí měnit stav; zadavatel smí měnit jen přílohy)
+      if(cat==='po' && P().edit && poAdvance(base)){ patch.status='odesláno'; if(isRecv2(base)) patch.recv2=true;
+        hist.push(`${today()} · ${me.name} · stav → PO odesláno (nahráno PO)`); }
+      await updateDoc(doc(db,'requests',editing._id),patch); Object.assign(editing,patch);
+      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':''),'ok'); }
     catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
   uploadBusy=false; render();
 }
