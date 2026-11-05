@@ -213,8 +213,9 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   Akce `del-file` u ní spočítá, kolik JINÝCH požadavků má přílohu se stejným `path`;
   z úložiště (`deleteObject`) se maže, až když na soubor nikdo jiný neodkazuje.
 - Stejný mechanismus (`uploadShared(f,cat,prefix)`) používá **Správa požadavků**:
-  vedle Order no. je tlačítko „📎 soubor“ (příloha kategorie PO) a vedle Nabídky
-  (kategorie Nabídka). Vybraný soubor drží `mgrFiles`, při „Použít na vybrané“ se nahraje
+  vedle Order no. je pole `[data-mgdrop="po"]` (přetažení souboru i klik „📎 vložit“,
+  příloha kategorie PO) a vedle Nabídky `[data-mgdrop="nabidka"]` (kategorie Nabídka);
+  přetažení obsluhuje `bindMgrDnD()`. Vybraný soubor drží `mgrFiles`, při „Použít na vybrané“ se nahraje
   jednou do `nabidky/sprava_<čas>_<náhoda>/` a připojí se ke všem vybraným řádkům.
   U přílohy se pak v Přílohách ukazuje „🔗 sdíleno s N“.
 - Políčka řádků importu mají `data-ir="klíč|pole"` (ne `data-a`), aby se okno

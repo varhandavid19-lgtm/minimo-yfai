@@ -156,10 +156,17 @@
   .mgrgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#41506b}
   .mgrgrid .inline{display:flex;gap:6px}
   .mgrgrid .mgrf{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#41506b}
-  .mgrgrid .mgr-fbtn{display:inline-flex;flex-direction:row;align-items:center;flex:0 0 auto;white-space:nowrap;padding:0 11px;border:1px solid var(--navy-2);border-radius:8px;background:#eef4fc;color:var(--navy-2);font-weight:700;cursor:pointer}
-  .mgrgrid .mgr-fbtn:hover{background:#dfeafa}
-  .mgr-fname{display:flex;align-items:center;gap:6px;font-weight:600;color:#1b3a66;font-size:12px}
-  .mgr-fname .muted{font-weight:400}
+  .mgrgrid .mgrf .inline input{flex:1 1 45%;min-width:0}
+  .mgrgrid .mgr-drop{flex:1 1 55%;min-width:0;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;
+    padding:0 10px;min-height:36px;border:2px dashed #9db4d4;border-radius:8px;background:#f7faff;color:var(--navy-2);
+    font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden}
+  .mgrgrid .mgr-drop:hover{background:#eef4fc}
+  .mgrgrid .mgr-pick{padding:3px 9px;border-radius:6px;background:var(--navy-2);color:#fff;font-weight:700}
+  .mgrgrid .mgr-drop.drag{background:#eaf2ff;border-color:var(--navy-2);box-shadow:inset 0 0 0 2px rgba(37,90,158,.25)}
+  .mgrgrid .mgr-drop.has{border-style:solid;border-color:#8fc59a;background:#eefaf0;color:#1b3a66;justify-content:flex-start;cursor:default}
+  .mgrgrid .mgr-drop .mgr-fn{overflow:hidden;text-overflow:ellipsis}
+  .mgrgrid .mgr-drop .muted{font-weight:400;flex:0 0 auto}
+  .mgrgrid .mgr-drop .att-del{margin-left:auto;flex:0 0 auto}
   .mgrbtns{display:flex;gap:10px;align-items:center;padding:0 14px 14px;flex-wrap:wrap}
   .selcol{width:34px;text-align:center;cursor:default}
   .selcol input{width:17px;height:17px;cursor:pointer;margin:0}
@@ -1257,8 +1264,29 @@ function listView(){
 /* Soubor ve správě (PO u Order no., nabídka u Nabídky): nahraje se do úložiště JEDNOU
    a všechny vybrané požadavky dostanou přílohu s odkazem na ten samý soubor (shared:true). */
 let mgrFiles={po:null,nabidka:null};
-const mgrFileBtn = cat => `<label class="mgr-fbtn" title="Vložit soubor (${esc(catLabel(cat))}) — nahraje se jednou a připojí se ke všem vybraným požadavkům">📎 soubor<input type="file" data-a="mgr-file" data-v="${cat}" accept="${ATT_ACCEPT}" hidden></label>`;
-const mgrFileChip = cat => mgrFiles[cat] ? `<div class="mgr-fname">📄 ${esc(mgrFiles[cat].name)} <span class="muted">(${esc(fmtSize(mgrFiles[cat].size))} → příloha ${esc(catLabel(cat))})</span><button class="att-del" data-a="mgr-file-clear" data-v="${cat}" title="Odebrat soubor">✕</button></div>` : '';
+// Pole pro soubor vedle políčka: přetažení souboru, nebo klik = výběr souboru.
+const mgrFileBtn = cat => {
+  const f=mgrFiles[cat];
+  return f
+    ? `<div class="mgr-drop has" data-mgdrop="${cat}" title="Nahraje se jednou a připojí se ke všem vybraným požadavkům (příloha ${esc(catLabel(cat))})"><span class="mgr-fn">📄 ${esc(f.name)}</span><span class="muted">${esc(fmtSize(f.size))}</span><button class="att-del" data-a="mgr-file-clear" data-v="${cat}" title="Odebrat soubor">✕</button></div>`
+    : `<label class="mgr-drop" data-mgdrop="${cat}" title="Soubor se nahraje jednou a připojí se ke všem vybraným požadavkům (příloha ${esc(catLabel(cat))})">Přetáhni sem ${cat==='po'?'PO':'nabídku'} nebo <span class="mgr-pick">📎 vložit</span><input type="file" data-a="mgr-file" data-v="${cat}" accept="${ATT_ACCEPT}" hidden></label>`;
+};
+const mgrFileChip = () => '';
+/* Přetažení souboru do polí Správy požadavků. */
+function bindMgrDnD(){
+  document.querySelectorAll('[data-mgdrop]').forEach(z=>{
+    z.addEventListener('dragover',e=>{ e.preventDefault(); try{e.dataTransfer.dropEffect='copy';}catch(_){} z.classList.add('drag'); });
+    z.addEventListener('dragleave',e=>{ if(!z.contains(e.relatedTarget)) z.classList.remove('drag'); });
+    z.addEventListener('drop',e=>{ e.preventDefault(); z.classList.remove('drag');
+      const dt=e.dataTransfer; let files=dt&&dt.files&&dt.files.length?[...dt.files]:[];
+      if(!files.length&&dt&&dt.items) files=[...dt.items].filter(i=>i.kind==='file').map(i=>i.getAsFile()).filter(Boolean);
+      const f=files[0];
+      if(!f){ toast('Soubor se nepodařilo převzít. Ulož ho nejdřív na plochu a přetáhni odtud (nebo klikni a vyber ho).','err'); return; }
+      if(files.length>1) toast('Bere se jen jeden soubor — použil jsem „'+f.name+'".','err');
+      if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); return; }
+      mgrFiles[z.dataset.mgdrop]=f; render(); });
+  });
+}
 function mgrPanel(){
   const n=mgrSel.size;
   // staré a nové rozložení (isRecv2, od 26. 10. 2026) mají jiná pole: co do vybraných nepatří, se zašedí
@@ -2586,6 +2614,7 @@ function bind(){
   if(qrOpen) startQr();
   syncTopScroll();
   bindAttachDnD();
+  bindMgrDnD();
   bindImportDnD();
   bindIreq();
 }
