@@ -155,6 +155,11 @@
   .mgrgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px;padding:14px}
   .mgrgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#41506b}
   .mgrgrid .inline{display:flex;gap:6px}
+  .mgrgrid .mgrf{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#41506b}
+  .mgrgrid .mgr-fbtn{display:inline-flex;flex-direction:row;align-items:center;flex:0 0 auto;white-space:nowrap;padding:0 11px;border:1px solid var(--navy-2);border-radius:8px;background:#eef4fc;color:var(--navy-2);font-weight:700;cursor:pointer}
+  .mgrgrid .mgr-fbtn:hover{background:#dfeafa}
+  .mgr-fname{display:flex;align-items:center;gap:6px;font-weight:600;color:#1b3a66;font-size:12px}
+  .mgr-fname .muted{font-weight:400}
   .mgrbtns{display:flex;gap:10px;align-items:center;padding:0 14px 14px;flex-wrap:wrap}
   .selcol{width:34px;text-align:center;cursor:default}
   .selcol input{width:17px;height:17px;cursor:pointer;margin:0}
@@ -1249,6 +1254,11 @@ function listView(){
 }
 
 /* ---------- Správa požadavků (hromadné doplňování) ---------- */
+/* Soubor ve správě (PO u Order no., nabídka u Nabídky): nahraje se do úložiště JEDNOU
+   a všechny vybrané požadavky dostanou přílohu s odkazem na ten samý soubor (shared:true). */
+let mgrFiles={po:null,nabidka:null};
+const mgrFileBtn = cat => `<label class="mgr-fbtn" title="Vložit soubor (${esc(catLabel(cat))}) — nahraje se jednou a připojí se ke všem vybraným požadavkům">📎 soubor<input type="file" data-a="mgr-file" data-v="${cat}" accept="${ATT_ACCEPT}" hidden></label>`;
+const mgrFileChip = cat => mgrFiles[cat] ? `<div class="mgr-fname">📄 ${esc(mgrFiles[cat].name)} <span class="muted">(${esc(fmtSize(mgrFiles[cat].size))} → příloha ${esc(catLabel(cat))})</span><button class="att-del" data-a="mgr-file-clear" data-v="${cat}" title="Odebrat soubor">✕</button></div>` : '';
 function mgrPanel(){
   const n=mgrSel.size;
   // staré a nové rozložení (isRecv2, od 26. 10. 2026) mají jiná pole: co do vybraných nepatří, se zašedí
@@ -1262,7 +1272,7 @@ function mgrPanel(){
     <div class="mgrgrid">
       <label>Req no.<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="číslo requestu"></label>
       <label>RFQ no.<input id="m-rfqno" data-mg="rfqNo" value="${esc(mgr.rfqNo)}" placeholder="číslo poptávky"></label>
-      <label>Order no.<input id="m-orderno" data-mg="orderNo" value="${esc(mgr.orderNo)}" placeholder="číslo objednávky"></label>
+      <div class="mgrf">Order no.<div class="inline"><input id="m-orderno" data-mg="orderNo" value="${esc(mgr.orderNo)}" placeholder="číslo objednávky">${mgrFileBtn('po')}</div>${mgrFileChip('po')}</div>
       <label>DSSI item<input id="m-dssi" ${oldDis} data-mg="dssiItem" value="${esc(mgr.dssiItem)}" placeholder="DSSI item"></label>
       <label>Doklad<div class="inline">
         <select id="m-doctype" ${oldDis} data-mg="docType"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${mgr.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
@@ -1270,7 +1280,7 @@ function mgrPanel(){
       <label>Přijaté množství<input id="m-qty" type="number" min="0" step="1" data-mg="recvQty" value="${esc(mgr.recvQty)}" placeholder="ks"></label>
       <label>Komentář<input id="m-comment" data-mg="comment" value="${esc(mgr.comment)}" placeholder="komentář skladu (nepřepíše Poznámku)"></label>
       <label>Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label>
-      <label>Nabídka<input id="m-offer" ${newDis} data-mg="offerNo" value="${esc(mgr.offerNo)}" placeholder="číslo nabídky"></label>
+      <div class="mgrf">Nabídka<div class="inline"><input id="m-offer" ${newDis} data-mg="offerNo" value="${esc(mgr.offerNo)}" placeholder="číslo nabídky">${mgrFileBtn('nabidka')}</div>${mgrFileChip('nabidka')}</div>
       <label>Objednávka QAD<input id="m-qad" ${newDis} data-mg="qadOrder" value="${esc(mgr.qadOrder)}" placeholder="číslo objednávky v QAD"></label>
       <label>Dodací list/servisní výkaz<input id="m-dl" ${newDis} data-mg="dlNo" value="${esc(mgr.dlNo)}" placeholder="číslo DL / výkazu"></label>
       <label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${mgr.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></label>
@@ -1289,8 +1299,18 @@ async function mgrApply(receiveComplete){
   const sel=rows.filter(r=>mgrSel.has(r._id));
   if(!sel.length){ toast('Nejdřív zaškrtni aspoň jeden požadavek.','err'); return; }
   if(!receiveComplete){
-    const anyField = mgr.reqNo!==''||mgr.rfqNo!==''||mgr.orderNo!==''||mgr.dssiItem!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!==''||mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!=='';
+    const anyField = mgr.reqNo!==''||mgr.rfqNo!==''||mgr.orderNo!==''||mgr.dssiItem!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!==''||mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!==''||!!mgrFiles.po||!!mgrFiles.nabidka;
     if(!anyField){ toast('Vyplň aspoň jedno políčko, které se má změnit.','err'); return; }
+  }
+  // soubory ze správy: nahrát JEDNOU, pak stejná metadata ke všem vybraným
+  const sharedMetas=[];
+  if(!receiveComplete){
+    for(const cat of ['po','nabidka']){
+      const f=mgrFiles[cat]; if(!f) continue;
+      if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); return; }
+      try{ toast(`Nahrávám „${f.name}"…`,'ok'); sharedMetas.push(await uploadShared(f,cat,'sprava')); }
+      catch(e){ toast(`Nahrání „${f.name}" selhalo: `+e.message,'err'); return; }
+    }
   }
   let ok=0, fail=0, skip=0;
   for(const r of sel){
@@ -1314,6 +1334,11 @@ async function mgrApply(receiveComplete){
       if(v2 && mgr.qadOrder!==''){ patch.qadOrder=mgr.qadOrder.trim(); ch.push('objednávka QAD '+patch.qadOrder); }
       if(v2 && mgr.dlNo!==''){ patch.dlNo=mgr.dlNo.trim(); ch.push('dodací list/servisní výkaz '+patch.dlNo); }
       if(mgr.status!==''){ patch.status=mgr.status; ch.push('stav → '+mgr.status); }
+      if(sharedMetas.length){
+        const have=new Set((r.files||[]).map(f=>f.path));
+        const add=sharedMetas.filter(m=>!have.has(m.path));
+        if(add.length){ patch.files=(r.files||[]).concat(add); add.forEach(m=>ch.push(`příloha ${m.name} (${catLabel(m.cat)})`)); }
+      }
     }
     if(!Object.keys(patch).length) continue;
     if(v2) patch.recv2=true;   // nové rozložení zůstane i po změně stavu z „nový"
@@ -1321,7 +1346,7 @@ async function mgrApply(receiveComplete){
     try{ await updateDoc(doc(db,'requests',r._id),patch); ok++; }
     catch(e){ fail++; }
   }
-  mgrSel.clear();
+  mgrSel.clear(); mgrFiles={po:null,nabidka:null};
   mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''};  // po použití vyprázdnit políčka, ať se nepřenesou na další dávku
   toast(`Upraveno ${czCount(ok)}.`+(skip?` Pole, která daný požadavek nemá, se přeskočila (${skip}×).`:'')+(fail?` (${fail} se nepovedlo — zkus to znovu)`:''), fail?'err':'ok');
   render();
@@ -1529,7 +1554,7 @@ function renderAttachments(r,isNew,attCan){
         .map(x=>`<div class="attrow"><span class="attlink">📄 ${esc(x.p.file.name)}</span><span class="attmeta">${esc(fmtSize(x.p.file.size))} · připraveno</span>${attCan?`<button class="att-del" data-a="unqueue-file" data-v="${x.i}" title="Odebrat">✕</button>`:''}</div>`).join('');
     } else {
       items = (r.files||[]).map((f,i)=>({f,i})).filter(x=>(x.f.cat||'ostatni')===c.key)
-        .map(x=>`<div class="attrow" draggable="true" data-dl="${x.i}"><a class="attlink" href="${esc(x.f.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Otevřít ${esc(x.f.name)}">📄 ${esc(x.f.name)}</a><span class="attmeta">${x.f.size?esc(fmtSize(x.f.size)):''}${x.f.by?' · '+esc(x.f.by):''}</span><button class="att-dl" data-a="dl-file" data-v="${x.i}" title="Stáhnout">⬇</button>${attCan?`<button class="att-del" data-a="del-file" data-v="${x.i}" title="Smazat">✕</button>`:''}</div>`).join('');
+        .map(x=>`<div class="attrow" draggable="true" data-dl="${x.i}"><a class="attlink" href="${esc(x.f.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Otevřít ${esc(x.f.name)}">📄 ${esc(x.f.name)}</a><span class="attmeta">${x.f.size?esc(fmtSize(x.f.size)):''}${x.f.by?' · '+esc(x.f.by):''}${(()=>{ if(!x.f.shared) return ''; const n=rows.filter(q=>q._id!==r._id&&(q.files||[]).some(g=>g.path===x.f.path)).length; return n?` · <b title="Stejný soubor je připojený i k dalším požadavkům">🔗 sdíleno s ${n}</b>`:''; })()}</span><button class="att-dl" data-a="dl-file" data-v="${x.i}" title="Stáhnout">⬇</button>${attCan?`<button class="att-del" data-a="del-file" data-v="${x.i}" title="Smazat">✕</button>`:''}</div>`).join('');
     }
     return `<div class="attcat">
       <div class="attcat-h">${esc(c.label)}${attCan?`<label class="att-add">+ soubor<input type="file" data-a="upload-file" data-v="${c.key}" accept="${ATT_ACCEPT}" multiple hidden></label>`:''}</div>
@@ -2304,14 +2329,15 @@ function bindIreq(){
 /* Nabídku nahrajeme do úložiště JEDNOU a stejná metadata dáme všem požadavkům.
    Příznak shared:true říká mazání příloh, že se soubor z úložiště smazat nesmí
    (patří i ostatním požadavkům z téhož importu). */
-async function ireqUploadOffer(f){
+async function uploadShared(f,cat,prefix){
   const safe=f.name.replace(/[^\w.\-]+/g,'_').slice(-80);
-  const path='nabidky/import_'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'/'+safe;
+  const path='nabidky/'+(prefix||'import')+'_'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'/'+safe;
   const st=sref(storage,path);
   await uploadBytes(st,f,{contentType:f.type||'application/octet-stream'});
   const url=await getDownloadURL(st);
-  return {name:f.name,path,url,size:f.size,cat:'nabidka',at:today(),by:me.name,shared:true};
+  return {name:f.name,path,url,size:f.size,cat:cat||'nabidka',at:today(),by:me.name,shared:true};
 }
+const ireqUploadOffer = f => uploadShared(f,'nabidka','import');
 function ireqValidate(){
   const errs={};
   impReq.rows.forEach(r=>{
@@ -2675,7 +2701,11 @@ async function act(a,v,el,ev){
     }
     case 'mgr-selrow': if(el.checked) mgrSel.add(v); else mgrSel.delete(v); break;
     case 'mgr-selall':{ const vis=visibleRows(); if(el.checked) vis.forEach(r=>mgrSel.add(r._id)); else vis.forEach(r=>mgrSel.delete(r._id)); break; }
-    case 'mgr-clear': mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''}; break;
+    case 'mgr-file':{ const f=el.files&&el.files[0]; if(!f) return;
+      if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); return; }
+      mgrFiles[v]=f; break; }
+    case 'mgr-file-clear': mgrFiles[v]=null; break;
+    case 'mgr-clear': mgrFiles={po:null,nabidka:null}; mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''}; break;
     case 'mgr-apply': await mgrApply(false); return;
     case 'mgr-receive': await mgrApply(true); return;
     case 'dlg-yes':{const d=dlg;dlg=null;const val=d.kind==='prompt'?(document.getElementById('dlg-input')||{}).value||'':true;
@@ -2834,13 +2864,15 @@ async function act(a,v,el,ev){
       if(!canAttach(cur)){ toast('Na smazání přílohy nemáš právo.','err'); return; }
       const files=(editing.files||[]).slice(); const f=files[Number(v)];
       if(!f) return;
-      const otazka = f.shared
-        ? `Odebrat přílohu „${f.name}" z tohohle požadavku? Je to nabídka z hromadného importu — u ostatních požadavků z téže nabídky zůstane, proto se z úložiště nemaže.`
+      // sdílený soubor (import / správa požadavků): kolik JINÝCH požadavků na něj ještě odkazuje
+      const others = f.shared ? rows.filter(x=>x._id!==editing._id && (x.files||[]).some(g=>g.path===f.path)).length : 0;
+      const otazka = others
+        ? `Odebrat přílohu „${f.name}" z tohohle požadavku? Je sdílená — připojená je i k dalším požadavkům (${others}), tam zůstane, proto se z úložiště nemaže.`
         : `Smazat přílohu „${f.name}"? Soubor se odstraní z úložiště.`;
-      if(!await askYes(otazka,{title:'Smazání přílohy',ok:f.shared?'Odebrat':'Smazat',danger:true})) return;
+      if(!await askYes(otazka,{title:'Smazání přílohy',ok:others?'Odebrat':'Smazat',danger:true})) return;
       try{
-        // sdílenou nabídku z importu z úložiště nemažeme — odkazují na ni i ostatní požadavky
-        if(!f.shared){ try{ await deleteObject(sref(storage,f.path)); }catch(e){ /* soubor už možná není – pokračuj v odebrání z požadavku */ } }
+        // z úložiště se maže, jen když na soubor už neodkazuje žádný jiný požadavek
+        if(!others){ try{ await deleteObject(sref(storage,f.path)); }catch(e){ /* soubor už možná není – pokračuj v odebrání z požadavku */ } }
         files.splice(Number(v),1);
         const hist=(editing.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${f.name}`);
         await updateDoc(doc(db,'requests',editing._id),{files,hist});

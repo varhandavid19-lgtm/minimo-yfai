@@ -209,9 +209,14 @@ nabídka (Excel / CSV / PDF), z ní se rozepíšou položky do řádků a z kaž
 vznikne jeden požadavek. Knihovny na čtení souborů (SheetJS, pdf.js) se stahují
 z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
 - Nabídka se do úložiště nahraje JEDNOU do `nabidky/import_<čas>_<náhoda>/` a stejná
-  metadata se připnou ke všem požadavkům z importu. Taková příloha má `shared:true`
-  a při mazání se ze **úložiště neodstraňuje** — odkazují na ni i ostatní požadavky
-  z téhož importu. Nepřeváděj na mazání přes `deleteObject`.
+  metadata se připnou ke všem požadavkům z importu. Taková příloha má `shared:true`.
+  Akce `del-file` u ní spočítá, kolik JINÝCH požadavků má přílohu se stejným `path`;
+  z úložiště (`deleteObject`) se maže, až když na soubor nikdo jiný neodkazuje.
+- Stejný mechanismus (`uploadShared(f,cat,prefix)`) používá **Správa požadavků**:
+  vedle Order no. je tlačítko „📎 soubor“ (příloha kategorie PO) a vedle Nabídky
+  (kategorie Nabídka). Vybraný soubor drží `mgrFiles`, při „Použít na vybrané“ se nahraje
+  jednou do `nabidky/sprava_<čas>_<náhoda>/` a připojí se ke všem vybraným řádkům.
+  U přílohy se pak v Přílohách ukazuje „🔗 sdíleno s N“.
 - Políčka řádků importu mají `data-ir="klíč|pole"` (ne `data-a`), aby se okno
   nepřekreslovalo při každém stisku klávesy a nevyskakoval kurzor z políčka.
 - Každý požadavek z importu vzniká ve stavu `nový`, stejně jako přes „+ Nový požadavek".
