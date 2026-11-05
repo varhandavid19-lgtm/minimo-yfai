@@ -3003,9 +3003,13 @@ async function act(a,v,el,ev){
         if(!others){ try{ await deleteObject(sref(storage,f.path)); }catch(e){ /* soubor už možná není – pokračuj v odebrání z požadavku */ } }
         files.splice(Number(v),1);
         const hist=(editing.hist||[]).concat(`${today()} · ${me.name} · smazal přílohu ${f.name}`);
-        await updateDoc(doc(db,'requests',editing._id),{files,hist});
-        editing.files=files; editing.hist=hist;
-        toast('Příloha smazána.','ok');
+        const patch={files,hist};
+        // smazaná poslední nabídka → vymazat i číslo nabídky (pole NABÍDKA smí měnit jen P().edit)
+        const clearOffer = f.cat==='nabidka' && P().edit && String(cur.offerNo||'').trim() && !files.some(g=>g.cat==='nabidka');
+        if(clearOffer){ patch.offerNo=''; hist.push(`${today()} · ${me.name} · nabídka ${cur.offerNo} vymazána (smazaná příloha)`); }
+        await updateDoc(doc(db,'requests',editing._id),patch);
+        Object.assign(editing,patch);
+        toast('Příloha smazána.'+(clearOffer?' Číslo nabídky vymazáno.':''),'ok');
       }catch(e){ toast('Smazání selhalo: '+e.message,'err'); }
       render(); return;
     }

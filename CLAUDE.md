@@ -233,6 +233,7 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   cat nabidka, `isRecv2`, `P().edit`, prázdné `offerNo`) → doplní; nenajde → `askText`
   (Uložit / Přeskočit). Správa: `mgrSetFile()` (přetažení i „vložit“) číslo hned zapíše do
   pole Nabídka (`mgr.offerNo`, jen když je prázdné), nenajde → stejný dialog.
+  Smazání poslední přílohy kategorie nabidka (`del-file`, `P().edit`) vymaže i `offerNo`.
 - Políčka řádků importu mají `data-ir="klíč|pole"` (ne `data-a`), aby se okno
   nepřekreslovalo při každém stisku klávesy a nevyskakoval kurzor z políčka.
 - Každý požadavek z importu vzniká ve stavu `nový`, stejně jako přes „+ Nový požadavek".
