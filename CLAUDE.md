@@ -227,7 +227,12 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   „Nabídka“. Prázdné pole NABÍDKA (`offerNo`) se doplní (jen s `P().edit`), vyplněné se
   porovná přes `offerMatches()` (bez lomítek/teček/mezer, 26/077 = 26077). Při neshodě
   dialog s volbami ANO / NE (`dlg.no` = popisek tlačítka zrušení); NE = nic se nenahraje,
-  ve správě zůstane výběr i soubor. Sken bez textu → kontrola se neprovede.
+  ve správě zůstane výběr i soubor. Číslo v PO nenalezeno (sken) a NABÍDKA vyplněná → dialog
+  `poNoQuoteText` (zkontroluj ručně, ANO/NE). Shoda jen stejné číslo nebo přípona revize
+  („-2", „rev 1"), ne prefix. Vyčtená čísla se ukládají do `r.poQuotes` (smazání PO je vymaže).
+  Pozdější změna NABÍDKA u požadavku s PO (`offerEditCheck` v `recv-save`/`save`, nahraná
+  nabídka v `handleFiles`, jen pole Nabídka ve správě) → `offerVsPo` (`poQuotesOf`: uložené
+  `poQuotes`, u starších se PO stáhne a přečte).
 - **Číslo nabídky z nahrané nabídky**: `offerNoFromFile(file)` hledá v textu PDF a pak
   v názvu souboru „Nabídka č. / Quotation No. / Offer / Angebot Nr. …“. Přílohy (`handleFiles`,
   cat nabidka, `isRecv2`, `P().edit`, prázdné `offerNo`) → doplní; nenajde → `askText`
