@@ -234,6 +234,10 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   (Uložit / Přeskočit). Správa: `mgrSetFile()` (přetažení i „vložit“) číslo hned zapíše do
   pole Nabídka (`mgr.offerNo`, jen když je prázdné), nenajde → stejný dialog.
   Smazání poslední přílohy kategorie nabidka (`del-file`, `P().edit`) vymaže i `offerNo`.
+- **Dodavatel z PO**: `poSupplier(file)` (Supplier Name / Supplier Code / Credit Terms, text přes
+  `poText` s cache) → `poSupPatch(r,s)`: `supplierNo` a `supplierDue` („30 dní“) vždy podle PO,
+  `dodavatel` jen když `!supConfirmed` (pak potvrdí); přezdívka jen při společném slově.
+  Volá se v `handleFiles` (cat po, `P().edit`) i v `mgrApply`.
 - Políčka řádků importu mají `data-ir="klíč|pole"` (ne `data-a`), aby se okno
   nepřekreslovalo při každém stisku klávesy a nevyskakoval kurzor z políčka.
 - Každý požadavek z importu vzniká ve stavu `nový`, stejně jako přes „+ Nový požadavek".
