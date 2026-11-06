@@ -1909,7 +1909,8 @@ function poSupPatch(r,s){
   // jméno nenalezené v PO → dohledat podle čísla dodavatele u jiných (potvrzených) požadavků
   if(!s.name && s.no){ const o=rows.find(x=>x.supConfirmed && x.dodavatel && String(x.supplierNo||'').trim()===s.no) || rows.find(x=>x.dodavatel && String(x.supplierNo||'').trim()===s.no);
     if(o) s=Object.assign({},s,{name:o.dodavatel}); }
-  if(s.name && !r.supConfirmed){
+  // prázdné jméno se bere jako nepotvrzené (i když u požadavku zůstal příznak supConfirmed)
+  if(s.name && (!r.supConfirmed || !String(r.dodavatel||'').trim())){
     const known=confirmedSuppliers().find(n=>supNorm(n)===supNorm(s.name));
     const name=known||s.name, before=String(r.dodavatel||'').trim();
     if(name!==before){
