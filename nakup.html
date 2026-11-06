@@ -1885,7 +1885,14 @@ function poText(file){
 async function poSupplier(file){
   const t=await poText(file); if(!t) return null;
   const g=rx=>{ const m=t.match(rx); return m?m[1].trim():''; };
-  const name=g(/Supplier Name[ \t]*:?[ \t]*([^\n]+)/i).split(/\s+(?:Support Contact|Invoice Mailing|Delivery Location|Phone|Tel\b|Fax\b)/i)[0].trim();
+  // jméno: za „Supplier Name" na stejném řádku; když tam nic není (pravý sloupec se slepil
+  // do řádku), vezme se první další řádek, který není popisek/adresa Yanfengu
+  const LBL=/(?:Support Contact|Invoice Mailing|Delivery Location|Credit Terms|Incoterms|Buyer|Phone|Tel\b|Fax\b|E-mail|Yanfeng|PTP-|@|Supplier Code|Order Date)/i;
+  const cut=s=>String(s||'').replace(/^[ \t]*:?[ \t]*/,'').split(/\s+(?=Support Contact|Invoice Mailing|Delivery Location|Phone|Tel\b|Fax\b|E-mail)/i)[0].replace(/^(?:Support Contact|Invoice Mailing Address|Delivery Location)\b.*$/i,'').trim();
+  const L=t.split('\n'); let name='';
+  const i=L.findIndex(l=>/Supplier Name/i.test(l));
+  if(i>=0){ name=cut(L[i].slice(L[i].search(/Supplier Name/i)+13));
+    for(let k=i+1; !name && k<Math.min(L.length,i+4); k++){ const c=cut(L[k]); if(c && !LBL.test(c)) name=c; } }
   const no=g(/Supplier (?:Code|No\.?|Number)[ \t]*:?[ \t]*([A-Za-z0-9\-]+)/i);
   const terms=g(/Credit Terms[ \t]*:?[ \t]*([^\n]+)/i);
   const days=(terms.match(/(\d+)\s*(?:NET|days|dní|dnů)/i)||t.match(/Invoice date\s*\+\s*(\d+)\s*days/i)||[])[1];
@@ -1899,6 +1906,9 @@ function poSupPatch(r,s){
   if(!s) return {patch,ch};
   if(s.no && s.no!==String(r.supplierNo||'').trim()){ patch.supplierNo=s.no; ch.push('číslo dodavatele '+s.no); }
   if(s.due && s.due!==String(r.supplierDue||'').trim()){ patch.supplierDue=s.due; ch.push('splatnost '+s.due); }
+  // jméno nenalezené v PO → dohledat podle čísla dodavatele u jiných (potvrzených) požadavků
+  if(!s.name && s.no){ const o=rows.find(x=>x.supConfirmed && x.dodavatel && String(x.supplierNo||'').trim()===s.no) || rows.find(x=>x.dodavatel && String(x.supplierNo||'').trim()===s.no);
+    if(o) s=Object.assign({},s,{name:o.dodavatel}); }
   if(s.name && !r.supConfirmed){
     const known=confirmedSuppliers().find(n=>supNorm(n)===supNorm(s.name));
     const name=known||s.name, before=String(r.dodavatel||'').trim();
