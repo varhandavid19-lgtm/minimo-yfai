@@ -811,3 +811,6 @@ A hlavně: **otestuj stránku s daty, ne jen s prázdnou databází.**
 ## Když si nejsi jistý
 Radši se zeptej v PR nebo navrhni variantu, než abys přepsal něco z výše
 uvedeného seznamu „nesmí se rozbít“.
+- **Kontrola účtu při zadání Req.č.**: `recv-save` — nové/změněné `reqNo` → dialog OK/NE s účtem;
+  NE → `askText` na nový účet (musí být v `cfg.accounts` a jiný než dosavadní), uloží se `ucet` s reqNo.
+  `mgrApply` s `mgr.reqNo` → dialog se seznamem účtů vybraných; NE = nic se neuloží.
