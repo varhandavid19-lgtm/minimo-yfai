@@ -1360,7 +1360,7 @@ async function mgrApply(receiveComplete){
     }
   }
   // PO ve správě: vyčíst číslo nabídky — u nových požadavků prázdné doplnit, vyplněné zkontrolovat
-  let poQ=[], poSup=null;
+  let poQ=[], poSup=null, poManual=false;
   if(!receiveComplete && mgrFiles.po){
     toast('Čtu PO…','ok');
     poQ=await poQuotes(mgrFiles.po); poSup=await poSupplier(mgrFiles.po);
@@ -1368,8 +1368,14 @@ async function mgrApply(receiveComplete){
     if(poQ.length){
       const bad=withOffer.filter(x=>!offerMatches(x.offer,poQ));
       if(bad.length && !await askYes(poMismatchText(bad),{title:'Kontrola PO',ok:'ANO',no:'NE'})){ await poRetryInfo(); return; }
-    } else if(withOffer.length){   // číslo v PO nenalezeno → upozornit, ať se zkontroluje ručně
-      if(!await askYes(poNoQuoteText(withOffer),{title:'Kontrola PO',ok:'ANO',no:'NE'})){ await poRetryInfo(); return; }
+    } else {
+      if(withOffer.length){   // číslo v PO nenalezeno → upozornit, ať se zkontroluje ručně
+        if(!await askYes(poNoQuoteText(withOffer),{title:'Kontrola PO',ok:'ANO',no:'NE'})){ await poRetryInfo(); return; } }
+      // a u požadavků s prázdnou NABÍDKOU si říct o ruční zadání (jednou pro celou dávku)
+      if(sel.some(r=>isRecv2(r) && !String(r.offerNo||'').trim())){
+        const v=await askText(poAskText(mgrFiles.po.name),{title:'Číslo nabídky',ok:'Uložit',no:'Přeskočit',placeholder:'číslo nabídky'});
+        if(String(v||'').trim()){ poQ=[String(v).trim()]; poManual=true; }   // ručně opsané z PO → doplní se do prázdných polí jako číslo z PO
+      }
     }
   } else if(!receiveComplete && mgr.offerNo.trim()){
     // jen číslo nabídky (bez nového PO) → porovnat s PO, které už požadavky mají
@@ -1418,7 +1424,7 @@ async function mgrApply(receiveComplete){
           if(mgr.status==='' && add.some(m=>m.cat==='po') && poAdvance(r)){ patch.status='odesláno'; ch.push('stav → PO odesláno (nahráno PO)'); }
           // prázdné pole NABÍDKA doplnit číslem z PO
           if(v2 && poQ.length && add.some(m=>m.cat==='po') && !patch.offerNo && !String(r.offerNo||'').trim()){
-            patch.offerNo=poQ.join(', '); ch.push(`nabídka ${patch.offerNo} (vyčteno z PO)`); }
+            patch.offerNo=poQ.join(', '); ch.push(`nabídka ${patch.offerNo} (${poManual?'zadáno ručně':'vyčteno z PO'})`); }
           // dodavatel, číslo dodavatele a splatnost z PO
           if(add.some(m=>m.cat==='po')) patch.poQuotes=poQ;
           if(add.some(m=>m.cat==='po')){ const sp=poSupPatch(r,poSup); Object.assign(patch,sp.patch); if(sp.ch.length) ch.push('z PO: '+sp.ch.join(', ')); } }
@@ -1966,8 +1972,9 @@ async function poQuotes(file){
   if(!file || !(/\.pdf$/i.test(file.name||'') || file.type==='application/pdf')) return [];
   try{
     const txt=await poText(file), out=[];
-    const rx=/(?:quotation|quote|nab[ií]dk[ay])\s*(?:no\.?|nr\.?|number|č\.?|číslo)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9\/\-.]*[A-Za-z0-9])/gi;
-    let m; while((m=rx.exec(txt))){ const q=m[1]; if(/\d/.test(q) && !out.some(x=>normOffer(x)===normOffer(q))) out.push(q); }
+    const rx=/(?:quotation|quote|nab[ií]dk[aeyuy]|nab[ií]dce|ponuk[ay]|offer|angebot|oferta)\s*(?:no\.?|nr\.?|n°|number|nummer|č\.?|c\.|číslo|cislo|ref\.?)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9\/\-.]*[A-Za-z0-9])/gi;
+    let m; while((m=rx.exec(txt))){ const q=m[1];
+      if(/\d/.test(q) && !/^\d{1,2}\.\d{1,2}\.(\d{2}|\d{4})$/.test(q) && !out.some(x=>normOffer(x)===normOffer(q))) out.push(q); }
     return out;
   }catch(e){ return []; }   // sken / nečitelné PDF → kontrola se neprovede
 }
@@ -2016,6 +2023,7 @@ async function offerNoFromFile(file){
   }
   return pick(String(file.name||'').replace(/\.[a-z0-9]+$/i,'').replace(/_/g,' '));
 }
+const poAskText = name => `Z PO „${name}“ se nepodařilo přečíst číslo nabídky a pole NABÍDKA je prázdné.\n\nOpiš ho prosím z PO:`;
 const offerAskText = name => `Číslo nabídky se z dokumentu „${name}“ nepodařilo přečíst (sken, Excel nebo neobvyklý formát).\n\nZadej ho prosím ručně:`;
 const poRetryInfo = () =>info('PO se neuložilo. Oprav číslo nabídky (pole NABÍDKA nebo dokument PO) a nahraj PO znovu.',{title:'PO neuloženo'});
 async function handleFiles(fileList,cat){
@@ -2029,7 +2037,7 @@ async function handleFiles(fileList,cat){
   const cur=rows.find(x=>x._id===editing._id)||editing;
   if(!canAttach(cur)){ toast('Na přidání přílohy nemáš právo.','err'); return; }
   // PO: vyčíst číslo nabídky — prázdné pole NABÍDKA doplnit, vyplněné zkontrolovat
-  let fillOffer='', poQ=null;
+  let fillOffer='', poQ=null, offerSrc='z PO';
   if(cat==='po' && isRecv2(cur)){
     toast('Čtu PO…','ok');
     const quotes=[]; for(const f of files) for(const q of await poQuotes(f)) if(!quotes.some(x=>normOffer(x)===normOffer(q))) quotes.push(q);
@@ -2042,13 +2050,16 @@ async function handleFiles(fileList,cat){
       }
     } else if(offer){   // číslo v PO nenalezeno → aspoň upozornit, ať se zkontroluje ručně
       if(!await askYes(poNoQuoteText([{r:cur,offer}]),{title:'Kontrola PO',ok:'ANO',no:'NE'})){ await poRetryInfo(); return; }
+    } else if(P().edit){   // číslo v PO nenalezeno a NABÍDKA prázdná → zadat ručně
+      const v=await askText(poAskText(files[0].name),{title:'Číslo nabídky',ok:'Uložit',no:'Přeskočit',placeholder:'číslo nabídky'});
+      fillOffer=String(v||'').trim(); if(fillOffer){ offerSrc='zadáno ručně'; poQ=[fillOffer]; }   // ručně opsané z PO = číslo nabídky v PO
     }
   }
   // PO: dodavatel, číslo dodavatele a splatnost do boxu Dodavatel (jen kdo smí upravovat)
   let supInfo=null;
   if(cat==='po' && P().edit){ for(const f of files){ supInfo=await poSupplier(f); if(supInfo) break; } }
   // Nabídka: číslo nabídky vyčíst a doplnit do prázdného pole NABÍDKA; když to nejde, zeptat se
-  let offerSrc='z PO';
+  // offerSrc: odkud je číslo nabídky (z PO / z nabídky / zadáno ručně)
   if(cat==='nabidka' && isRecv2(cur) && P().edit && !String(cur.offerNo||'').trim()){
     toast('Čtu nabídku…','ok');
     for(const f of files){ fillOffer=await offerNoFromFile(f); if(fillOffer) break; }
