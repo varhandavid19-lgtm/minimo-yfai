@@ -237,7 +237,9 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
 - **Dodavatel z PO**: `poSupplier(file)` (Supplier Name / Supplier Code / Credit Terms, text přes
   `poText` s cache) → `poSupPatch(r,s)`: `supplierNo` a `supplierDue` („30 dní“) vždy podle PO,
   `dodavatel` jen když `!supConfirmed` (pak potvrdí); přezdívka jen při společném slově.
-  Volá se v `handleFiles` (cat po, `P().edit`) i v `mgrApply`.
+  Volá se v `handleFiles` (cat po, `P().edit`) i v `mgrApply`. Co z PO zapsal, si pamatuje v `poSup`
+  ({no,due,name,prev}). Smazání posledního PO (`del-file`) vymaže hodnoty, které se pořád shodují
+  s `poSup` (jméno vrátí na `prev`); bez `poSup` (starší požadavky) vymaže číslo, splatnost i jméno.
 - Políčka řádků importu mají `data-ir="klíč|pole"` (ne `data-a`), aby se okno
   nepřekreslovalo při každém stisku klávesy a nevyskakoval kurzor z políčka.
 - Každý požadavek z importu vzniká ve stavu `nový`, stejně jako přes „+ Nový požadavek".
