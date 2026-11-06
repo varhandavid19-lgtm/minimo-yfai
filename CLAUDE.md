@@ -813,4 +813,5 @@ Radši se zeptej v PR nebo navrhni variantu, než abys přepsal něco z výše
 uvedeného seznamu „nesmí se rozbít“.
 - **Kontrola účtu při zadání Req.č.**: `reqAccCheck()` v `recv-save` i `save` — nové/změněné `reqNo` → dialog OK/NE s účtem;
   NE → `askText` na nový účet (musí být v `cfg.accounts` a jiný než dosavadní), uloží se `ucet` s reqNo.
-  `mgrApply` s `mgr.reqNo` → dialog se seznamem účtů vybraných; NE = nic se neuloží.
+  `mgrApply` s `mgr.reqNo` → dialog se seznamem účtů; NE → dialog `kind:"accfix"` (`accFixView`,
+  políčko účtu u každého řádku, ověří se v `dlg-yes`), změněné účty se zapíšou s Req no.; Zrušit = nic.

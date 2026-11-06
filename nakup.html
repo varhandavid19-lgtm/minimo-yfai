@@ -1344,12 +1344,20 @@ async function mgrApply(receiveComplete){
     const anyField = mgr.reqNo!==''||mgr.rfqNo!==''||mgr.orderNo!==''||mgr.dssiItem!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!==''||mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!==''||!!mgrFiles.po||!!mgrFiles.nabidka;
     if(!anyField){ toast('Vyplň aspoň jedno políčko, které se má změnit.','err'); return; }
   }
-  // Req no. hromadně → kontrola účtů u vybraných; NE = nic se neuloží, účty opravit a akci opakovat
+  // Req no. hromadně → kontrola účtů u vybraných; NE = přepsat účty v okně (Zrušit = nic se neuloží)
+  let mgrAccFix={};
   if(!receiveComplete && mgr.reqNo.trim()){
     const list=sel.map(r=>`${r.poradove||''}: ${r.ucet?accLabel(r.ucet):'— účet nevyplněn —'}`);
     const okAcc=await ask({title:'Kontrola účtu',ok:'OK',no:'NE',
       text:`Zadáváš Req no. ${mgr.reqNo.trim()}.\n\nJsou správně zadané účty?\n\n${list.slice(0,25).join('\n')}${list.length>25?`\n… a dalších ${list.length-25}`:''}`});
-    if(!okAcc){ await info('Nic se neuložilo. Oprav účet u požadavků (otevři požadavek → záložka Požadavek → Účet) a Req no. zadej znovu. Výběr i vyplněná políčka zůstávají.',{title:'Oprav účet'}); return; }
+    if(!okAcc){
+      // NE → okno se všemi vybranými řádky, u každého jde účet rovnou přepsat
+      const fixes=await ask({kind:'accfix',title:'Oprava účtů',ok:'Uložit',no:'Zrušit',
+        text:'Přepiš účet u požadavků, kde není správně. Zrušit = nic se neuloží.',
+        rows:sel.map(r=>({id:r._id,no:r.poradove||'',popis:r.popis||'',ucet:r.ucet||''}))});
+      if(!fixes){ toast('Nic se neuložilo. Výběr i vyplněná políčka zůstávají.','err'); return; }
+      mgrAccFix=fixes;
+    }
   }
   // PO ve správě: vyčíst číslo nabídky — u nových požadavků prázdné doplnit, vyplněné zkontrolovat
   let poQ=[], poSup=null;
@@ -1380,6 +1388,8 @@ async function mgrApply(receiveComplete){
       ch.push(`přijato kompletně (${patch.receivedQty} ks) → doručeno`);
     } else {
       if(mgr.reqNo!==''){ patch.reqNo=mgr.reqNo.trim(); ch.push('Req no. '+patch.reqNo); }
+      const af=mgrAccFix[r._id];
+      if(af!==undefined && af!==String(r.ucet||'').trim()){ patch.ucet=af; ch.push(`účet ${r.ucet||'—'} → ${af} (kontrola při zadání Req no.)`); }
       if(v2 && (mgr.dssiItem!==''||mgr.docType!==''||mgr.docNo!=='')) skip++;
       if(!v2 && (mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!=='')) skip++;
       if(mgr.rfqNo!==''){ patch.rfqNo=mgr.rfqNo.trim(); ch.push('RFQ no. '+patch.rfqNo); }
@@ -1713,9 +1723,19 @@ function adminView(){
 function dlgView(){
   if(!dlg) return '';
   return `<div class="dlg-wrap"><div class="dlg"><div class="t">${esc(dlg.title)}</div>
-    <div class="c" style="white-space:pre-line">${esc(dlg.text)}${dlg.kind==='prompt'?`<input id="dlg-input" value="${esc(dlg.value||'')}" placeholder="${esc(dlg.placeholder||'')}">`:''}</div>
+    <div class="c" style="white-space:pre-line">${esc(dlg.text)}${dlg.kind==='prompt'?`<input id="dlg-input" value="${esc(dlg.value||'')}" placeholder="${esc(dlg.placeholder||'')}">`:''}${dlg.kind==='accfix'?accFixView():''}</div>
     <div class="b">${dlg.kind!=='info'?`<button class="btn-ghost" data-a="dlg-no">${esc(dlg.no||'Zrušit')}</button>`:''}
       <button class="${dlg.danger?'btn-danger':'btn-primary'}" data-a="dlg-yes">${esc(dlg.ok||'Potvrdit')}</button></div></div></div>`;
+}
+/* Okno „Oprava účtů" (hromadné Req no.): řádek = požadavek s políčkem účtu, našeptávač ze seznamu účtů. */
+function accFixView(){
+  return `<div class="accfix" style="white-space:normal;margin-top:10px;max-height:52vh;overflow:auto">
+    <datalist id="accfix-list">${(cfg.accounts||[]).map(a=>`<option value="${esc(a.code)}">${esc(a.name||'')}</option>`).join('')}</datalist>
+    ${dlg.rows.map(x=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid #eef1f6">
+      <div style="flex:1 1 auto;min-width:0"><b>${esc(x.no)}</b> <span class="muted" style="font-size:12px">${esc(x.popis.slice(0,60))}</span>
+        <div class="muted" style="font-size:11px">teď: ${esc(x.ucet?accLabel(x.ucet):'nevyplněn')}</div></div>
+      <input class="accfix-in" data-id="${esc(x.id)}" list="accfix-list" value="${esc(x.ucet)}" placeholder="číslo účtu" style="width:130px;flex:0 0 130px">
+    </div>`).join('')}</div>`;
 }
 function toastView(){ return toastMsg?`<div class="toast ${toastKind}">${esc(toastMsg)}</div>`:''; }
 
@@ -2920,7 +2940,15 @@ async function act(a,v,el,ev){
     case 'mgr-clear': mgrFiles={po:null,nabidka:null}; mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''}; break;
     case 'mgr-apply': await mgrApply(false); return;
     case 'mgr-receive': await mgrApply(true); return;
-    case 'dlg-yes':{const d=dlg;dlg=null;const val=d.kind==='prompt'?(document.getElementById('dlg-input')||{}).value||'':true;
+    case 'dlg-yes':{
+      if(dlg&&dlg.kind==='accfix'){   // ověřit účty, okno zůstane otevřené, dokud nejsou v pořádku
+        const out={}, bad=[];
+        document.querySelectorAll('.accfix-in').forEach(i=>{ const v=i.value.trim(), row=dlg.rows.find(x=>x.id===i.dataset.id);
+          if(!v || ((cfg.accounts||[]).length && !acc(v))){ bad.push(row?row.no:''); i.style.borderColor='#c0392b'; } else { i.style.borderColor=''; out[i.dataset.id]=v; } });
+        if(bad.length){ toast(`Neplatný nebo prázdný účet: ${bad.join(', ')} — účet musí být ze seznamu účtů.`,'err'); return; }
+        const d=dlg; dlg=null; render(); d.resolve(out); return;
+      }
+      const d=dlg;dlg=null;const val=d.kind==='prompt'?(document.getElementById('dlg-input')||{}).value||'':true;
       if(d.mailto){const a2=document.createElement('a');a2.href=d.mailto;a2.rel='noopener';document.body.appendChild(a2);a2.click();a2.remove();}
       render();d.resolve(d.kind==='prompt'?val:true);return;}
     case 'dlg-no':{const d=dlg;dlg=null;render();d.resolve(d.kind==='prompt'?null:false);return;}
