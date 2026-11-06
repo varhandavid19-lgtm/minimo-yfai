@@ -2722,6 +2722,26 @@ async function createRequest(){
   pendingFiles=[];
   return poradove;
 }
+/* Nově zadané / změněné Req.č. (u `editing`) → kontrola účtu. Vrací null = účet OK (nebo Req.č.
+   beze změny), řetězec = nový účet (NE + přepsání), false = zrušeno → nic neukládat. */
+async function reqAccCheck(){
+  if(!editing||!editing._id) return null;
+  const oldReq=String((rows.find(x=>x._id===editing._id)||{}).reqNo||'').trim(), newReq=String(editing.reqNo||'').trim();
+  if(!newReq || newReq===oldReq) return null;
+  const okAcc=await ask({title:'Kontrola účtu',ok:'OK',no:'NE',
+    text:`Zadáváš Req.č. ${newReq}.\n\nJe správně zadaný účet?\n\nÚčet: ${editing.ucet?accLabel(editing.ucet):'— nevyplněn —'}`});
+  if(okAcc) return null;
+  let v=editing.ucet||'';
+  for(;;){
+    v=await askText(`Přepiš účet na správné číslo (teď ${editing.ucet||'nevyplněn'}).\n\nZrušit = nic se neuloží.`,{title:'Oprava účtu',ok:'Uložit',value:v,placeholder:'číslo účtu'});
+    if(v===null){ toast('Nic se neuložilo — účet je potřeba opravit.','err'); return false; }
+    v=v.trim();
+    if(!v){ toast('Zadej číslo účtu.','err'); continue; }
+    if(cfg.accounts.length && !acc(v)){ toast(`Účet ${v} v seznamu účtů není — zkontroluj číslo.`,'err'); continue; }
+    if(v===String(editing.ucet||'').trim()){ toast('Účet je stejný jako předtím — přepiš ho na správné číslo.','err'); continue; }
+    return v;
+  }
+}
 async function updateRequest(){
   const id=editing._id; const old=rows.find(r=>r._id===id)||{};
   const touched=old.status!==editing.status;
@@ -2974,6 +2994,11 @@ async function act(a,v,el,ev){
       if(editing.dodavatel) editing.dodavatel=canonSupplier(editing.dodavatel);   // naučený dodavatel → potvrzený název
       if(isNew&&!P().edit)editing.status='nový';
       if(!validate()){footMsg='Doplň povinná pole označená červeně.';modalTab='pozadavek';render();return;}
+      if(!isNew){   // Req.č. zadané v Nákup/příjem → kontrola účtu i u tohoto (modrého) Uložit
+        const fix=await reqAccCheck();
+        if(fix===false){ render(); return; }
+        if(fix){ editing.hist=(editing.hist||[]).concat(`${today()} · ${me.name} · účet ${editing.ucet||'—'} → ${fix} (kontrola při zadání Req.č.)`); editing.ucet=fix; }
+      }
       try{
         if(isNew){const no=await createRequest();editing=null;footMsg='';toast('Požadavek '+no+' založen.','ok');}
         else{
@@ -3112,26 +3137,8 @@ async function act(a,v,el,ev){
       if(!P().edit||!editing||!editing._id)return;
       collect();
       const rid=editing._id;
-      // nově zadané / změněné Req.č. → kontrola účtu; NE = účet se musí přepsat, jinak se nic neuloží
-      let accFix=null;
-      const oldReq=String((rows.find(x=>x._id===rid)||{}).reqNo||'').trim(), newReq=String(editing.reqNo||'').trim();
-      if(newReq && newReq!==oldReq){
-        const okAcc=await ask({title:'Kontrola účtu',ok:'OK',no:'NE',
-          text:`Zadáváš Req.č. ${newReq}.\n\nJe správně zadaný účet?\n\nÚčet: ${editing.ucet?accLabel(editing.ucet):'— nevyplněn —'}`});
-        if(!okAcc){
-          let v=editing.ucet||'';
-          for(;;){
-            v=await askText(`Přepiš účet na správné číslo (teď ${editing.ucet||'nevyplněn'}).\n\nZrušit = nic se neuloží.`,{title:'Oprava účtu',ok:'Uložit',value:v,placeholder:'číslo účtu'});
-            if(v===null){ toast('Nic se neuložilo — účet je potřeba opravit.','err'); render(); return; }
-            v=v.trim();
-            if(!v){ toast('Zadej číslo účtu.','err'); continue; }
-            if(cfg.accounts.length && !acc(v)){ toast(`Účet ${v} v seznamu účtů není — zkontroluj číslo.`,'err'); continue; }
-            if(v===String(editing.ucet||'').trim()){ toast('Účet je stejný jako předtím — přepiš ho na správné číslo.','err'); continue; }
-            break;
-          }
-          accFix=v;
-        }
-      }
+      const accFix=await reqAccCheck();
+      if(accFix===false){ render(); return; }
       const patch={reqNo:editing.reqNo||'',rfqNo:editing.rfqNo||'',orderNo:editing.orderNo||'',dssiItem:editing.dssiItem||'',
         receivedQty:(editing.receivedQty===''||editing.receivedQty===undefined)?'':Number(editing.receivedQty),
         receivedDate:editing.receivedDate||'',docType:editing.docType||'',docNo:editing.docNo||'',skladComment:editing.skladComment||'',
