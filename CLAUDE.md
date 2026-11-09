@@ -239,6 +239,7 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   cat nabidka, `isRecv2`, `P().edit`, prázdné `offerNo`) → doplní; nenajde → `askText`
   (Uložit / Přeskočit). Správa: `mgrSetFile()` (přetažení i „vložit“) číslo hned zapíše do
   pole Nabídka (`mgr.offerNo`, jen když je prázdné), nenajde → stejný dialog.
+  Přeskočit (nebo prázdné číslo) v tomhle dotazu = nabídka se nenahraje (`handleFiles` i `mgrSetFile`).
   Smazání poslední přílohy kategorie nabidka (`del-file`, `P().edit`) vymaže i `offerNo`.
 - **Dodavatel z PO**: `poSupplier(file)` (Supplier Name / Supplier Code / Credit Terms, text přes
   `poText` s cache) → `poSupPatch(r,s)`: `supplierNo` a `supplierDue` („30 dní“) vždy podle PO,

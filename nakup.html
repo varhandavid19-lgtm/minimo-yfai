@@ -1299,7 +1299,9 @@ async function mgrSetFile(cat,f){
   if(mgrFiles[cat]!==f || mgr.offerNo.trim()) return;   // mezitím jiný soubor nebo ručně vyplněno
   if(n){ mgr.offerNo=n; render(); toast(`Číslo nabídky ${n} přečteno z dokumentu — zkontroluj ho v poli Nabídka.`,'ok'); return; }
   const v=await askText(offerAskText(f.name),{title:'Číslo nabídky',ok:'Uložit',no:'Přeskočit',placeholder:'číslo nabídky'});
-  if(v && v.trim() && !mgr.offerNo.trim()){ mgr.offerNo=v.trim(); render(); }
+  if(mgr.offerNo.trim() || mgrFiles[cat]!==f) return;   // mezitím ručně vyplněno nebo jiný soubor
+  if(v && v.trim()){ mgr.offerNo=v.trim(); render(); return; }
+  mgrFiles[cat]=null; render(); toast('Nabídka se nenahraje — chybí její číslo.','err');   // Přeskočit / prázdné = soubor pryč
 }
 function mgrPanel(){
   const n=mgrSel.size;
@@ -2067,6 +2069,7 @@ async function handleFiles(fileList,cat){
     if(!fillOffer){
       const v=await askText(offerAskText(files[0].name),{title:'Číslo nabídky',ok:'Uložit',no:'Přeskočit',placeholder:'číslo nabídky'});
       fillOffer=String(v||'').trim(); offerSrc='zadáno ručně';
+      if(!fillOffer){ toast('Nabídka se nenahrála — chybí její číslo.','err'); render(); return; }   // Přeskočit / prázdné = soubor se nenahraje
     }
     // požadavek už má PO → číslo z nabídky porovnat s PO
     if(fillOffer && !await offerVsPo([{r:cur,offer:fillOffer}],'nabídka')) return;
