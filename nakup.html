@@ -1446,7 +1446,7 @@ async function mgrApply(receiveComplete){
     catch(e){ fail++; }
   }
   // jedno PO ke všem vybraným → jeden e-mail
-  const mailNote=(ok && sharedMetas.some(m=>m.cat==='po') && mgrFiles.po)?await poMailDraft([mgrFiles.po]):'';
+  const mailNote=(ok && sharedMetas.some(m=>m.cat==='po') && mgrFiles.po)?await poMailDraft([mgrFiles.po],sel.map(r=>r.supplierEmail||'').join(',')):'';
   mgrSel.clear(); mgrFiles={po:null,nabidka:null};
   mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''};  // po použití vyprázdnit políčka, ať se nepřenesou na další dávku
   toast(`Upraveno ${czCount(ok)}.`+(skip?` Pole, která daný požadavek nemá, se přeskočila (${skip}×).`:'')+(fail?` (${fail} se nepovedlo — zkus to znovu)`:'')+mailNote, fail?'err':'ok');
@@ -1600,12 +1600,14 @@ function modalView(){
       <label>Číslo dodavatele<input id="e-sup-no" value="${esc(r.supplierNo||'')}"></label>
       <label>IČO/DIČ<input id="e-sup-ico" value="${esc(r.supplierIco||'')}"></label>
       <label>Splatnost faktur<input id="e-sup-due" value="${esc(r.supplierDue||'')}" placeholder="např. 30 dní"></label>
+      <label>E-mail pro zasílání PL<input id="e-sup-email" type="text" value="${esc(r.supplierEmail||'')}" placeholder="např. objednavky@dodavatel.cz"></label>
     </div>
     <div class="recvsave"><button class="btn-ok" data-a="sup-save">Uložit dodavatele</button></div>` : `<div class="recvgrid">
       <div><span>Dodavatel</span><b>${esc(r.dodavatel||'—')}</b></div>
       <div><span>Číslo dodavatele</span><b>${esc(r.supplierNo||'—')}</b></div>
       <div><span>IČO/DIČ</span><b>${esc(r.supplierIco||'—')}</b></div>
       <div><span>Splatnost faktur</span><b>${esc(r.supplierDue||'—')}</b></div>
+      <div><span>E-mail pro zasílání PL</span><b>${esc(r.supplierEmail||'—')}</b></div>
     </div>`;
   const supplierInfo = !isNew ? `<div class="recvbox"><div class="recvh">🏢 Dodavatel${recvEditable?`<button class="recv-editbtn" data-a="sup-edit">${supEdit?'✕ Zrušit editaci':'✎ Editace'}</button>`:''}</div>${supBody}</div>` : '';
   const attCan = canAttach(r);
@@ -1862,7 +1864,7 @@ function collect(){
   // editace boxu Dodavatel (jen pokud jsou jeho pole na stránce)
   if(document.getElementById('e-sup-name')){
     editing.dodavatel=g('e-sup-name')||''; editing.supplierNo=g('e-sup-no')||'';
-    editing.supplierIco=g('e-sup-ico')||''; editing.supplierDue=g('e-sup-due')||'';
+    editing.supplierIco=g('e-sup-ico')||''; editing.supplierDue=g('e-sup-due')||''; editing.supplierEmail=(g('e-sup-email')||'').trim();
   }
 }
 function recalc(){
@@ -2009,9 +2011,11 @@ function poOrderPatch(r,no,orderNow){
 /* E-mail s PO pro dodavatele. Prohlížeč neumí Outlooku předat přílohu (mailto ji nepodporuje), proto se
    stáhne koncept .eml (X-Unsent: 1) — po otevření z něj Outlook udělá rozepsaný e-mail s přiloženým PO.
    Vrací text do oznámení; při chybě nic nerozbije (PO už je nahrané). */
-async function poMailDraft(files){
+const mailList = s => { const a=String(s||'').split(/[,;\s]+/).filter(Boolean), ok=a.filter(x=>/^[^\s@,;<>"]+@[^\s@,;<>"]+\.[^\s@,;<>"]+$/.test(x)); return {list:ok,valid:a.length>0&&ok.length===a.length}; };
+async function poMailDraft(files,to){
   try{
     if(!files||!files.length) return '';
+    const toList=[...new Set(mailList(to).list)];
     const b64=buf=>{ const u=new Uint8Array(buf); let s=''; for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); };
     const utf8=t=>b64(new TextEncoder().encode(t));
     const wrap=s=>s.replace(/(.{76})/g,'$1\r\n');
@@ -2021,7 +2025,7 @@ async function poMailDraft(files){
     const subject=`Purchase Order${label?' '+label:''}`;
     const body=`Dear Sir or Madam,\r\n\r\nplease find attached our Purchase Order${label?' '+label:''}.\r\n\r\nBest regards\r\n${me&&me.name||''}\r\n`;
     const bnd='----=_minimo_'+Date.now().toString(36);
-    let eml=`X-Unsent: 1\r\nSubject: ${hdr(subject)}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="${bnd}"\r\n\r\n`
+    let eml=`X-Unsent: 1\r\n${toList.length?`To: ${toList.join(', ')}\r\n`:''}Subject: ${hdr(subject)}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="${bnd}"\r\n\r\n`
       +`--${bnd}\r\nContent-Type: text/plain; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(utf8(body))}\r\n`;
     for(const f of files){
       const name=hdr(String(f.name||'PO.pdf').replace(/["\r\n]/g,''));
@@ -2166,7 +2170,7 @@ async function handleFiles(fileList,cat){
       Object.assign(patch,op.patch); if(op.ch) hist.push(`${today()} · ${me.name} · z PO: ${op.ch}`); if(op.kept) hist.push(`${today()} · ${me.name} · ${op.kept}`);
       Object.assign(patch,sp.patch); if(sp.ch.length){ hist.push(`${today()} · ${me.name} · z PO: ${sp.ch.join(', ')}`); }
       await updateDoc(doc(db,'requests',editing._id),patch); Object.assign(editing,patch);
-      const mailNote=cat==='po'?await poMailDraft(okFiles):'';
+      const mailNote=cat==='po'?await poMailDraft(okFiles,base.supplierEmail):'';
       toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(sp.ch.length?' Dodavatel doplněn z PO.':'')+(op.ch?` ${op.ch} doplněno.`:'')+(op.kept?` ${op.kept}.`:'')+(qp.ch?` Doplněna ${qp.ch}.`:'')+(qp.kept?` ${qp.kept}.`:'')+(qadOn&&!qadNo&&!String(base.qadOrder||'').trim()?' V názvu souboru není číslo objednávky QAD (10 číslic) — vyplň ho ručně.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna${offerSrc==='zadáno ručně'?'':' '+offerSrc}.`:'')+mailNote,'ok'); }
     catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
   uploadBusy=false; render();
@@ -3299,8 +3303,9 @@ async function act(a,v,el,ev){
     case 'sup-save':{
       if(!P().edit||!editing||!editing._id)return;
       collect();
+      if(String(editing.supplierEmail||'').trim() && !mailList(editing.supplierEmail).valid){ toast('Neplatný e-mail pro zasílání PL.','err'); render(); return; }
       const patch={dodavatel:editing.dodavatel||'',supplierNo:editing.supplierNo||'',
-        supplierIco:editing.supplierIco||'',supplierDue:editing.supplierDue||''};
+        supplierIco:editing.supplierIco||'',supplierDue:editing.supplierDue||'',supplierEmail:String(editing.supplierEmail||'').trim()};
       const old=rows.find(x=>x._id===editing._id)||{};
       const before=String(old.dodavatel||'').trim(), now=String(patch.dodavatel||'').trim();
       patch.dodavatel=now; patch.supConfirmed=!!now;          // uložením v boxu je dodavatel POTVRZENÝ

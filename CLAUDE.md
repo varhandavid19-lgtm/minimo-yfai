@@ -245,7 +245,7 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   `poOrderPatch`: prázdné `orderNo` doplní, jiné vyplněné nepřepíše (zapíše do historie). `poOrderNo`
   si pamatuje číslo z PO; smazání posledního PO vymaže `orderNo`, jen když se pořád shoduje.
 - **E-mail s PO dodavateli**: po nahrání PO (`handleFiles`, `mgrApply`, `createRequest`) `poMailDraft` stáhne
-  koncept `.eml` (X-Unsent: 1) s přiloženým PO; mailto přílohy neumí. Příjemce je prázdný (e-mail dodavatele nikde není).
+  koncept `.eml` (X-Unsent: 1) s přiloženým PO; mailto přílohy neumí. Příjemce = `supplierEmail` (ruční pole „E-mail pro zasílání PL“ v boxu Dodavatel; smazání PO ho nemaže).
 - Smazání posledního PO u stavu `odesláno` vrátí stav na `schváleno` (`del-file`, `P().edit`).
 - **Číslo nabídky z PO a smazání PO**: co PO doplnilo do `offerNo`, je v `poOffer` (u starších podle
   historie „vyčteno z PO“); smazání posledního PO ho vymaže, ručně změněné číslo zůstane.
