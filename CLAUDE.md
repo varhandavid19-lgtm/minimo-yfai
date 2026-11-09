@@ -241,6 +241,9 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   pole Nabídka (`mgr.offerNo`, jen když je prázdné), nenajde → stejný dialog.
   Přeskočit (nebo prázdné číslo) v tomhle dotazu = nabídka se nenahraje (`handleFiles` i `mgrSetFile`).
   Smazání poslední přílohy kategorie nabidka (`del-file`, `P().edit`) vymaže i `offerNo`.
+- **Číslo PO → Order no.**: `poNumber(file)` (PL + 6 číslic z textu PDF, jinak z názvu souboru) a
+  `poOrderPatch`: prázdné `orderNo` doplní, jiné vyplněné nepřepíše (zapíše do historie). `poOrderNo`
+  si pamatuje číslo z PO; smazání posledního PO vymaže `orderNo`, jen když se pořád shoduje.
 - **Dodavatel z PO**: `poSupplier(file)` (Supplier Name / Supplier Code / Credit Terms, text přes
   `poText` s cache) → `poSupPatch(r,s)`: `supplierNo` a `supplierDue` („30 dní“) vždy podle PO,
   `dodavatel` jen když `!supConfirmed` (pak potvrdí); přezdívka jen při společném slově.
