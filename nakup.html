@@ -1069,6 +1069,7 @@ function visibleRows(){
   if(filters.mine) r=r.filter(x=>x.author===me.uid);
   if(filters.grp==='open') r=r.filter(x=>!['doručeno','zamítnuto'].includes(x.status));
   else if(filters.grp==='closed') r=r.filter(x=>['doručeno','zamítnuto'].includes(x.status));
+  else if(filters.grp==='todate') r=r.filter(x=>poDateState(x));
   else if(filters.grp==='nodate') r=r.filter(x=>{ const s=poDateState(x); return s&&s.late; });
   if(filters.status) r=r.filter(x=>x.status===filters.status);
   if(filters.priorita) r=r.filter(x=>x.priorita===filters.priorita);
@@ -1193,6 +1194,7 @@ function listView(){
       <button class="stchip grp ${(!filters.grp&&!filters.status)?'on':''}" data-a="flt-all" title="Zobrazit všechny">${T('Vše')} (${rows.length})</button>
       <button class="stchip grp ${filters.grp==='open'?'on':''}" data-a="flt-grp" data-v="open"><i style="background:#e7eefb"></i>${T('Otevřené požadavky')} (${openCount})</button>
       <button class="stchip grp ${filters.grp==='closed'?'on':''}" data-a="flt-grp" data-v="closed"><i style="background:#eef1f5"></i>${T('Uzavřené požadavky')} (${closedCount})</button>
+      <button class="stchip grp ${filters.grp==='todate'?'on':''}" data-a="flt-grp" data-v="todate" title="PO odesláno a sloupec Dodání je prázdný"><i style="background:#fff;border:1px solid #c0392b"></i>${T('Doplnit datum dodání')} (${rows.filter(r=>poDateState(r)).length})</button>
       ${(n=>n?`<button class="stchip grp ${filters.grp==='nodate'?'on':''}" data-a="flt-grp" data-v="nodate" style="border-color:#c0392b;color:#c0392b;font-weight:700" title="PO odesláno před více než ${PO_CONFIRM_DAYS} pracovními dny a sloupec Dodání je prázdný"><i style="background:#c0392b"></i>⚠ ${T('Chybí termín dodání')} (${n})</button>`:'')(rows.filter(r=>{ const s=poDateState(r); return s&&s.late; }).length)}
       <span class="lg-sep"></span>
       ${STATUSES.map(x=>`<button class="stchip ${filters.status===x.k?'on':''}" data-a="flt-status" data-v="${x.k}" title="Filtrovat stav ${esc(x.label||x.k)}"><i style="background:${ROW_TINT[x.k]}"></i>${esc(x.label||x.k)}</button>`).join('')}
