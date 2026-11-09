@@ -1197,7 +1197,7 @@ function listView(){
       <button class="stchip grp ${filters.grp==='todate'?'on':''}" data-a="flt-grp" data-v="todate" title="PO odesláno a sloupec Dodání je prázdný"><i style="background:#fff;border:1px solid #c0392b"></i>${T('Doplnit datum dodání')} (${rows.filter(r=>poDateState(r)).length})</button>
       ${(n=>n?`<button class="stchip grp ${filters.grp==='nodate'?'on':''}" data-a="flt-grp" data-v="nodate" style="border-color:#c0392b;color:#c0392b;font-weight:700" title="PO odesláno před více než ${PO_CONFIRM_DAYS} pracovními dny a sloupec Dodání je prázdný"><i style="background:#c0392b"></i>⚠ ${T('Chybí termín dodání')} (${n})</button>`:'')(rows.filter(r=>{ const s=poDateState(r); return s&&s.late; }).length)}
       <span class="lg-sep"></span>
-      ${STATUSES.map(x=>`<button class="stchip ${filters.status===x.k?'on':''}" data-a="flt-status" data-v="${x.k}" title="Filtrovat stav ${esc(x.label||x.k)}"><i style="background:${ROW_TINT[x.k]}"></i>${esc(x.label||x.k)}</button>`).join('')}
+      ${STATUSES.map(x=>`<button class="stchip ${filters.status===x.k?'on':''}" data-a="flt-status" data-v="${x.k}" title="Filtrovat stav ${esc(x.label||x.k)}"><i style="background:${ROW_TINT[x.k]}"></i>${esc(x.label||x.k)} (${rows.filter(r=>r.status===x.k).length})</button>`).join('')}
     </div>
     <div class="filters">
       <input class="grow" id="f-q" placeholder="Hledat v popisu, skladovém čísle, výrobci…" value="${esc(filters.q)}">
