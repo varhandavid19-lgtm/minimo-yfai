@@ -1496,6 +1496,8 @@ function machineSelect(r){
 }
 function modalView(){
   const r=editing, isNew=!r._id, ed=canEditRow(isNew, r);
+  // po vložení PO mění termín dodání jen skladník a výše (P().edit)
+  const datumLock=!P().edit && ((r.files||[]).some(f=>f.cat==='po') || (isNew && pendingFiles.some(p=>p.cat==='po')));
   const lab=id=>`${esc(fld(id).label)}${fld(id).req&&ed?' <span class="req">*</span>':''}`;
   const wrap=(id,inner,cls='')=>`<div class="f ${cls} ${errs[id]?'invalid':''}"><label>${lab(id)}</label>${inner}${errs[id]?`<span class="err">${esc(errs[id])}</span>`:''}</div>`;
   const wrapL=(id,label,inner,cls='',req=false)=>`<div class="f ${cls} ${errs[id]?'invalid':''}"><label>${esc(label)}${req&&ed?' <span class="req">*</span>':''}</label>${inner}${errs[id]?`<span class="err">${esc(errs[id])}</span>`:''}</div>`;
@@ -1533,7 +1535,7 @@ function modalView(){
       ${wrapL('costcenter','CostCenter',`<select id="e-costcenter"><option value="">— nepovinné —</option>${(cfg.costCenters||[]).map(c=>`<option value="${esc(c.code)}" ${r.costcenter===c.code?'selected':''}>${esc(ccLabel(c.code))}</option>`).join('')}${(r.costcenter&&!cc(r.costcenter))?`<option value="${esc(r.costcenter)}" selected>${esc(r.costcenter)}</option>`:''}</select>`)}
       ${wrapL('usek','Linka',`<select id="e-usek"><option value="">— vyber linku —</option>${cfg.sections.map(x=>`<option ${r.usek===x.name?'selected':''}>${esc(x.name)}</option>`).join('')}${(r.usek&&!cfg.sections.some(x=>x.name===r.usek))?`<option selected>${esc(r.usek)}</option>`:''}</select>`,'',fld('usek').req)}
       ${wrap('stroj',machineSelect(r))}
-      ${wrapL('datum','Předpokládané datum dodání',`<input id="e-datum" type="date" value="${esc(r.datum)}">`)}
+      ${wrapL('datum','Předpokládané datum dodání',`<input id="e-datum" type="date" value="${esc(r.datum)}" ${datumLock?'disabled title="Po vložení PO může termín dodání měnit jen skladník nebo administrátor."':''}>${datumLock?'<span class="muted" style="font-size:11px">Po vložení PO mění jen skladník nebo administrátor.</span>':''}`)}
       <div class="stockbox"><input type="checkbox" id="e-newstock" ${stockOn?'checked':''}><label for="e-newstock">Založit jako novou skladovou položku?</label></div>
       ${stockOn?`${wrap('min',`<input id="e-min" type="number" min="0" step="1" value="${esc(r.min)}">`,'span2')}
       ${wrap('max',`<input id="e-max" type="number" min="0" step="1" value="${esc(r.max)}">`,'span2')}`:''}
