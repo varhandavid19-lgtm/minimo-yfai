@@ -1363,6 +1363,7 @@ async function mgrApply(receiveComplete){
   }
   // PO ve správě: vyčíst číslo nabídky — u nových požadavků prázdné doplnit, vyplněné zkontrolovat
   let poQ=[], poSup=null, poManual=false, poNum='';
+  const poMailTos=[];
   const poQadNo=(!receiveComplete && mgrFiles.po)?poQadFromName(mgrFiles.po.name):'';
   if(!receiveComplete && mgrFiles.po && !poQadNo && !mgr.qadOrder.trim() && sel.some(r=>isRecv2(r) && !String(r.qadOrder||'').trim()))
     await info('V názvu souboru PO není číslo objednávky QAD (10 číslic), pole Objednávka QAD se nevyplní.',{title:'Objednávka QAD'});
@@ -1436,7 +1437,11 @@ async function mgrApply(receiveComplete){
             if(op.ch) ch.push('z PO: '+op.ch); if(op.kept) ch.push(op.kept);
             if(v2){ const qp=poQadPatch(poQadNo,patch.qadOrder!==undefined?patch.qadOrder:r.qadOrder); Object.assign(patch,qp.patch);
               if(qp.ch) ch.push('z názvu PO: '+qp.ch); if(qp.kept) ch.push(qp.kept); } }
-          if(add.some(m=>m.cat==='po')){ const sp=poSupPatch(r,poSup); Object.assign(patch,sp.patch); if(sp.ch.length) ch.push('z PO: '+sp.ch.join(', ')); } }
+          if(add.some(m=>m.cat==='po')){ const sp=poSupPatch(r,poSup); Object.assign(patch,sp.patch); if(sp.ch.length) ch.push('z PO: '+sp.ch.join(', '));
+            if(!String(r.supplierEmail||'').trim()){   // naučený e-mail podle čísla dodavatele z PDF
+              const known=knownSupEmail(poSup&&poSup.no,r._id);
+              if(known){ patch.supplierEmail=known; patch.poEmail=known; ch.push(`e-mail pro zasílání PL ${known} (podle čísla dodavatele)`); } }
+            poMailTos.push(patch.supplierEmail||r.supplierEmail||''); } }
       }
     }
     if(!Object.keys(patch).length) continue;
@@ -1446,7 +1451,7 @@ async function mgrApply(receiveComplete){
     catch(e){ fail++; }
   }
   // jedno PO ke všem vybraným → jeden e-mail
-  const mailNote=(ok && sharedMetas.some(m=>m.cat==='po') && mgrFiles.po)?await poMailDraft([mgrFiles.po],sel.map(r=>r.supplierEmail||'').join(',')):'';
+  const mailNote=(ok && sharedMetas.some(m=>m.cat==='po') && mgrFiles.po)?await poMailDraft([mgrFiles.po],poMailTos.join(',')):'';
   mgrSel.clear(); mgrFiles={po:null,nabidka:null};
   mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''};  // po použití vyprázdnit políčka, ať se nepřenesou na další dávku
   toast(`Upraveno ${czCount(ok)}.`+(skip?` Pole, která daný požadavek nemá, se přeskočila (${skip}×).`:'')+(fail?` (${fail} se nepovedlo — zkus to znovu)`:'')+mailNote, fail?'err':'ok');
@@ -2012,6 +2017,14 @@ function poOrderPatch(r,no,orderNow){
    stáhne koncept .eml (X-Unsent: 1) — po otevření z něj Outlook udělá rozepsaný e-mail s přiloženým PO.
    Vrací text do oznámení; při chybě nic nerozbije (PO už je nahrané). */
 const mailList = s => { const a=String(s||'').split(/[,;\s]+/).filter(Boolean), ok=a.filter(x=>/^[^\s@,;<>"]+@[^\s@,;<>"]+\.[^\s@,;<>"]+$/.test(x)); return {list:ok,valid:a.length>0&&ok.length===a.length}; };
+/* Naučený e-mail dodavatele: z jiných požadavků se stejným číslem dodavatele vyčteným z PDF (název se nepoužívá);
+   nejnověji zadaný má přednost. */
+function knownSupEmail(no,exceptId){
+  const n=String(no||'').trim(); if(!n) return '';
+  const c=rows.filter(x=>x._id!==exceptId && String(x.supplierEmail||'').trim() && String(x.supplierNo||'').trim()===n)
+    .sort((a,b)=>String(b.supplierEmailAt||'').localeCompare(String(a.supplierEmailAt||'')));
+  return c.length?String(c[0].supplierEmail).trim():'';
+}
 async function poMailDraft(files,to){
   try{
     if(!files||!files.length) return '';
@@ -2169,8 +2182,14 @@ async function handleFiles(fileList,cat){
       const op=ok?poOrderPatch(base,poNo,base.orderNo):{patch:{},ch:''};
       Object.assign(patch,op.patch); if(op.ch) hist.push(`${today()} · ${me.name} · z PO: ${op.ch}`); if(op.kept) hist.push(`${today()} · ${me.name} · ${op.kept}`);
       Object.assign(patch,sp.patch); if(sp.ch.length){ hist.push(`${today()} · ${me.name} · z PO: ${sp.ch.join(', ')}`); }
+      // prázdný e-mail pro zasílání PL → doplnit naučený podle dodavatele
+      let mailTo=base.supplierEmail;
+      if(cat==='po' && ok && !String(mailTo||'').trim()){
+        const known=knownSupEmail(supInfo&&supInfo.no,base._id);
+        if(known){ mailTo=known; if(P().edit){ patch.supplierEmail=known; patch.poEmail=known; hist.push(`${today()} · ${me.name} · e-mail pro zasílání PL ${known} (podle čísla dodavatele)`); } }
+      }
       await updateDoc(doc(db,'requests',editing._id),patch); Object.assign(editing,patch);
-      const mailNote=cat==='po'?await poMailDraft(okFiles,base.supplierEmail):'';
+      const mailNote=cat==='po'?await poMailDraft(okFiles,mailTo):'';
       toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(sp.ch.length?' Dodavatel doplněn z PO.':'')+(op.ch?` ${op.ch} doplněno.`:'')+(op.kept?` ${op.kept}.`:'')+(qp.ch?` Doplněna ${qp.ch}.`:'')+(qp.kept?` ${qp.kept}.`:'')+(qadOn&&!qadNo&&!String(base.qadOrder||'').trim()?' V názvu souboru není číslo objednávky QAD (10 číslic) — vyplň ho ručně.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna${offerSrc==='zadáno ručně'?'':' '+offerSrc}.`:'')+mailNote,'ok'); }
     catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
   uploadBusy=false; render();
@@ -3286,6 +3305,8 @@ async function act(a,v,el,ev){
           const curOffer=String(cur.offerNo||'').trim();
           if(curOffer && (eq(curOffer,cur.poOffer) || (cur.hist||[]).some(h=>String(h).includes(`nabídka ${curOffer} (vyčteno z PO)`)))){ patch.offerNo=''; out.push('číslo nabídky'); }
           if(cur.poOffer) patch.poOffer=null;
+          // e-mail doplněný automaticky podle dodavatele pryč, jinak by další PO mohlo odejít starému dodavateli
+          if(cur.poEmail){ if(eq(cur.supplierEmail,cur.poEmail)){ patch.supplierEmail=''; out.push('e-mail pro zasílání PL'); } patch.poEmail=null; }
           if(cur.poQad){ if(String(cur.qadOrder||'').trim() && eq(cur.qadOrder,cur.poQad)){ patch.qadOrder=''; out.push('objednávka QAD'); } patch.poQad=null; }
           if(out.length){ clearSup=true; hist.push(`${today()} · ${me.name} · smazané PO → vymazáno: ${out.join(', ')}`); }
           // bez PO už požadavek není „PO odesláno" → zpět na schváleno (doručené a zamítnuté se nemění)
@@ -3307,6 +3328,7 @@ async function act(a,v,el,ev){
       const patch={dodavatel:editing.dodavatel||'',supplierNo:editing.supplierNo||'',
         supplierIco:editing.supplierIco||'',supplierDue:editing.supplierDue||'',supplierEmail:String(editing.supplierEmail||'').trim()};
       const old=rows.find(x=>x._id===editing._id)||{};
+      if(patch.supplierEmail!==String(old.supplierEmail||'').trim()){ patch.supplierEmailAt=new Date().toISOString(); patch.poEmail=null; }   // ručně zadaný: nejnovější se učí, smazání PO ho nemaže
       const before=String(old.dodavatel||'').trim(), now=String(patch.dodavatel||'').trim();
       patch.dodavatel=now; patch.supConfirmed=!!now;          // uložením v boxu je dodavatel POTVRZENÝ
       patch.supConfirmedBy=me.name; patch.supConfirmedAt=new Date().toISOString();
