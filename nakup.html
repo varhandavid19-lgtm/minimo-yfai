@@ -1249,6 +1249,8 @@ function listView(){
       ${rr.length?rr.map(r=>{
         const late=r.datum&&r.datum<today()&&!['doručeno','zamítnuto'].includes(r.status);
         const dst=poDateState(r);
+        // termín přímo v řádku: jen skladník/admin, u otevřeného požadavku s PO
+        const inlineD=P().edit && !['doručeno','zamítnuto'].includes(r.status) && (r.status==='odesláno' || (r.files||[]).some(f=>f.cat==='po'));
         const crit=r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status);
         return `<tr class="${crit?'crit':''} ${manage.on&&mgrSel.has(r._id)?'rowsel':''} ${pickedReq===r._id?'picked':''}" style="--row:${ROW_TINT[r.status]||'#fff'};cursor:pointer" data-a="row-pick" data-v="${r._id}" title="Klikni pro označení, dalším klikem otevřeš detail">
           ${manage.on?`<td class="selcol" data-label="Vybrat" onclick="event.stopPropagation()"><input type="checkbox" data-a="mgr-selrow" data-v="${r._id}" ${mgrSel.has(r._id)?'checked':''}></td>`:''}
@@ -1267,7 +1269,7 @@ function listView(){
           <td data-col="vyrobce" class="hide-mobile" data-label="Výrobce">${r.vyrobce?esc(r.vyrobce):'<span class="muted">—</span>'}</td>
           <td data-col="ucet" class="hide-mobile" data-label="Účet">${r.ucet?`<b>${esc(r.ucet)}</b>`:'<span class="muted">—</span>'}</td>
           <td data-col="usek" data-label="Linka / stroj">${r.usek?`<b>${esc(r.usek)}</b>${r.stroj?`<div class="muted" style="font-size:10.5px">${esc(r.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
-          <td data-col="datum" class="${(late||(dst&&dst.late))?'late':''}" data-label="Dodání">${r.datum?esc(dateCz(r.datum))+(late?' ⚠':''):dst?(dst.late?`⚠ chybí termín (měl být do ${esc(dateCz(dst.due))})`:`<span class="muted">doplnit do ${esc(dateCz(dst.due))}</span>`):'<span class="muted">—</span>'}</td>
+          <td data-col="datum" class="${(late||(dst&&dst.late))?'late':''}" data-label="Dodání" ${inlineD?'onclick="event.stopPropagation()"':''}>${inlineD?`<input type="date" class="row-datum" data-id="${r._id}" value="${esc(r.datum||'')}" title="Termín dodání" style="width:128px;font-size:12px;padding:2px 4px">${late?' ⚠':''}${dst?`<div style="font-size:11px" class="${dst.late?'':'muted'}">${dst.late?`⚠ chybí termín (měl být do ${esc(dateCz(dst.due))})`:`doplnit do ${esc(dateCz(dst.due))}`}</div>`:''}`:r.datum?esc(dateCz(r.datum))+(late?' ⚠':''):dst?(dst.late?`⚠ chybí termín (měl být do ${esc(dateCz(dst.due))})`:`<span class="muted">doplnit do ${esc(dateCz(dst.due))}</span>`):'<span class="muted">—</span>'}</td>
           <td data-col="objednavka" class="hide-mobile ordcell" data-label="Objednávka">${ORD_FIELDS.some(([k])=>r[k])?ORD_FIELDS.filter(([k])=>r[k]).map(([k,l])=>`<div>${l} ${esc(r[k])}</div>`).join(''):'<span class="muted">—</span>'}</td>
           <td data-col="prijato" class="num hide-mobile" data-label="Přijato">${(r.receivedQty!==undefined&&r.receivedQty!=='')?`<b>${esc(r.receivedQty)}</b> / ${esc(r.mnozstvi||0)}${r.receivedDate?`<div class="muted" style="font-size:10px">${esc(dateCz(r.receivedDate))}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td data-col="minmax" class="num hide-mobile ${(Number(r.min)||0)>0&&(Number(r.mnozstvi)||0)<Number(r.min)?'stock-warn':''}" data-label="MIN/MAX">${(r.min||r.max)?`${r.min||0} / ${r.max||0}`:'<span class="muted">—</span>'}</td>
@@ -2987,6 +2989,18 @@ document.addEventListener("pointerdown", e=>{
   pickedReq=null;
   document.querySelectorAll("tr.picked").forEach(r=>r.classList.remove("picked"));
 });
+const rowDatumBusy={};
+async function saveRowDatum(id,el){
+  const r=rows.find(x=>x._id===id); if(!r||!P().edit) return;
+  const val=el.value, old=String(r.datum||'');
+  if(el.validity.badInput || (val && Number(val.slice(0,4))<2000)){ el.value=old; return; }   // nedopsané datum se neukládá
+  if(val===old || rowDatumBusy[id]===val) return;
+  rowDatumBusy[id]=val;
+  const hist=(r.hist||[]).concat(`${today()} · ${me.name} · termín dodání ${old?dateCz(old):'—'} → ${val?dateCz(val):'—'}`);
+  try{ await updateDoc(doc(db,'requests',id),{datum:val,hist}); toast('Termín dodání uložen.','ok'); }
+  catch(e){ el.value=old; toast('Uložení selhalo: '+e.message,'err'); }
+  delete rowDatumBusy[id];
+}
 function bind(){
   const ov=document.querySelector('.overlay[data-a="close-bg"]');
   if(ov) ov.addEventListener('mousedown',e=>{ downOnOverlay=(e.target===ov); });
@@ -2996,6 +3010,13 @@ function bind(){
       (el.tagName==='INPUT'&&['acc-name','cc-name','user-name','user-email','user-phone','user-team','user-role','col-w'].includes(a)));
     if(isInput) el.onchange=ev=>act(a,v,el,ev);
     else el.onclick=ev=>{ev.stopPropagation();act(a,v,el,ev);};
+  });
+  // termín dodání v řádku: výběr z kalendáře se uloží po chvilce, psaní při opuštění pole nebo Enteru
+  document.querySelectorAll('.row-datum').forEach(el=>{ let t;
+    const commit=()=>{ clearTimeout(t); saveRowDatum(el.dataset.id,el); };
+    el.onchange=()=>{ clearTimeout(t); t=setTimeout(commit,1500); };
+    el.onblur=commit;
+    el.onkeydown=ev=>{ if(ev.key==='Enter') el.blur(); };
   });
   const q=document.getElementById('f-q');
   if(q) q.oninput=()=>{filters.q=q.value;const p=q.selectionStart;render();const n=document.getElementById('f-q');n.focus();n.setSelectionRange(p,p);};

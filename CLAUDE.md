@@ -242,6 +242,7 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
   Přeskočit (nebo prázdné číslo) v tomhle dotazu = nabídka se nenahraje (`handleFiles` i `mgrSetFile`).
   Smazání poslední přílohy kategorie nabidka (`del-file`, `P().edit`) vymaže i `offerNo`.
 - **Termín dodání po vložení PO**: `datumLock` (`modalView`) zamkne `e-datum` všem bez `P().edit`, jakmile je u požadavku příloha PO.
+- **Termín v řádku**: `.row-datum` ve sloupci Dodání (`P().edit`, otevřený požadavek s PO nebo stav `odesláno`), ukládá `saveRowDatum`.
 - **Hlídání termínu dodání**: přechod na `odesláno` zapíše `poSentAt`; `poDateState` hlídá prázdné `datum` (sloupec Dodání) 3 pracovní dny (`addWorkdays`, CZ svátky). Po termínu červená buňka a filtr `grp=nodate`. Bez `poSentAt` (starší) se nehlídá.
 - **Jen standardní PO**: `isStandardPo` (PDF s textem „Purchase Order“, PL + 6 číslic, „Supplier Code/Name“) hlídá kategorii po v `handleFiles` i `mgrSetFile`; sken neprojde.
 - **Číslo PO → Order no.**: `poNumber(file)` (PL + 6 číslic z textu PDF, jinak z názvu souboru) a
