@@ -1429,7 +1429,7 @@ async function mgrApply(receiveComplete){
           if(mgr.status==='' && add.some(m=>m.cat==='po') && poAdvance(r)){ patch.status='odesláno'; ch.push('stav → PO odesláno (nahráno PO)'); }
           // prázdné pole NABÍDKA doplnit číslem z PO
           if(v2 && poQ.length && add.some(m=>m.cat==='po') && !patch.offerNo && !String(r.offerNo||'').trim()){
-            patch.offerNo=poQ.join(', '); ch.push(`nabídka ${patch.offerNo} (${poManual?'zadáno ručně':'vyčteno z PO'})`); }
+            patch.offerNo=poQ.join(', '); patch.poOffer=patch.offerNo; ch.push(`nabídka ${patch.offerNo} (${poManual?'zadáno ručně':'vyčteno z PO'})`); }
           // dodavatel, číslo dodavatele a splatnost z PO
           if(add.some(m=>m.cat==='po')){ patch.poQuotes=poQ;
             const op=poOrderPatch(r,poNum,patch.orderNo!==undefined?patch.orderNo:r.orderNo); Object.assign(patch,op.patch);
@@ -2124,7 +2124,7 @@ async function handleFiles(fileList,cat){
       // nahrané PO → stav „PO odesláno" (jen kdo smí měnit stav; zadavatel smí měnit jen přílohy)
       if(cat==='po' && P().edit && poAdvance(base)){ patch.status='odesláno'; if(isRecv2(base)) patch.recv2=true;
         hist.push(`${today()} · ${me.name} · stav → PO odesláno (nahráno PO)`); }
-      if(fillOffer){ patch.offerNo=fillOffer; patch.recv2=true; hist.push(`${today()} · ${me.name} · nabídka ${fillOffer} (${offerSrc==='zadáno ručně'?offerSrc:'vyčteno '+offerSrc})`); }
+      if(fillOffer){ patch.offerNo=fillOffer; patch.recv2=true; if(cat==='po') patch.poOffer=fillOffer; hist.push(`${today()} · ${me.name} · nabídka ${fillOffer} (${offerSrc==='zadáno ručně'?offerSrc:'vyčteno '+offerSrc})`); }
       const sp=poSupPatch(base,supInfo);
       if(poQ && ok) patch.poQuotes=poQ;   // čísla nabídek z PO — pro pozdější kontrolu při změně NABÍDKA
       // objednávka QAD z názvu souboru PO (pole mají jen požadavky v novém rozložení)
@@ -3245,6 +3245,10 @@ async function act(a,v,el,ev){
           if(ps) patch.poSup=null;
           if(Array.isArray(cur.poQuotes)) patch.poQuotes=null;
           if(cur.poOrderNo){ if(String(cur.orderNo||'').trim() && eq(cur.orderNo,cur.poOrderNo)){ patch.orderNo=''; out.push('Order no.'); } patch.poOrderNo=null; }
+          // číslo nabídky z PO (poOffer; u dřívějších nahrání podle zápisu v historii) → vymazat; ručně změněné zůstane
+          const curOffer=String(cur.offerNo||'').trim();
+          if(curOffer && (eq(curOffer,cur.poOffer) || (cur.hist||[]).some(h=>String(h).includes(`nabídka ${curOffer} (vyčteno z PO)`)))){ patch.offerNo=''; out.push('číslo nabídky'); }
+          if(cur.poOffer) patch.poOffer=null;
           if(cur.poQad){ if(String(cur.qadOrder||'').trim() && eq(cur.qadOrder,cur.poQad)){ patch.qadOrder=''; out.push('objednávka QAD'); } patch.poQad=null; }
           if(out.length){ clearSup=true; hist.push(`${today()} · ${me.name} · smazané PO → vymazáno: ${out.join(', ')}`); }
         }
