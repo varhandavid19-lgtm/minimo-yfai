@@ -822,6 +822,25 @@ const total = r => (Number(r.cena)||0)*(Number(r.mnozstvi)||0);
 const totalEur = r => r.mena==='EUR'?total(r):total(r)/((cfg?.rates?.[r.mena])||1);
 const fld = id => (cfg?.fields||[]).find(f=>f.id===id)||{label:id,req:false};
 const today = () => new Date().toISOString().slice(0,10);
+/* Pracovní dny: bez víkendů a českých státních svátků. */
+function czHolidaySet(y){
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,
+    i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+  const p=n=>String(n).padStart(2,'0'), out=new Set(['01-01','05-01','05-08','07-05','07-06','09-28','10-28','11-17','12-24','12-25','12-26'].map(x=>y+'-'+x));
+  for(const off of [-2,1]){ const x=new Date(y,mo-1,da+off); out.add(`${x.getFullYear()}-${p(x.getMonth()+1)}-${p(x.getDate())}`); }
+  return out;
+}
+function addWorkdays(from,n){
+  const p=x=>String(x).padStart(2,'0'), [y,mo,da]=String(from).split('-').map(Number), x=new Date(y,mo-1,da);
+  while(n>0){ x.setDate(x.getDate()+1); const s=`${x.getFullYear()}-${p(x.getMonth()+1)}-${p(x.getDate())}`;
+    if(x.getDay()!==0 && x.getDay()!==6 && !czHolidaySet(x.getFullYear()).has(s)) n--; }
+  return `${x.getFullYear()}-${p(x.getMonth()+1)}-${p(x.getDate())}`;
+}
+/* Hlídání potvrzení dodavatele: do 3 pracovních dnů od „PO odesláno" musí být vyplněné Dodání.
+   null = nic se nehlídá (jiný stav, Dodání vyplněné, nebo PO odesláno před zavedením — bez poSentAt). */
+const PO_CONFIRM_DAYS = 3;
+const poDateState = r => { if(r.status!=='odesláno' || !r.poSentAt || String(r.datum||'').trim()) return null;
+  const due=addWorkdays(r.poSentAt,PO_CONFIRM_DAYS); return {due,late:today()>due}; };
 const fmtSize = b => { b=Number(b)||0; return b<1024?b+' B':(b<1048576?(b/1024).toFixed(0)+' kB':(b/1048576).toFixed(1)+' MB'); };
 const MAX_FILE = 5*1024*1024;   // 5 MB na soubor
 const canAttach = r => !!r && !isNakupRO() && (P().edit || !r._id || (me && r.author===me.uid));   // nový zakládá autor; u existujícího jen autor + skladník/admin
@@ -1050,6 +1069,7 @@ function visibleRows(){
   if(filters.mine) r=r.filter(x=>x.author===me.uid);
   if(filters.grp==='open') r=r.filter(x=>!['doručeno','zamítnuto'].includes(x.status));
   else if(filters.grp==='closed') r=r.filter(x=>['doručeno','zamítnuto'].includes(x.status));
+  else if(filters.grp==='nodate') r=r.filter(x=>{ const s=poDateState(x); return s&&s.late; });
   if(filters.status) r=r.filter(x=>x.status===filters.status);
   if(filters.priorita) r=r.filter(x=>x.priorita===filters.priorita);
   if(filters.ucet) r=r.filter(x=>x.ucet===filters.ucet);
@@ -1173,6 +1193,7 @@ function listView(){
       <button class="stchip grp ${(!filters.grp&&!filters.status)?'on':''}" data-a="flt-all" title="Zobrazit všechny">${T('Vše')} (${rows.length})</button>
       <button class="stchip grp ${filters.grp==='open'?'on':''}" data-a="flt-grp" data-v="open"><i style="background:#e7eefb"></i>${T('Otevřené požadavky')} (${openCount})</button>
       <button class="stchip grp ${filters.grp==='closed'?'on':''}" data-a="flt-grp" data-v="closed"><i style="background:#eef1f5"></i>${T('Uzavřené požadavky')} (${closedCount})</button>
+      ${(n=>n?`<button class="stchip grp ${filters.grp==='nodate'?'on':''}" data-a="flt-grp" data-v="nodate" style="border-color:#c0392b;color:#c0392b;font-weight:700" title="PO odesláno před více než ${PO_CONFIRM_DAYS} pracovními dny a sloupec Dodání je prázdný"><i style="background:#c0392b"></i>⚠ ${T('Chybí termín dodání')} (${n})</button>`:'')(rows.filter(r=>{ const s=poDateState(r); return s&&s.late; }).length)}
       <span class="lg-sep"></span>
       ${STATUSES.map(x=>`<button class="stchip ${filters.status===x.k?'on':''}" data-a="flt-status" data-v="${x.k}" title="Filtrovat stav ${esc(x.label||x.k)}"><i style="background:${ROW_TINT[x.k]}"></i>${esc(x.label||x.k)}</button>`).join('')}
     </div>
@@ -1227,6 +1248,7 @@ function listView(){
       <tbody>
       ${rr.length?rr.map(r=>{
         const late=r.datum&&r.datum<today()&&!['doručeno','zamítnuto'].includes(r.status);
+        const dst=poDateState(r);
         const crit=r.priorita==='kritická'&&!['doručeno','zamítnuto'].includes(r.status);
         return `<tr class="${crit?'crit':''} ${manage.on&&mgrSel.has(r._id)?'rowsel':''} ${pickedReq===r._id?'picked':''}" style="--row:${ROW_TINT[r.status]||'#fff'};cursor:pointer" data-a="row-pick" data-v="${r._id}" title="Klikni pro označení, dalším klikem otevřeš detail">
           ${manage.on?`<td class="selcol" data-label="Vybrat" onclick="event.stopPropagation()"><input type="checkbox" data-a="mgr-selrow" data-v="${r._id}" ${mgrSel.has(r._id)?'checked':''}></td>`:''}
@@ -1245,7 +1267,7 @@ function listView(){
           <td data-col="vyrobce" class="hide-mobile" data-label="Výrobce">${r.vyrobce?esc(r.vyrobce):'<span class="muted">—</span>'}</td>
           <td data-col="ucet" class="hide-mobile" data-label="Účet">${r.ucet?`<b>${esc(r.ucet)}</b>`:'<span class="muted">—</span>'}</td>
           <td data-col="usek" data-label="Linka / stroj">${r.usek?`<b>${esc(r.usek)}</b>${r.stroj?`<div class="muted" style="font-size:10.5px">${esc(r.stroj)}</div>`:''}`:'<span class="muted">—</span>'}</td>
-          <td data-col="datum" class="${late?'late':''}" data-label="Dodání">${r.datum?esc(dateCz(r.datum))+(late?' ⚠':''):'<span class="muted">—</span>'}</td>
+          <td data-col="datum" class="${(late||(dst&&dst.late))?'late':''}" data-label="Dodání">${r.datum?esc(dateCz(r.datum))+(late?' ⚠':''):dst?(dst.late?`⚠ chybí termín (měl být do ${esc(dateCz(dst.due))})`:`<span class="muted">doplnit do ${esc(dateCz(dst.due))}</span>`):'<span class="muted">—</span>'}</td>
           <td data-col="objednavka" class="hide-mobile ordcell" data-label="Objednávka">${ORD_FIELDS.some(([k])=>r[k])?ORD_FIELDS.filter(([k])=>r[k]).map(([k,l])=>`<div>${l} ${esc(r[k])}</div>`).join(''):'<span class="muted">—</span>'}</td>
           <td data-col="prijato" class="num hide-mobile" data-label="Přijato">${(r.receivedQty!==undefined&&r.receivedQty!=='')?`<b>${esc(r.receivedQty)}</b> / ${esc(r.mnozstvi||0)}${r.receivedDate?`<div class="muted" style="font-size:10px">${esc(dateCz(r.receivedDate))}</div>`:''}`:'<span class="muted">—</span>'}</td>
           <td data-col="minmax" class="num hide-mobile ${(Number(r.min)||0)>0&&(Number(r.mnozstvi)||0)<Number(r.min)?'stock-warn':''}" data-label="MIN/MAX">${(r.min||r.max)?`${r.min||0} / ${r.max||0}`:'<span class="muted">—</span>'}</td>
@@ -1422,13 +1444,13 @@ async function mgrApply(receiveComplete){
       if(v2 && mgr.offerNo!==''){ patch.offerNo=mgr.offerNo.trim(); ch.push('nabídka '+patch.offerNo); }
       if(v2 && mgr.qadOrder!==''){ patch.qadOrder=mgr.qadOrder.trim(); ch.push('objednávka QAD '+patch.qadOrder); }
       if(v2 && mgr.dlNo!==''){ patch.dlNo=mgr.dlNo.trim(); ch.push('dodací list/servisní výkaz '+patch.dlNo); }
-      if(mgr.status!==''){ patch.status=mgr.status; ch.push('stav → '+mgr.status); }
+      if(mgr.status!==''){ patch.status=mgr.status; ch.push('stav → '+mgr.status); if(mgr.status==='odesláno' && r.status!=='odesláno') patch.poSentAt=today(); }
       if(sharedMetas.length){
         const have=new Set((r.files||[]).map(f=>f.path));
         const add=sharedMetas.filter(m=>!have.has(m.path));
         if(add.length){ patch.files=(r.files||[]).concat(add); add.forEach(m=>ch.push(`příloha ${m.name} (${catLabel(m.cat)})`));
           // nahrané PO → „PO odesláno", pokud stav ve správě nikdo nevybral ručně
-          if(mgr.status==='' && add.some(m=>m.cat==='po') && poAdvance(r)){ patch.status='odesláno'; ch.push('stav → PO odesláno (nahráno PO)'); }
+          if(mgr.status==='' && add.some(m=>m.cat==='po') && poAdvance(r)){ patch.status='odesláno'; patch.poSentAt=today(); ch.push('stav → PO odesláno (nahráno PO)'); }
           // prázdné pole NABÍDKA doplnit číslem z PO
           if(v2 && poQ.length && add.some(m=>m.cat==='po') && !patch.offerNo && !String(r.offerNo||'').trim()){
             patch.offerNo=poQ.join(', '); patch.poOffer=patch.offerNo; ch.push(`nabídka ${patch.offerNo} (${poManual?'zadáno ručně':'vyčteno z PO'})`); }
@@ -2183,7 +2205,7 @@ async function handleFiles(fileList,cat){
   if(ok){ try{
       const patch={files:filesArr,hist};
       // nahrané PO → stav „PO odesláno" (jen kdo smí měnit stav; zadavatel smí měnit jen přílohy)
-      if(cat==='po' && P().edit && poAdvance(base)){ patch.status='odesláno'; if(isRecv2(base)) patch.recv2=true;
+      if(cat==='po' && P().edit && poAdvance(base)){ patch.status='odesláno'; patch.poSentAt=today(); if(isRecv2(base)) patch.recv2=true;
         hist.push(`${today()} · ${me.name} · stav → PO odesláno (nahráno PO)`); }
       if(fillOffer){ patch.offerNo=fillOffer; patch.recv2=true; if(cat==='po') patch.poOffer=fillOffer; hist.push(`${today()} · ${me.name} · nabídka ${fillOffer} (${offerSrc==='zadáno ručně'?offerSrc:'vyčteno '+offerSrc})`); }
       const sp=poSupPatch(base,supInfo);
@@ -2948,6 +2970,7 @@ async function updateRequest(){
   // Automatická změna stavu po doplnění ceny je PROZATÍM VYPNUTÁ (na přání Davida) —
   // stav mění ručně jen skladník/admin ve výběru „Stav schvalování".
   const {_id,...data}=editing; data.hist=hist;
+  if(touched && editing.status==='odesláno') data.poSentAt=today();   // ruční přepnutí na „PO odesláno" spouští hlídání termínu
   await updateDoc(doc(db,'requests',id),data);
 }
 
@@ -3324,7 +3347,7 @@ async function act(a,v,el,ev){
           if(cur.poQad){ if(String(cur.qadOrder||'').trim() && eq(cur.qadOrder,cur.poQad)){ patch.qadOrder=''; out.push('objednávka QAD'); } patch.poQad=null; }
           if(out.length){ clearSup=true; hist.push(`${today()} · ${me.name} · smazané PO → vymazáno: ${out.join(', ')}`); }
           // bez PO už požadavek není „PO odesláno" ani „PO ve schvalování" → zpět na schváleno (doručené a zamítnuté se nemění)
-          if(cur.status==='odesláno'||cur.status==='ve schvalování'){ patch.status='schváleno'; clearStat=true; hist.push(`${today()} · ${me.name} · stav → schváleno (smazané PO)`); }
+          if(cur.status==='odesláno'||cur.status==='ve schvalování'){ patch.status='schváleno'; patch.poSentAt=null; clearStat=true; hist.push(`${today()} · ${me.name} · stav → schváleno (smazané PO)`); }
         }
         await updateDoc(doc(db,'requests',editing._id),patch);
         Object.assign(editing,patch);
