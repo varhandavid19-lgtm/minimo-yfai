@@ -3234,7 +3234,7 @@ async function act(a,v,el,ev){
         if(clearOffer){ patch.offerNo=''; hist.push(`${today()} · ${me.name} · nabídka ${cur.offerNo} vymazána (smazaná příloha)`); }
         // smazané poslední PO → odebrat i údaje dodavatele vyčtené z PO (číslo, splatnost, jméno);
         // co mezitím někdo ručně změnil, zůstane. Starší požadavky bez záznamu poSup: vymaže se vše.
-        let clearSup=false;
+        let clearSup=false, clearStat=false;
         if(f.cat==='po' && P().edit && !files.some(g=>g.cat==='po')){
           const ps=cur.poSup, eq=(a,b)=>String(a||'').trim()===String(b||'').trim(), out=[];
           if(String(cur.supplierNo||'').trim() && (!ps || eq(cur.supplierNo,ps.no))){ patch.supplierNo=''; out.push('číslo dodavatele'); }
@@ -3251,10 +3251,12 @@ async function act(a,v,el,ev){
           if(cur.poOffer) patch.poOffer=null;
           if(cur.poQad){ if(String(cur.qadOrder||'').trim() && eq(cur.qadOrder,cur.poQad)){ patch.qadOrder=''; out.push('objednávka QAD'); } patch.poQad=null; }
           if(out.length){ clearSup=true; hist.push(`${today()} · ${me.name} · smazané PO → vymazáno: ${out.join(', ')}`); }
+          // bez PO už požadavek není „PO odesláno" → zpět na schváleno (doručené a zamítnuté se nemění)
+          if(cur.status==='odesláno'){ patch.status='schváleno'; clearStat=true; hist.push(`${today()} · ${me.name} · stav → schváleno (smazané PO)`); }
         }
         await updateDoc(doc(db,'requests',editing._id),patch);
         Object.assign(editing,patch);
-        toast('Příloha smazána.'+(clearOffer?' Číslo nabídky vymazáno.':'')+(clearSup?' Údaje z PO vymazány.':''),'ok');
+        toast('Příloha smazána.'+(clearOffer?' Číslo nabídky vymazáno.':'')+(clearSup?' Údaje z PO vymazány.':'')+(clearStat?' Stav → schváleno.':''),'ok');
       }catch(e){ toast('Smazání selhalo: '+e.message,'err'); }
       render(); return;
     }
