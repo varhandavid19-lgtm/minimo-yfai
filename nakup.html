@@ -1445,9 +1445,11 @@ async function mgrApply(receiveComplete){
     try{ await updateDoc(doc(db,'requests',r._id),patch); ok++; }
     catch(e){ fail++; }
   }
+  // jedno PO ke všem vybraným → jeden e-mail
+  const mailNote=(ok && sharedMetas.some(m=>m.cat==='po') && mgrFiles.po)?await poMailDraft([mgrFiles.po]):'';
   mgrSel.clear(); mgrFiles={po:null,nabidka:null};
   mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''};  // po použití vyprázdnit políčka, ať se nepřenesou na další dávku
-  toast(`Upraveno ${czCount(ok)}.`+(skip?` Pole, která daný požadavek nemá, se přeskočila (${skip}×).`:'')+(fail?` (${fail} se nepovedlo — zkus to znovu)`:''), fail?'err':'ok');
+  toast(`Upraveno ${czCount(ok)}.`+(skip?` Pole, která daný požadavek nemá, se přeskočila (${skip}×).`:'')+(fail?` (${fail} se nepovedlo — zkus to znovu)`:'')+mailNote, fail?'err':'ok');
   render();
 }
 
@@ -2004,6 +2006,34 @@ function poOrderPatch(r,no,orderNow){
   if(now===no) return {patch:{poOrderNo:no},ch:''};
   return {patch:{},ch:'',kept:`Order no. zůstává ${now}, v PO je ${no}`};
 }
+/* E-mail s PO pro dodavatele. Prohlížeč neumí Outlooku předat přílohu (mailto ji nepodporuje), proto se
+   stáhne koncept .eml (X-Unsent: 1) — po otevření z něj Outlook udělá rozepsaný e-mail s přiloženým PO.
+   Vrací text do oznámení; při chybě nic nerozbije (PO už je nahrané). */
+async function poMailDraft(files){
+  try{
+    if(!files||!files.length) return '';
+    const b64=buf=>{ const u=new Uint8Array(buf); let s=''; for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); };
+    const utf8=t=>b64(new TextEncoder().encode(t));
+    const wrap=s=>s.replace(/(.{76})/g,'$1\r\n');
+    const hdr=t=>/^[\x20-\x7e]*$/.test(t)?t:`=?UTF-8?B?${utf8(t)}?=`;
+    const nos=[]; for(const f of files){ const n=await poNumber(f); if(n && !nos.includes(n)) nos.push(n); }
+    const label=nos.join(', ');
+    const subject=`Purchase Order${label?' '+label:''}`;
+    const body=`Dear Sir or Madam,\r\n\r\nplease find attached our Purchase Order${label?' '+label:''}.\r\n\r\nBest regards\r\n${me&&me.name||''}\r\n`;
+    const bnd='----=_minimo_'+Date.now().toString(36);
+    let eml=`X-Unsent: 1\r\nSubject: ${hdr(subject)}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="${bnd}"\r\n\r\n`
+      +`--${bnd}\r\nContent-Type: text/plain; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(utf8(body))}\r\n`;
+    for(const f of files){
+      const name=hdr(String(f.name||'PO.pdf').replace(/["\r\n]/g,''));
+      eml+=`--${bnd}\r\nContent-Type: ${f.type||'application/octet-stream'}; name="${name}"\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="${name}"\r\n\r\n${wrap(b64(await f.arrayBuffer()))}\r\n`;
+    }
+    eml+=`--${bnd}--\r\n`;
+    const u=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));
+    const a=document.createElement('a'); a.href=u; a.download=`E-mail ${(label||'PO').replace(/[\\/:*?"<>|]/g,'-')}.eml`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),60000);
+    return ' E-mail s PO se stáhl — otevři ho ve stažených souborech, otevře se v Outlooku.';
+  }catch(e){ return ' E-mail s PO se nepodařilo připravit — PO pošli ručně.'; }
+}
 async function poQuotes(file){
   if(!file || !(/\.pdf$/i.test(file.name||'') || file.type==='application/pdf')) return [];
   try{
@@ -2113,10 +2143,10 @@ async function handleFiles(fileList,cat){
   }
   uploadBusy=true; render();
   const base=rows.find(x=>x._id===editing._id)||editing;
-  const filesArr=(base.files||[]).slice(); const hist=(base.hist||[]).slice(); let ok=0;
+  const filesArr=(base.files||[]).slice(); const hist=(base.hist||[]).slice(); let ok=0; const okFiles=[];
   for(const f of files){
     if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); continue; }
-    try{ const meta=await uploadOne(editing._id,f,cat); filesArr.push(meta); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name} (${catLabel(cat)})`); ok++; }
+    try{ const meta=await uploadOne(editing._id,f,cat); okFiles.push(f); filesArr.push(meta); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name} (${catLabel(cat)})`); ok++; }
     catch(e){ toast(`Nahrání „${f.name}" selhalo: `+e.message,'err'); }
   }
   if(ok){ try{
@@ -2136,7 +2166,8 @@ async function handleFiles(fileList,cat){
       Object.assign(patch,op.patch); if(op.ch) hist.push(`${today()} · ${me.name} · z PO: ${op.ch}`); if(op.kept) hist.push(`${today()} · ${me.name} · ${op.kept}`);
       Object.assign(patch,sp.patch); if(sp.ch.length){ hist.push(`${today()} · ${me.name} · z PO: ${sp.ch.join(', ')}`); }
       await updateDoc(doc(db,'requests',editing._id),patch); Object.assign(editing,patch);
-      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(sp.ch.length?' Dodavatel doplněn z PO.':'')+(op.ch?` ${op.ch} doplněno.`:'')+(op.kept?` ${op.kept}.`:'')+(qp.ch?` Doplněna ${qp.ch}.`:'')+(qp.kept?` ${qp.kept}.`:'')+(qadOn&&!qadNo&&!String(base.qadOrder||'').trim()?' V názvu souboru není číslo objednávky QAD (10 číslic) — vyplň ho ručně.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna${offerSrc==='zadáno ručně'?'':' '+offerSrc}.`:''),'ok'); }
+      const mailNote=cat==='po'?await poMailDraft(okFiles):'';
+      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(sp.ch.length?' Dodavatel doplněn z PO.':'')+(op.ch?` ${op.ch} doplněno.`:'')+(op.kept?` ${op.kept}.`:'')+(qp.ch?` Doplněna ${qp.ch}.`:'')+(qp.kept?` ${qp.kept}.`:'')+(qadOn&&!qadNo&&!String(base.qadOrder||'').trim()?' V názvu souboru není číslo objednávky QAD (10 číslic) — vyplň ho ručně.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna${offerSrc==='zadáno ručně'?'':' '+offerSrc}.`:'')+mailNote,'ok'); }
     catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
   uploadBusy=false; render();
 }
@@ -2836,8 +2867,10 @@ async function createRequest(){
   // připravené přílohy nahraj až teď, když máme id požadavku
   if(pendingFiles.length){
     const filesArr=[]; const hist=rec.hist.slice();
-    for(const p of pendingFiles){ try{ const meta=await uploadOne(refNew.id,p.file,p.cat); filesArr.push(meta); hist.push(`${today()} · ${me.name} · přidal přílohu ${p.file.name} (${catLabel(p.cat)})`); }catch(e){} }
+    const poDone=[];
+    for(const p of pendingFiles){ try{ const meta=await uploadOne(refNew.id,p.file,p.cat); filesArr.push(meta); if(p.cat==='po') poDone.push(p.file); hist.push(`${today()} · ${me.name} · přidal přílohu ${p.file.name} (${catLabel(p.cat)})`); }catch(e){} }
     if(filesArr.length){ try{ await updateDoc(refNew,{files:filesArr,hist}); }catch(e){} }
+    await poMailDraft(poDone);
   }
   pendingFiles=[];
   return poradove;

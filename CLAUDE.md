@@ -244,6 +244,8 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
 - **Číslo PO → Order no.**: `poNumber(file)` (PL + 6 číslic z textu PDF, jinak z názvu souboru) a
   `poOrderPatch`: prázdné `orderNo` doplní, jiné vyplněné nepřepíše (zapíše do historie). `poOrderNo`
   si pamatuje číslo z PO; smazání posledního PO vymaže `orderNo`, jen když se pořád shoduje.
+- **E-mail s PO dodavateli**: po nahrání PO (`handleFiles`, `mgrApply`, `createRequest`) `poMailDraft` stáhne
+  koncept `.eml` (X-Unsent: 1) s přiloženým PO; mailto přílohy neumí. Příjemce je prázdný (e-mail dodavatele nikde není).
 - Smazání posledního PO u stavu `odesláno` vrátí stav na `schváleno` (`del-file`, `P().edit`).
 - **Číslo nabídky z PO a smazání PO**: co PO doplnilo do `offerNo`, je v `poOffer` (u starších podle
   historie „vyčteno z PO“); smazání posledního PO ho vymaže, ručně změněné číslo zůstane.
