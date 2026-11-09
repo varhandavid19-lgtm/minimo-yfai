@@ -1290,6 +1290,7 @@ function bindMgrDnD(){
 /* Soubor do Správy (přetažením i „vložit"). U nabídky se hned přečte číslo do pole Nabídka
    (je vidět a jde opravit před „Použít"); když to nejde, vyzve k ručnímu zadání. */
 async function mgrSetFile(cat,f){
+  if(cat==='po'){ toast('Kontroluji PO…','ok'); if(!await isStandardPo(f)){ await info(poRejectText([f]),{title:'Nestandardní PO'}); render(); return; } }
   mgrFiles[cat]=f; render();
   if(cat!=='nabidka' || mgr.offerNo.trim()) return;
   const selR=rows.filter(r=>mgrSel.has(r._id));
@@ -1987,6 +1988,13 @@ function poSupPatch(r,s){
   return {patch,ch};
 }
 /* Číslo PO (vždy PL + 6 číslic, např. PL111546): z textu PDF, jinak z názvu souboru. '' = nenalezeno. */
+/* Standardní PO = PDF s textem z QAD: nadpis „Purchase Order", číslo PL + 6 číslic a „Supplier Code/Name".
+   Sken bez textu, jiné PDF ani jiný typ souboru neprojde. */
+async function isStandardPo(file){
+  const t=String(await poText(file)||'');
+  return /Purchase\s+Order/i.test(t) && /\bPL\s?\d{6}(?!\d)/.test(t) && /Supplier\s+(?:Code|Name)/i.test(t);
+}
+const poRejectText = list => `Do PO lze vložit jen standardní dokument Purchase Order (PDF s číslem PL a údaji dodavatele).\n\nNevloženo:\n${list.map(f=>'• '+(f.name||'soubor')).join('\n')}`;
 async function poNumber(file){
   if(!file) return '';
   let t='';
@@ -2113,6 +2121,12 @@ async function handleFiles(fileList,cat){
   const files=[...(fileList||[])].filter(Boolean); if(!files.length) return;
   cat=cat||'ostatni';
   if(!editing) return;
+  if(cat==='po'){   // do PO jen standardní dokument (platí i pro nový požadavek)
+    toast('Kontroluji PO…','ok');
+    const bad=[]; for(const f of files) if(!await isStandardPo(f)) bad.push(f);
+    if(bad.length){ await info(poRejectText(bad),{title:'Nestandardní PO'}); for(const f of bad) files.splice(files.indexOf(f),1); }
+    if(!files.length){ render(); return; }
+  }
   if(!editing._id){   // nový požadavek → fronta, nahraje se po založení
     for(const f of files){ if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); continue; } pendingFiles.push({file:f,cat}); }
     render(); return;
