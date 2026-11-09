@@ -1363,6 +1363,9 @@ async function mgrApply(receiveComplete){
   }
   // PO ve správě: vyčíst číslo nabídky — u nových požadavků prázdné doplnit, vyplněné zkontrolovat
   let poQ=[], poSup=null, poManual=false, poNum='';
+  const poQadNo=(!receiveComplete && mgrFiles.po)?poQadFromName(mgrFiles.po.name):'';
+  if(!receiveComplete && mgrFiles.po && !poQadNo && !mgr.qadOrder.trim() && sel.some(r=>isRecv2(r) && !String(r.qadOrder||'').trim()))
+    await info('V názvu souboru PO není číslo objednávky QAD (10 číslic), pole Objednávka QAD se nevyplní.',{title:'Objednávka QAD'});
   if(!receiveComplete && mgrFiles.po){
     toast('Čtu PO…','ok');
     poQ=await poQuotes(mgrFiles.po); poSup=await poSupplier(mgrFiles.po); poNum=await poNumber(mgrFiles.po);
@@ -1430,7 +1433,9 @@ async function mgrApply(receiveComplete){
           // dodavatel, číslo dodavatele a splatnost z PO
           if(add.some(m=>m.cat==='po')){ patch.poQuotes=poQ;
             const op=poOrderPatch(r,poNum,patch.orderNo!==undefined?patch.orderNo:r.orderNo); Object.assign(patch,op.patch);
-            if(op.ch) ch.push('z PO: '+op.ch); if(op.kept) ch.push(op.kept); }
+            if(op.ch) ch.push('z PO: '+op.ch); if(op.kept) ch.push(op.kept);
+            if(v2){ const qp=poQadPatch(poQadNo,patch.qadOrder!==undefined?patch.qadOrder:r.qadOrder); Object.assign(patch,qp.patch);
+              if(qp.ch) ch.push('z názvu PO: '+qp.ch); if(qp.kept) ch.push(qp.kept); } }
           if(add.some(m=>m.cat==='po')){ const sp=poSupPatch(r,poSup); Object.assign(patch,sp.patch); if(sp.ch.length) ch.push('z PO: '+sp.ch.join(', ')); } }
       }
     }
@@ -1982,6 +1987,16 @@ async function poNumber(file){
   return m?'PL'+m[1]:'';
 }
 /* Zápis čísla PO do Order no.: prázdné pole doplní, jiné vyplněné číslo nepřepíše. */
+/* Objednávka QAD: 10místné číslo z NÁZVU souboru PO (např. 5100612992); víc kandidátů → přednost má 51…. */
+const poQadFromName = name => { const a=String(name||'').match(/(?<!\d)\d{10}(?!\d)/g)||[]; return a.find(x=>x.startsWith('51'))||a[0]||''; };
+/* Zápis do Objednávka QAD: prázdné pole doplní, jiné vyplněné číslo nepřepíše. */
+function poQadPatch(no,now){
+  if(!no) return {patch:{},ch:''};
+  now=String(now||'').trim();
+  if(!now) return {patch:{qadOrder:no,poQad:no},ch:`objednávka QAD ${no}`};
+  if(now===no) return {patch:{poQad:no},ch:''};
+  return {patch:{},ch:'',kept:`Objednávka QAD zůstává ${now}, v názvu PO je ${no}`};
+}
 function poOrderPatch(r,no,orderNow){
   if(!no) return {patch:{},ch:''};
   const now=String(orderNow||'').trim();
@@ -2112,11 +2127,16 @@ async function handleFiles(fileList,cat){
       if(fillOffer){ patch.offerNo=fillOffer; patch.recv2=true; hist.push(`${today()} · ${me.name} · nabídka ${fillOffer} (${offerSrc==='zadáno ručně'?offerSrc:'vyčteno '+offerSrc})`); }
       const sp=poSupPatch(base,supInfo);
       if(poQ && ok) patch.poQuotes=poQ;   // čísla nabídek z PO — pro pozdější kontrolu při změně NABÍDKA
+      // objednávka QAD z názvu souboru PO (pole mají jen požadavky v novém rozložení)
+      const qadOn=!!(ok && cat==='po' && P().edit && isRecv2(base));
+      const qadNo=qadOn?(files.map(f=>poQadFromName(f.name)).find(Boolean)||''):'';
+      const qp=poQadPatch(qadNo,base.qadOrder);
+      Object.assign(patch,qp.patch); if(qp.ch) hist.push(`${today()} · ${me.name} · z názvu PO: ${qp.ch}`); if(qp.kept) hist.push(`${today()} · ${me.name} · ${qp.kept}`);
       const op=ok?poOrderPatch(base,poNo,base.orderNo):{patch:{},ch:''};
       Object.assign(patch,op.patch); if(op.ch) hist.push(`${today()} · ${me.name} · z PO: ${op.ch}`); if(op.kept) hist.push(`${today()} · ${me.name} · ${op.kept}`);
       Object.assign(patch,sp.patch); if(sp.ch.length){ hist.push(`${today()} · ${me.name} · z PO: ${sp.ch.join(', ')}`); }
       await updateDoc(doc(db,'requests',editing._id),patch); Object.assign(editing,patch);
-      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(sp.ch.length?' Dodavatel doplněn z PO.':'')+(op.ch?` ${op.ch} doplněno.`:'')+(op.kept?` ${op.kept}.`:'')+(fillOffer?` Nabídka ${fillOffer} doplněna${offerSrc==='zadáno ručně'?'':' '+offerSrc}.`:''),'ok'); }
+      toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(sp.ch.length?' Dodavatel doplněn z PO.':'')+(op.ch?` ${op.ch} doplněno.`:'')+(op.kept?` ${op.kept}.`:'')+(qp.ch?` Doplněna ${qp.ch}.`:'')+(qp.kept?` ${qp.kept}.`:'')+(qadOn&&!qadNo&&!String(base.qadOrder||'').trim()?' V názvu souboru není číslo objednávky QAD (10 číslic) — vyplň ho ručně.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna${offerSrc==='zadáno ručně'?'':' '+offerSrc}.`:''),'ok'); }
     catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
   uploadBusy=false; render();
 }
@@ -3225,6 +3245,7 @@ async function act(a,v,el,ev){
           if(ps) patch.poSup=null;
           if(Array.isArray(cur.poQuotes)) patch.poQuotes=null;
           if(cur.poOrderNo){ if(String(cur.orderNo||'').trim() && eq(cur.orderNo,cur.poOrderNo)){ patch.orderNo=''; out.push('Order no.'); } patch.poOrderNo=null; }
+          if(cur.poQad){ if(String(cur.qadOrder||'').trim() && eq(cur.qadOrder,cur.poQad)){ patch.qadOrder=''; out.push('objednávka QAD'); } patch.poQad=null; }
           if(out.length){ clearSup=true; hist.push(`${today()} · ${me.name} · smazané PO → vymazáno: ${out.join(', ')}`); }
         }
         await updateDoc(doc(db,'requests',editing._id),patch);
