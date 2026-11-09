@@ -3309,8 +3309,8 @@ async function act(a,v,el,ev){
           if(cur.poEmail){ if(eq(cur.supplierEmail,cur.poEmail)){ patch.supplierEmail=''; out.push('e-mail pro zasílání PL'); } patch.poEmail=null; }
           if(cur.poQad){ if(String(cur.qadOrder||'').trim() && eq(cur.qadOrder,cur.poQad)){ patch.qadOrder=''; out.push('objednávka QAD'); } patch.poQad=null; }
           if(out.length){ clearSup=true; hist.push(`${today()} · ${me.name} · smazané PO → vymazáno: ${out.join(', ')}`); }
-          // bez PO už požadavek není „PO odesláno" → zpět na schváleno (doručené a zamítnuté se nemění)
-          if(cur.status==='odesláno'){ patch.status='schváleno'; clearStat=true; hist.push(`${today()} · ${me.name} · stav → schváleno (smazané PO)`); }
+          // bez PO už požadavek není „PO odesláno" ani „PO ve schvalování" → zpět na schváleno (doručené a zamítnuté se nemění)
+          if(cur.status==='odesláno'||cur.status==='ve schvalování'){ patch.status='schváleno'; clearStat=true; hist.push(`${today()} · ${me.name} · stav → schváleno (smazané PO)`); }
         }
         await updateDoc(doc(db,'requests',editing._id),patch);
         Object.assign(editing,patch);

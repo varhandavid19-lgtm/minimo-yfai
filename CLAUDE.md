@@ -247,7 +247,7 @@ z CDN až ve chvíli, kdy někdo nabídku opravdu nahraje.
 - **E-mail s PO dodavateli**: po nahrání PO (`handleFiles`, `mgrApply`, `createRequest`) `poMailDraft` stáhne
   koncept `.eml` (X-Unsent: 1) s přiloženým PO; mailto přílohy neumí. Příjemce = `supplierEmail` (ruční pole „E-mail pro zasílání PL“ v boxu Dodavatel). Prázdné se při nahrání PO doplní přes
   `knownSupEmail` (jen číslo dodavatele vyčtené z PDF, název se nepoužívá; nejnovější `supplierEmailAt`) a zapamatuje v `poEmail`; smazání PO maže jen tento automatický.
-- Smazání posledního PO u stavu `odesláno` vrátí stav na `schváleno` (`del-file`, `P().edit`).
+- Smazání posledního PO u stavu `odesláno` nebo `ve schvalování` vrátí stav na `schváleno` (`del-file`, `P().edit`).
 - **Číslo nabídky z PO a smazání PO**: co PO doplnilo do `offerNo`, je v `poOffer` (u starších podle
   historie „vyčteno z PO“); smazání posledního PO ho vymaže, ručně změněné číslo zůstane.
 - **Objednávka QAD z PO**: `poQadFromName` (10 číslic z názvu souboru PO, přednost 51…) a `poQadPatch`:
