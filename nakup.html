@@ -2072,7 +2072,8 @@ async function poMailDraft(files,to){
     const nos=[]; for(const f of files){ const n=await poNumber(f); if(n && !nos.includes(n)) nos.push(n); }
     const label=nos.join(', ');
     const subject=`Purchase Order${label?' '+label:''}`;
-    const body=`Dear Sir or Madam,\r\n\r\nplease find attached our Purchase Order${label?' '+label:''}.\r\n\r\nBest regards\r\n${me&&me.name||''}\r\n`;
+    // předdefinovaný text (Robert, 10. 11. 2026)
+    const body=`Dobrý den,\r\nV příloze Vám posílám objednávku a prosím o její potvrzení a potvrzení termínu dodání do tří pracovních dnů.\r\n\r\nDěkuji\r\n${me&&me.name||''}\r\n`;
     const bnd='----=_minimo_'+Date.now().toString(36);
     let eml=`X-Unsent: 1\r\n${toList.length?`To: ${toList.join(', ')}\r\n`:''}Subject: ${hdr(subject)}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="${bnd}"\r\n\r\n`
       +`--${bnd}\r\nContent-Type: text/plain; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(utf8(body))}\r\n`;
