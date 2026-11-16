@@ -839,13 +839,3 @@ uvedeného seznamu „nesmí se rozbít“.
   NE → `askText` na nový účet (musí být v `cfg.accounts` a jiný než dosavadní), uloží se `ucet` s reqNo.
   `mgrApply` s `mgr.reqNo` → dialog se seznamem účtů; NE → dialog `kind:"accfix"` (`accFixView`,
   políčko účtu u každého řádku, ověří se v `dlg-yes`), změněné účty se zapíšou s Req no.; Zrušit = nic.
-- **Dodací list čte Claude Sonnet 5.5** (David, 11/2026): po nahrání přílohy kategorie `dodaci`
-  (`handleFiles`, jen `P().edit`) volá `dlReadClaude` serverovou funkci `readDeliveryNote`
-  (`functions/index.js`, Claude API přes `@anthropic-ai/sdk`, model `claude-sonnet-5-5`, structured
-  output `DL_SCHEMA`, `fallbacks: "default"`). Funkce jen ČTE (ověří právo jako `canEdit()` a že soubor
-  je příloha „Dodací list" toho požadavku) a vrací číslo DL, datum, dodavatele, čísla objednávek,
-  položky a `matchIndex`. Aplikace nabídne doplnit jen PRÁZDNÁ pole (`dlNo`, u starého rozložení
-  `docType`/`docNo`; `receivedDate`; `receivedQty`) a upozorní na nesoulad dodavatele, objednávky
-  a množství; zápis až po „Doplnit" (historie „z dodacího listu (Claude)"). Stav se nemění.
-  Klíč je v Secret Manageru jako `ANTHROPIC_API_KEY` (soukromý účet; firemní klíč = jen výměna secretu).
-  AI pro import nabídek zůstává Gemini (Firebase AI Logic) — neplést.
