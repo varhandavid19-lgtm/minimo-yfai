@@ -24,12 +24,14 @@
    ========================================================== */
 const { setGlobalOptions } = require('firebase-functions/v2');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const nodemailer = require('nodemailer');
+const Anthropic = require('@anthropic-ai/sdk');
 
 initializeApp();
 const db = getFirestore();
@@ -37,6 +39,9 @@ setGlobalOptions({ region: 'europe-west1', maxInstances: 3 });
 
 const SMTP_USER = defineSecret('SMTP_USER');
 const SMTP_PASS = defineSecret('SMTP_PASS');
+// Klíč k Anthropicu (čtení nabídek v Nákupních požadavcích). V kódu NIKDY není,
+// nastavuje se příkazem `firebase functions:secrets:set ANTHROPIC_API_KEY`.
+const ANTHROPIC_API_KEY = defineSecret('ANTHROPIC_API_KEY');
 
 /* Zdroje úkolů. Stejné funkce obsluhují LAMA (lama.html) i 📋 Požadavky na správce
    v Plánování směn (lama.html?mode=plan, kolekce plan_tasks, nastavení meta/plancfg).
@@ -221,3 +226,128 @@ exports.lamaDaily   = onSchedule(morning, LAMA.daily);
 exports.planNewTask = onDocumentCreated(opts('plan_tasks/{id}'), PLAN.newTask);
 exports.planDone    = onDocumentUpdated(opts('plan_tasks/{id}'), PLAN.done);
 exports.planDaily   = onSchedule(morning, PLAN.daily);
+
+/* ==========================================================
+   AI ČTENÍ NABÍDEK (Claude) — pro tlačítko „+ Import požadavků" v nakup.html
+
+   Proč to běží na serveru: klíč k Anthropicu je jako platební karta. V prohlížeči
+   by si ho přečetl kdokoliv, kdo si zobrazí zdroj stránky. Tahle funkce drží klíč
+   u sebe (Secret Manager) a prohlížeči vrací jen hotový seznam položek.
+
+   Volá se z prohlížeče přes httpsCallable(functions,'readOffer') a dostane
+   { data: <soubor v base64>, mime: 'application/pdf' | 'image/…' }.
+   Vrací { items: [{popis, mnozstvi, jednotka, cena, mena}, …] }.
+   ========================================================== */
+const OFFER_MODEL = 'claude-opus-5-5';
+const OFFER_MIMES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const OFFER_MAX_BYTES = 5 * 1024 * 1024;        // stejný strop jako přílohy v aplikaci
+
+const OFFER_SYSTEM = `Jsi asistent nákupního oddělení výrobní firmy. V přiloženém souboru je cenová NABÍDKA od dodavatele.
+Vypiš POUZE skutečné položky k objednání — každý produkt jako jednu položku.
+
+Pro každou položku vrať:
+- popis: název/označení položky, klidně včetně kódu dílu od dodavatele
+- mnozstvi: objednávané množství jako číslo; když v nabídce není, dej 1
+- jednotka: ks, m nebo kg; když to z nabídky nepoznáš, dej ks
+- cena: cena za JEDNU jednotku BEZ DPH jako číslo; když cena není uvedená, dej 0
+- mena: CZK, EUR nebo USD; když není uvedená, odhadni ji podle jazyka a formátu nabídky
+
+Pravidla:
+- Přeskoč souhrnné řádky (mezisoučet, DPH, celkem k úhradě), hlavičky, patičky, adresy, bankovní spojení a obchodní podmínky.
+- Když je u řádku jen celková cena za řádek, přepočti ji na cenu za jednotku (celkem ÷ množství).
+- Čísla vracej jako čísla s desetinnou tečkou, bez měny a bez mezer uvnitř.
+- Raději vynech řádek, u kterého si nejsi jistý, že je to objednávaná položka, než abys vymýšlel údaje.
+- Když v souboru žádná nabídka ani položky nejsou, vrať prázdný seznam.`;
+
+/* Pevný tvar odpovědi. Model nemůže vrátit nic jiného — nemusíme tedy hádat,
+   co přišlo, a odpadá parsování volného textu. */
+const OFFER_SCHEMA = {
+  type: 'object',
+  properties: {
+    polozky: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          popis:    { type: 'string' },
+          mnozstvi: { type: 'number' },
+          jednotka: { type: 'string', enum: ['ks', 'm', 'kg'] },
+          cena:     { type: 'number' },
+          mena:     { type: 'string', enum: ['CZK', 'EUR', 'USD'] }
+        },
+        required: ['popis', 'mnozstvi', 'jednotka', 'cena', 'mena'],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ['polozky'],
+  additionalProperties: false
+};
+
+exports.readOffer = onCall({
+  secrets: [ANTHROPIC_API_KEY],
+  timeoutSeconds: 300,          // velké PDF se čte i přes minutu
+  memory: '512MiB',
+  cors: true
+}, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Na čtení nabídek musíš být přihlášený.');
+
+  const data = String((req.data && req.data.data) || '');
+  const mime = String((req.data && req.data.mime) || '').toLowerCase();
+  const name = String((req.data && req.data.name) || 'nabídka');
+  if (!data) throw new HttpsError('invalid-argument', 'Nepřišel žádný soubor.');
+  if (!OFFER_MIMES.has(mime)) {
+    throw new HttpsError('invalid-argument',
+      'Tenhle typ souboru číst neumím. Pošli PDF, nebo obrázek ve formátu PNG, JPG, WEBP či GIF.');
+  }
+  // base64 je zhruba o třetinu delší než soubor sám
+  if (Math.floor(data.length * 3 / 4) > OFFER_MAX_BYTES) {
+    throw new HttpsError('invalid-argument', 'Nabídka je větší než 5 MB.');
+  }
+
+  const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+  const fileBlock = mime === 'application/pdf'
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
+    : { type: 'image',    source: { type: 'base64', media_type: mime, data } };
+
+  let res;
+  try {
+    res = await client.beta.messages.create({
+      model: OFFER_MODEL,
+      max_tokens: 8000,
+      // Když bezpečnostní klasifikátor požadavek odmítne, server ho sám zkusí
+      // na náhradním modelu, místo aby čtení spadlo.
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: OFFER_SYSTEM,
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: OFFER_SCHEMA } },
+      messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: 'Vypiš položky z téhle nabídky.' }] }]
+    });
+  } catch (e) {
+    logger.error('Čtení nabídky selhalo', { name, mime, err: e && e.message });
+    const st = e && e.status;
+    if (st === 401 || st === 403) throw new HttpsError('failed-precondition', 'Klíč k Anthropicu je neplatný nebo chybí. Řekni o tom správci.');
+    if (st === 429) throw new HttpsError('resource-exhausted', 'Anthropic je zrovna vytížený. Zkus to za chvíli znovu.');
+    if (st === 400 && /credit|balance/i.test(String(e && e.message))) {
+      throw new HttpsError('failed-precondition', 'Na účtu u Anthropicu došel kredit. Řekni o tom správci.');
+    }
+    throw new HttpsError('internal', 'Nabídku se nepodařilo přečíst: ' + (e && e.message || 'neznámá chyba'));
+  }
+
+  if (res.stop_reason === 'refusal') {
+    throw new HttpsError('failed-precondition', 'Model odmítl soubor zpracovat. Zkus jinou nabídku, nebo řádky vyplň ručně.');
+  }
+
+  const txt = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  let parsed;
+  try { parsed = JSON.parse(txt); }
+  catch (e) { throw new HttpsError('internal', 'Odpověď od AI se nepodařilo přečíst. Zkus to prosím znovu.'); }
+
+  const items = Array.isArray(parsed && parsed.polozky) ? parsed.polozky : [];
+  const u = res.usage || {};
+  logger.info('Nabídka přečtena', {
+    name, mime, items: items.length, model: res.model,
+    inTokens: u.input_tokens, outTokens: u.output_tokens, by: req.auth.token && req.auth.token.email
+  });
+  return { items };
+});
