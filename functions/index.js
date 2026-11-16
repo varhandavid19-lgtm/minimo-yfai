@@ -29,6 +29,9 @@ const { defineSecret } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getStorage } = require('firebase-admin/storage');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const Anthropic = require('@anthropic-ai/sdk');
 const nodemailer = require('nodemailer');
 
 initializeApp();
@@ -37,6 +40,9 @@ setGlobalOptions({ region: 'europe-west1', maxInstances: 3 });
 
 const SMTP_USER = defineSecret('SMTP_USER');
 const SMTP_PASS = defineSecret('SMTP_PASS');
+// Klíč ke Claude API (platform.claude.com) — v trezoru Google, nikdy v kódu:
+//   firebase functions:secrets:set ANTHROPIC_API_KEY
+const ANTHROPIC_API_KEY = defineSecret('ANTHROPIC_API_KEY');
 
 /* Zdroje úkolů. Stejné funkce obsluhují LAMA (lama.html) i 📋 Požadavky na správce
    v Plánování směn (lama.html?mode=plan, kolekce plan_tasks, nastavení meta/plancfg).
@@ -221,3 +227,116 @@ exports.lamaDaily   = onSchedule(morning, LAMA.daily);
 exports.planNewTask = onDocumentCreated(opts('plan_tasks/{id}'), PLAN.newTask);
 exports.planDone    = onDocumentUpdated(opts('plan_tasks/{id}'), PLAN.done);
 exports.planDaily   = onSchedule(morning, PLAN.daily);
+
+/* ==========================================================
+   Nákup: čtení DODACÍHO LISTU pomocí Claude Sonnet 5.5 (David, 11/2026)
+   Volá ho nakup.html (httpsCallable 'readDeliveryNote') po nahrání přílohy
+   kategorie „Dodací list". Funkce soubor stáhne z úložiště, pošle ho Claude
+   a vrátí vyčtené údaje (číslo DL, datum, dodavatel, čísla objednávek, položky
+   a která položka odpovídá požadavku). NIC NEZAPISUJE — co doplnit, potvrzuje
+   uživatel v aplikaci. Smí ji volat jen ten, kdo smí požadavky upravovat
+   (role admin / skladnik nebo správce podle e-mailu — stejně jako canEdit() v pravidlech).
+   ========================================================== */
+const DL_MODEL = 'claude-sonnet-5-5';
+const EDIT_EMAILS = ['varhan@minimo.yfai', 'norkova@minimo.yfai', 'david.varhan@yanfeng.com', 'varhandavid19@gmail.com'];
+const DL_TYPES = { 'application/pdf': 'document', 'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image', 'image/gif': 'image' };
+const DL_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['dlNo', 'date', 'supplier', 'orderRefs', 'items', 'matchIndex', 'matchReason', 'notes'],
+  properties: {
+    dlNo: { type: 'string', description: 'Číslo dodacího listu / servisního výkazu, jinak prázdný řetězec' },
+    date: { type: 'string', description: 'Datum dodání / vystavení ve tvaru RRRR-MM-DD, jinak prázdný řetězec' },
+    supplier: { type: 'string', description: 'Název dodavatele (odesílatele), jinak prázdný řetězec' },
+    orderRefs: { type: 'array', items: { type: 'string' }, description: 'Čísla objednávek / PO / zakázek uvedená na dokladu' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['description', 'code', 'qty', 'unit'],
+        properties: {
+          description: { type: 'string' },
+          code: { type: 'string', description: 'Kód / objednací číslo položky, jinak prázdný řetězec' },
+          qty: { type: 'string', description: 'Dodané množství jako číslo s tečkou (např. 10 nebo 2.5), jinak prázdný řetězec' },
+          unit: { type: 'string' }
+        }
+      }
+    },
+    matchIndex: { type: 'integer', description: 'Index položky v items, která odpovídá nákupnímu požadavku, nebo -1' },
+    matchReason: { type: 'string', description: 'Krátce česky, podle čeho byla položka spárována (nebo proč ne)' },
+    notes: { type: 'string', description: 'Krátké české upozornění na nesrovnalosti, jinak prázdný řetězec' }
+  }
+};
+
+async function canEditRequests(auth) {
+  if (!auth) return false;
+  const email = String(auth.token && auth.token.email || '').toLowerCase();
+  if (EDIT_EMAILS.includes(email)) return true;
+  const u = await db.doc(`users/${auth.uid}`).get();
+  return u.exists && ['admin', 'skladnik'].includes(u.data().role);
+}
+
+exports.readDeliveryNote = onCall({ secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 180, memory: '512MiB' }, async (request) => {
+  if (!(await canEditRequests(request.auth))) throw new HttpsError('permission-denied', 'Dodací list smí číst jen skladník nebo administrátor.');
+  const { requestId, path } = request.data || {};
+  if (typeof requestId !== 'string' || typeof path !== 'string' || !path.startsWith('nabidky/'))
+    throw new HttpsError('invalid-argument', 'Chybí požadavek nebo soubor.');
+  // soubor musí být příloha „Dodací list" právě tohoto požadavku
+  const snap = await db.doc(`requests/${requestId}`).get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Požadavek neexistuje.');
+  const r = snap.data();
+  if (!(r.files || []).some(f => f.path === path && f.cat === 'dodaci'))
+    throw new HttpsError('failed-precondition', 'Soubor není přílohou „Dodací list" tohoto požadavku.');
+
+  const file = getStorage().bucket().file(path);
+  const [meta] = await file.getMetadata();
+  const mediaType = String(meta.contentType || '').toLowerCase();
+  const kind = DL_TYPES[mediaType];
+  if (!kind) throw new HttpsError('failed-precondition', 'Claude umí přečíst jen PDF nebo obrázek (JPG, PNG, WebP, GIF).');
+  const [buf] = await file.download();
+  const data = buf.toString('base64');
+
+  const context = [
+    `Číslo požadavku: ${r.poradove || ''}`,
+    `Popis položky: ${r.popis || r.duvod || ''}`,
+    `Skladové číslo: ${r.sklad || ''}`,
+    `Objednané množství: ${r.mnozstvi || ''} ${r.jednotka || 'ks'}`,
+    `Dodavatel: ${r.dodavatel || ''}`,
+    `Order no. / PO: ${r.orderNo || ''}`,
+    `Objednávka QAD: ${r.qadOrder || ''}`
+  ].join('\n');
+  const prompt = `Přikládám dodací list (nebo servisní výkaz) k nákupnímu požadavku. Vyčti z něj údaje podle schématu.
+Pole, které na dokladu není, nech prázdné — nic si nedomýšlej. Datum převeď na RRRR-MM-DD.
+Ve všech položkách najdi tu, která odpovídá tomuto nákupnímu požadavku (podle popisu, kódu, skladového čísla nebo množství); když žádná neodpovídá, dej matchIndex -1.
+Do notes napiš česky jen skutečné nesrovnalosti (jiný dodavatel, jiné číslo objednávky, jiné množství než objednané, nečitelný doklad).
+
+Nákupní požadavek:
+${context}`;
+
+  const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+  let msg;
+  try {
+    msg = await client.beta.messages.create({
+      model: DL_MODEL,
+      max_tokens: 16000,
+      // když Claude požadavek odmítne, server ho zopakuje na doporučeném záložním modelu
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: DL_SCHEMA } },
+      messages: [{ role: 'user', content: [
+        { type: kind, source: { type: 'base64', media_type: mediaType, data } },
+        { type: 'text', text: prompt }
+      ] }]
+    });
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) { logger.error('Claude: neplatný klíč'); throw new HttpsError('internal', 'Neplatný klíč ke Claude API (ANTHROPIC_API_KEY).'); }
+    if (e instanceof Anthropic.RateLimitError) throw new HttpsError('resource-exhausted', 'Claude je teď přetížený, zkus to za chvíli.');
+    if (e instanceof Anthropic.APIError) { logger.error('Claude API chyba', { status: e.status, message: e.message }); throw new HttpsError('unavailable', `Claude API: ${e.status || ''} ${e.message}`); }
+    throw new HttpsError('unavailable', 'Claude API není dostupné: ' + String(e && e.message || e));
+  }
+  logger.info('Dodací list přečten', { requestId, model: msg.model, stop: msg.stop_reason, usage: msg.usage });
+  if (msg.stop_reason === 'refusal') throw new HttpsError('failed-precondition', 'Claude dokument odmítl zpracovat.');
+  if (msg.stop_reason === 'max_tokens') throw new HttpsError('internal', 'Odpověď Claude byla příliš dlouhá.');
+  const text = (msg.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  let out;
+  try { out = JSON.parse(text); } catch (e) { throw new HttpsError('internal', 'Claude nevrátil čitelná data.'); }
+  return Object.assign(out, { model: msg.model });
+});

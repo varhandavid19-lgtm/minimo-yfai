@@ -436,6 +436,8 @@ import { getStorage, ref as sref, uploadBytes, getDownloadURL, deleteObject }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
+import { getFunctions, httpsCallable }
+  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
 
 /* ====== FIREBASE KONFIGURACE (David / projekt nakupni-pozadavky) ====== */
 const firebaseConfig = {
@@ -451,6 +453,7 @@ const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 const storage = getStorage(fbApp);   // úložiště na soubory (přílohy / nabídky)
+const fns = getFunctions(fbApp, 'europe-west1');   // serverové funkce (čtení dodacího listu pomocí Claude)
 
 /* ===== App Check – ochrana proti zneužití (reCAPTCHA Enterprise) =====
    Chrání hlavně volání AI (čtení nabídek). Pozn.: samotná inicializace NEomezí
@@ -2204,10 +2207,10 @@ async function handleFiles(fileList,cat){
   }
   uploadBusy=true; render();
   const base=rows.find(x=>x._id===editing._id)||editing;
-  const filesArr=(base.files||[]).slice(); const hist=(base.hist||[]).slice(); let ok=0; const okFiles=[];
+  const filesArr=(base.files||[]).slice(); const hist=(base.hist||[]).slice(); let ok=0; const okFiles=[], okMetas=[];
   for(const f of files){
     if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); continue; }
-    try{ const meta=await uploadOne(editing._id,f,cat); okFiles.push(f); filesArr.push(meta); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name} (${catLabel(cat)})`); ok++; }
+    try{ const meta=await uploadOne(editing._id,f,cat); okFiles.push(f); okMetas.push(meta); filesArr.push(meta); hist.push(`${today()} · ${me.name} · přidal přílohu ${f.name} (${catLabel(cat)})`); ok++; }
     catch(e){ toast(`Nahrání „${f.name}" selhalo: `+e.message,'err'); }
   }
   if(ok){ try{
@@ -2237,6 +2240,59 @@ async function handleFiles(fileList,cat){
       toast((ok===1?'Příloha nahrána.':ok+' přílohy nahrány.')+(patch.status?' Stav → PO odesláno.':'')+(sp.ch.length?' Dodavatel doplněn z PO.':'')+(op.ch?` ${op.ch} doplněno.`:'')+(op.kept?` ${op.kept}.`:'')+(qp.ch?` Doplněna ${qp.ch}.`:'')+(qp.kept?` ${qp.kept}.`:'')+(qadOn&&!qadNo&&!String(base.qadOrder||'').trim()?' V názvu souboru není číslo objednávky QAD (10 číslic) — vyplň ho ručně.':'')+(fillOffer?` Nabídka ${fillOffer} doplněna${offerSrc==='zadáno ručně'?'':' '+offerSrc}.`:'')+mailNote,'ok'); }
     catch(e){ toast('Uložení selhalo: '+e.message,'err'); } }
   uploadBusy=false; render();
+  // dodací list → přečíst pomocí Claude a nabídnout doplnění (jen kdo smí upravovat)
+  if(cat==='dodaci' && P().edit && okMetas.length) await dlReadClaude(editing&&editing._id, okMetas[0]);
+}
+
+/* ==========================================================
+   DODACÍ LIST přečtený pomocí Claude Sonnet 5.5 (David, 11/2026)
+   Serverová funkce readDeliveryNote (functions/index.js) soubor přečte a vrátí
+   číslo DL, datum, dodavatele, čísla objednávek a položky. Tady se jen nabídne
+   doplnit PRÁZDNÁ pole (Dodací list / Doklad, Datum přijetí, Přijímané množství)
+   a upozorní se na nesrovnalosti. Nic se nezapíše bez potvrzení.
+   ========================================================== */
+const dlNorm = t => String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+async function dlReadClaude(reqId, meta){
+  if(!reqId || !meta) return;
+  toast('Čtu dodací list pomocí Claude…','ok');
+  let res;
+  try{ res=(await httpsCallable(fns,'readDeliveryNote',{timeout:200000})({requestId:reqId, path:meta.path})).data; }
+  catch(e){ toast('Dodací list se nepodařilo přečíst: '+(e&&e.message||e),'err'); return; }
+  const cur=rows.find(x=>x._id===reqId)||editing; if(!cur) return;
+  const v2=isRecv2(cur), items=Array.isArray(res.items)?res.items:[];
+  const it = (res.matchIndex>=0 && items[res.matchIndex]) ? items[res.matchIndex] : (items.length===1 ? items[0] : null);
+  const qty = it ? Number(String(it.qty||'').replace(',','.')) : NaN;
+  const dlNo=String(res.dlNo||'').trim(), date=/^\d{4}-\d{2}-\d{2}$/.test(res.date||'') ? res.date : '';
+  // návrh doplnění — jen prázdná pole
+  const patch={}, fill=[];
+  if(dlNo){
+    if(v2 && !String(cur.dlNo||'').trim()){ patch.dlNo=dlNo; fill.push('Dodací list: '+dlNo); }
+    if(!v2 && !String(cur.docNo||'').trim()){ patch.docType='Dodací list'; patch.docNo=dlNo; fill.push('Doklad: Dodací list '+dlNo); }
+  }
+  if(date && !cur.receivedDate){ patch.receivedDate=date; fill.push('Datum přijetí: '+dateCz(date)); }
+  if(Number.isFinite(qty) && qty>0 && (cur.receivedQty===undefined || cur.receivedQty==='')){ patch.receivedQty=qty; fill.push(`Přijímané množství: ${qty} ${it.unit||cur.jednotka||''}`.trim()); }
+  // upozornění na nesrovnalosti
+  const warn=[];
+  if(res.supplier && cur.dodavatel && supNorm(res.supplier) && supNorm(cur.dodavatel) && !supNorm(res.supplier).includes(supNorm(cur.dodavatel)) && !supNorm(cur.dodavatel).includes(supNorm(res.supplier)))
+    warn.push(`Dodavatel na DL „${res.supplier}" ≠ v požadavku „${cur.dodavatel}".`);
+  const refs=(res.orderRefs||[]).map(dlNorm).filter(Boolean), myRefs=[cur.orderNo,cur.qadOrder].map(dlNorm).filter(Boolean);
+  if(refs.length && myRefs.length && !myRefs.some(m=>refs.some(x=>x.includes(m)||m.includes(x))))
+    warn.push(`Číslo objednávky na DL (${(res.orderRefs||[]).join(', ')}) nesedí s Order no. / QAD požadavku.`);
+  if(!it) warn.push(items.length?'Položku požadavku se na DL nepodařilo jednoznačně najít — množství doplň ručně.':'Na DL nejsou čitelné žádné položky.');
+  else if(Number.isFinite(qty) && Number(cur.mnozstvi)>0 && qty!==Number(cur.mnozstvi)) warn.push(`Dodáno ${qty}, objednáno ${cur.mnozstvi} ${cur.jednotka||'ks'}.`);
+  if(String(res.notes||'').trim()) warn.push('Claude: '+String(res.notes).trim());
+  const read=[`Číslo DL: ${dlNo||'—'}`, `Datum: ${date?dateCz(date):'—'}`, `Dodavatel: ${res.supplier||'—'}`,
+    `Objednávky: ${(res.orderRefs||[]).join(', ')||'—'}`, `Položka: ${it?(it.description+(it.qty?' — '+it.qty+' '+(it.unit||''):'')):'—'}`].join('\n');
+  const text=`Claude přečetl dodací list „${meta.name}":\n${read}`
+    + (warn.length?`\n\n⚠️ Zkontroluj:\n• ${warn.join('\n• ')}`:'')
+    + (fill.length?`\n\nDoplnit do prázdných polí?\n• ${fill.join('\n• ')}`:'\n\nVšechna pole už jsou vyplněná — nic se nemění.');
+  if(!fill.length){ await info(text,{title:'Dodací list (Claude)'}); return; }
+  if(!await askYes(text,{title:'Dodací list (Claude)',ok:'Doplnit',no:'Nedoplňovat'})) return;
+  const base=rows.find(x=>x._id===reqId)||cur;
+  patch.hist=(base.hist||[]).concat(`${today()} · ${me.name} · z dodacího listu (Claude): ${fill.join(', ')}`);
+  try{ await updateDoc(doc(db,'requests',reqId),patch); if(editing&&editing._id===reqId) Object.assign(editing,patch); toast('Doplněno z dodacího listu.','ok'); }
+  catch(e){ toast('Uložení selhalo: '+e.message,'err'); }
+  render();
 }
 
 /* ==========================================================
