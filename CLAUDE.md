@@ -156,6 +156,7 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   směnu na den, kdy mají podle rytmu volno (12h +200, sobota/neděle +1000). Směny z rytmu
   (i víkendové) a ruční výměna směny v den, kdy tým stejně pracuje, bonus nemají.
   **½ směny navíc** (Robert, 11/2026): tlačítko v řádku Směna (místo ruční Salaried), **jen v sekci Engineering**, značka `people.halfOt`
+  **🌴 sloupec vybrané dovolené** (Robert, 11/2026): v kalendáři za ⏱ sloupci (všechny sekce, na mobilu ne) — součet dnů typu „Dovolená“ v zobrazeném roce z `absenceMap` (½ dne = 0,5); `showVac`, `VACL`, `XC` (počet sloupců za jménem).
   {'RRRR-MM-DD':true} nezávislá na směně (`applyHalfOt`, opakovaný klik ruší, Vymazat ji smaže). VŽDY přesčas
   i bez rytmu: polovina směny dne (`halfOtHours`, bez směny 4 h); v kalendáři „½P“. Ruční nabídka směn
   je jednotná pro všechny sekce (`ALL_SHIFT_KEYS`).

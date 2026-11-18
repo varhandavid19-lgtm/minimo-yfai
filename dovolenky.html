@@ -254,6 +254,8 @@
   .cal td.otc.otc2,.cal th.otc.otc2{box-shadow:2px 0 0 #e6ebf2}
   .cal td.otc.ot0{color:#c3ccd8;font-weight:600}
   .cal tr.days th.otc{z-index:8;background:#fff4e8;color:#b45309;font-size:10.5px;font-weight:800}
+  .cal td.otc.vac{color:#8a6d00}
+  .cal tr.days th.otc.vac{background:#fff6cc;color:#8a6d00}
   .cal tr.grp .grp-add{margin-left:6px;padding:1px 7px;font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;
     background:#fff;border:1px solid #c3d0e2;color:var(--navy-2);border-radius:10px;cursor:pointer;vertical-align:1px}
   .cal tr.grp .grp-add:hover{background:var(--navy-2);color:#fff}
@@ -1793,18 +1795,21 @@ function calendarView(){
   // ⏱ přesčasy hned za jménem (David, 10/2026): „měs." = zobrazený měsíc (v Roku aktuální měsíc,
   // jen pro letošní rok), „rok" = celý zobrazený rok. Vidí kdo v sekci zapisuje všechny; na mobilu ne.
   const showOt = !mob && canEditAll(), OTW=50;
+  // 🌴 vybraná dovolená za zobrazený rok (Robert, 11/2026): součet dnů „Dovolená“ vč. ½ dne, všechny sekce, na mobilu ne
+  const showVac = !mob, VACW=50, VACL = NC+(showOt?2*OTW:0), XC = (showOt?2:0)+(showVac?1:0);
   const otMonth = monthView ? calMonth : (calYear===new Date().getFullYear() ? new Date().getMonth() : -1);
   const yearMonths=buildYear(calYear), months=monthView?[yearMonths[calMonth]]:yearMonths;
   const by=absenceMap(iso(calYear,0,1),iso(calYear,11,31)), sm=shiftMap(iso(calYear,0,1),iso(calYear,11,31));
   const allDays=months.flatMap(mo=>mo.days);
   let selM=new Map();                        // označené buňky (spočítá se, až je známé pořadí řádků)
   // měsíc: sloupce dnů se rozdělí o šířku obrazovky (bez pevné šířky), na úzkém displeji aspoň DC
-  const colgroup=`<colgroup><col style="width:${NC}px">${showOt?`<col style="width:${OTW}px"><col style="width:${OTW}px">`:''}${allDays.map(()=>monthView?'<col>':`<col style="width:${DC}px">`).join('')}</colgroup>`;
-  const tblStyle=monthView?` style="width:100%;min-width:${NC+(showOt?2*OTW:0)+allDays.length*DC}px"`:'';
-  const monthsRow=`<tr class="months"><th class="corner"${showOt?' colspan="3"':''}>${calYear}</th>${
+  const colgroup=`<colgroup><col style="width:${NC}px">${showOt?`<col style="width:${OTW}px"><col style="width:${OTW}px">`:''}${showVac?`<col style="width:${VACW}px">`:''}${allDays.map(()=>monthView?'<col>':`<col style="width:${DC}px">`).join('')}</colgroup>`;
+  const tblStyle=monthView?` style="width:100%;min-width:${VACL+(showVac?VACW:0)+allDays.length*DC}px"`:'';
+  const monthsRow=`<tr class="months"><th class="corner"${XC?` colspan="${XC+1}"`:''}>${calYear}</th>${
     months.map(mo=>`<th class="mstart ${mo.alt?'malt':''}" colspan="${mo.days.length}">${mo.name}</th>`).join('')}</tr>`;
   const otHead = showOt ? `<th class="otc" style="left:${NC}px" title="Přesčas za ${otMonth>=0?MONTHS[otMonth]+' '+calYear:'měsíc (jen pro letošní rok)'} — ručně zadané směny navíc proti rytmu">⏱ ${otMonth>=0?MONTHS_SHORT[otMonth]:'měs.'}</th><th class="otc otc2" style="left:${NC+OTW}px" title="Přesčas za rok ${calYear}">⏱ ${calYear}</th>` : '';
-  const daysRow=`<tr class="days"><th class="corner">Zaměstnanec</th>${otHead}${
+  const vacHead = showVac ? `<th class="otc otc2 vac" style="left:${VACL}px" title="Vybraná dovolená v roce ${calYear} (dny, ½ dne = 0,5)">🌴 ${calYear}</th>` : '';
+  const daysRow=`<tr class="days"><th class="corner">Zaměstnanec</th>${otHead}${vacHead}${
     allDays.map(dd=>{
       let cls='';
       if(dd.holiday)cls='hol'; else if(dd.weekend)cls='we'; else if(dd.alt)cls='malt';
@@ -1888,7 +1893,12 @@ function calendarView(){
         : `<td class="otc ${cls}${r.hours?'':' ot0'}" style="left:${left}px" title="${esc(lbl+': '+(r.days.join(', ')||'bez přesčasů'))}">${r.hours?r.hours+' h':'0'}</td>`;
       otCells = cell(om, NC, '', otMonth>=0?MONTHS[otMonth]+' '+calYear:'') + cell(oy, NC+OTW, 'otc2', 'rok '+calYear);
     }
-    return `<tr data-prow="${p.id}"${activeRow===p.id?' class="active"':''}>${nameCell}${otCells}${cells}</tr>`;
+    let vacCell='';
+    if(showVac){
+      let vd=0; Object.values(by[p.id]||{}).forEach(a=>{ if(a.type==='Dovolená') vd+=a.days===0.5?0.5:1; });
+      vacCell=`<td class="otc otc2 vac${vd?'':' ot0'}" style="left:${VACL}px" title="Vybraná dovolená ${calYear}: ${String(vd).replace('.',',')} dne/dnů">${vd?String(vd).replace('.',','):'0'}</td>`;
+    }
+    return `<tr data-prow="${p.id}"${activeRow===p.id?' class="active"':''}>${nameCell}${otCells}${vacCell}${cells}</tr>`;
   };
   // Rozdělení tabulky podle SMĚNY (směnového rytmu platného dnes), ne podle pozice —
   // pozice je za jménem (David, 10/2026). Pořadí skupin jako v nabídce rytmů,
@@ -1914,7 +1924,7 @@ function calendarView(){
     const grp=(groupsByPlan[k]||[]).sort(byPos);
     if(!grp.length) return;
     const title = !k ? 'Bez směnového rytmu' : k.startsWith('SH:') ? SHIFT3_GROUPS.find(g=>g.k===k).label : ROT_PLANS[k].label;
-    rowsHtml.push(`<tr class="grp"><td class="name grp-name"${showOt?' colspan="3"':''} title="${esc(title)}">${esc(title)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
+    rowsHtml.push(`<tr class="grp"><td class="name grp-name"${XC?` colspan="${XC+1}"`:''} title="${esc(title)}">${esc(title)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
     grp.forEach(p=>rowsHtml.push(personRow(p)));
   });
   const body=rowsHtml.join('');
