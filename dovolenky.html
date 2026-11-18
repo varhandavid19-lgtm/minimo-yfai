@@ -427,13 +427,10 @@ const SHIFTS = [
   {k:'SAL', name:'Salaried',      hours:'cca 7:00–15:30', fill:'#e2f5e0', noLabel:true, lab:'R'},
 ];
 const SHIFT_BY = Object.fromEntries(SHIFTS.map(s=>[s.k,s]));
-/* Které směny se ručně nabízejí v které sekci (rotační plány jsou naopak jednotné). */
-const SECTION_SHIFTS = {
-  engineering: ['DEN','R','SAL'],
-  toolsetters: ['R','O','N','D12','N12'],
-  maintenance: ['D12','O12','N12','R','O','N','SAL'],
-};
-const sectionShifts = key => (SECTION_SHIFTS[key]||[]).map(k=>SHIFT_BY[k]).filter(Boolean);
+/* Ručně se nabízejí VŠECHNY směny ve všech sekcích a u všech rytmů — stejně jako jsou jednotné
+   rytmy (Robert, 11/2026; dřív měla každá sekce jen část, např. Toolsetters bez O12 a Salaried). */
+const ALL_SHIFT_KEYS = ['R','O','N','D12','O12','N12','SAL','DEN'];
+const sectionShifts = () => ALL_SHIFT_KEYS.map(k=>SHIFT_BY[k]).filter(Boolean);
 
 /* ---- Směnové rotace (automatické rozplánování celého roku jedním kliknutím) ----
    4směnný 12h (týmy H1–H4) je vytěžený z reálného rozpisu „Směny 2026" (28denní
