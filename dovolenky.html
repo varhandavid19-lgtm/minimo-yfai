@@ -429,7 +429,7 @@ const SHIFTS = [
 const SHIFT_BY = Object.fromEntries(SHIFTS.map(s=>[s.k,s]));
 /* Ručně se nabízejí VŠECHNY směny ve všech sekcích a u všech rytmů — stejně jako jsou jednotné
    rytmy (Robert, 11/2026; dřív měla každá sekce jen část, např. Toolsetters bez O12 a Salaried). */
-const ALL_SHIFT_KEYS = ['R','O','N','D12','O12','N12','SAL','DEN'];
+const ALL_SHIFT_KEYS = ['R','O','N','D12','O12','N12','DEN'];   // Salaried ručně nahradilo „½ směny navíc" (rytmus Salaried zůstává)
 const sectionShifts = () => ALL_SHIFT_KEYS.map(k=>SHIFT_BY[k]).filter(Boolean);
 
 /* ---- Směnové rotace (automatické rozplánování celého roku jedním kliknutím) ----
@@ -839,7 +839,7 @@ function subscribe(){
   // ležet staré záznamy z původní aplikace Dovolenky — ty nemají ext:true a ignorují se.
   unsubExt = onSnapshot(collection(db,'people'),
     s=>{ extPeople=s.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.ext===true)
-           .map(x=>({id:x.id, name:x.name||'', email:'', positions:x.pos?[x.pos]:[], ext:true, notes:x.notes||{}}));
+           .map(x=>({id:x.id, name:x.name||'', email:'', positions:x.pos?[x.pos]:[], ext:true, notes:x.notes||{}, halfOt:x.halfOt||{}}));
          mergePeople(); render(); },
     e=>subErr('jména',e));
   unsubAbs = onSnapshot(collection(db,'absences'),
@@ -976,6 +976,22 @@ async function applyShift(code){
   }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
   busySel=false; render();
 }
+/* ½ směny navíc (Robert, 11/2026): značka ke dni v people.halfOt {'RRRR-MM-DD':true}, nezávislá
+   na směně — VŽDY přesčas (i bez rytmu). Když ji mají všechny vybrané dny, kliknutí ji zruší. */
+async function applyHalfOt(){
+  const m=selMap(); if(!m.size) return;
+  const all=[...m].every(([pid,days])=>{ const p=personById(pid); return p && [...days].every(ds=>(p.halfOt||{})[ds]); });
+  busySel=true; render();
+  try{
+    for(const [pid,days] of m){
+      if(!canEditPerson(pid)) continue;
+      const upd={}; [...days].forEach(ds=>{ upd['halfOt.'+ds] = all ? deleteField() : true; });
+      await updateDoc(doc(db,'people',pid), upd);
+    }
+    toast(all ? '½ směny navíc zrušeno.' : '½ směny navíc zapsáno — počítá se jako přesčas.','ok'); sel=null; selNote='';
+  }catch(e){ toast('Nepodařilo se uložit: '+e.message,'err'); }
+  busySel=false; render();
+}
 /* Vymaže z vybraných dnů nepřítomnosti i ručně naplánované směny.
    Směny z rotace se počítají z rytmu — ty zůstanou, dokud se rytmus neukončí. */
 /* Poznámka ke dni — nezávislá na směně i nepřítomnosti. Ukládá se do jména
@@ -1004,6 +1020,8 @@ async function clearSelection(){
     for(const r of ok){
       await clearRange('absences', r.p, r.from, r.to);
       await clearRange('shifts', r.p, r.from, r.to);
+      const hu={}; eachDay(r.from, r.to, ds=>{ if((r.p.halfOt||{})[ds]) hu['halfOt.'+ds]=deleteField(); });   // i ½ směny navíc
+      if(Object.keys(hu).length) await updateDoc(doc(db,'people',r.p.id), hu);
       // dny, kdy má člověk směnu z rytmu → značka „zrušená směna z rytmu" (po souvislých úsecích)
       let st=null, prev=null; const pieces=[];
       eachDay(r.from, r.to, ds=>{
@@ -1476,6 +1494,11 @@ function exportBonusCsv(){
    ========================================================== */
 const SHIFT_HOURS = {R:8, O:8, N:8, DEN:8, SAL:8, D12:12, O12:12, N12:12};
 const shiftH = c => SHIFT_HOURS[c] || 0;
+/* ½ směny navíc: polovina směny toho dne (ruční, jinak z rytmu); bez směny 4 h. */
+function halfOtHours(pid, ds, man){
+  const code = (man && !isOff(man)) ? man.shift : rotCodeOn(pid, ds);
+  const h=shiftH(code); return h ? h/2 : 4;
+}
 const otSections = () => SECTIONS.filter(s=>secPerm(s.key)==='all');
 /* Je ruční směna man v den ds přesčas? Stejná pravidla jako personOvertime (bez nepřítomnosti —
    tu řeší volající): člověk má ten den rytmus, ruční směna není OFF a rytmus má volno,
@@ -1488,8 +1511,14 @@ function isOtDay(pid, ds, man){
 }
 /* Přesčasy jednoho člověka za období od–do (abs/sm = absenceMap/shiftMap pokrývající období). */
 function personOvertime(p, from, to, abs, sm){
-  const r={rhythm:false, extra:0, ext:0, hours:0, days:[]};
+  const r={rhythm:false, extra:0, ext:0, half:0, hours:0, days:[]};
   eachDay(from,to,ds=>{
+    // ½ směny navíc = vždy přesčas (i bez rytmu); celodenní nepřítomnost ho ruší
+    const ab=(abs[p.id]||{})[ds];
+    if((p.halfOt||{})[ds] && !(ab && ab.days!==0.5)){
+      const h=halfOtHours(p.id, ds, (sm[p.id]||{})[ds]);
+      r.half++; r.hours+=h; r.rhythm=true; r.days.push(`${dCz(ds)} ½ směny navíc (+${h} h)`);
+    }
     const seg=activeSeg(p.id, ds);
     if(seg && seg.plan) r.rhythm=true; else return;          // bez rytmu ten den → nepočítá se
     const a=(abs[p.id]||{})[ds];
@@ -1569,7 +1598,7 @@ function overtimeView(){
       <button class="nav" id="bn-next" title="Další měsíc">›</button>
       <button class="btn-ghost" id="bn-today">Tento měsíc</button>
       <button class="btn-ghost" id="ot-export">⭳ Export CSV</button>
-      <span class="hint">ručně zadaná směna na den volna podle rytmu = celá směna · ruční 12h místo 8h z rytmu = +4 h · lidé bez rytmu se nepočítají · najetím na řádek uvidíš dny</span>
+      <span class="hint">ručně zadaná směna na den volna podle rytmu = celá směna · ruční 12h místo 8h z rytmu = +4 h · ½ směny navíc = vždy přesčas · lidé bez rytmu se jinak nepočítají · najetím na řádek uvidíš dny</span>
     </div>
     <div class="panel"><div class="tblwrap"><table class="ptable bonus">
       <thead><tr><th>Sekce</th><th>Úsek</th><th>Jméno</th><th class="num">Směn navíc</th><th class="num">Prodloužení 8h→12h</th>
@@ -1647,7 +1676,8 @@ function selBarView(){
       <input type="text" id="sb-note" value="${esc(selNote)}" placeholder="poznámka ke dni (uloží se i s nepřítomností)">
       <button class="sb-btn" id="sb-savenote" ${busySel?'disabled':''} title="Uložit poznámku k označeným dnům (prázdná poznámku smaže)">💾 Uložit poznámku</button></div>
     ${sh.length?`<div class="sb-row"><span class="sb-lbl">Směna</span>
-      ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?T(s.name):(s.k+' · '+T(s.name)), T(s.name)+(s.hours?' ('+T(s.hours)+')':''))).join('')}</div>`:''}
+      ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?T(s.name):(s.k+' · '+T(s.name)), T(s.name)+(s.hours?' ('+T(s.hours)+')':''))).join('')}
+      ${btn('data-halfot="1"', '#fecaca', '½ směny navíc', '½ směny navíc — vždy se počítá jako přesčas (polovina směny daného dne, bez směny 4 h). Znovu kliknutím na stejné dny se zruší.')}</div>`:''}
     ${onePerson ? rotRowView(p, from) : ''}
     <div class="sb-row"><span class="sb-lbl"></span>
       <button class="sb-btn sb-clear" id="sb-clear" ${busySel?'disabled':''}>🗑 Vymazat vybrané dny</button>
@@ -1794,8 +1824,10 @@ function calendarView(){
       if(isOff(sp[dd.ds]) && !a){ cls+=' rotoff'; tt+=' • směna z rytmu zrušena'; }
       // ⏱ přesčas: červené P nad označením směny (vidí všichni, David 11/2026)
       const otDay = !!sp[dd.ds] && (!a || a.days===0.5) && isOtDay(p.id, dd.ds, sp[dd.ds]);
-      const otMark = otDay ? '<span class="otmark">P</span>' : '';
+      const halfOt = !!(p.halfOt||{})[dd.ds] && (!a || a.days===0.5);   // ½ směny navíc = vždy přesčas
+      const otMark = (otDay||halfOt) ? `<span class="otmark">${otDay&&halfOt?'P+½':halfOt?'½P':'P'}</span>` : '';
       if(otDay){ cls+=' ot'; tt+=' • ⏱ počítá se jako přesčas'; }
+      if(halfOt){ if(!otDay) cls+=' ot'; tt+=' • ⏱ ½ směny navíc (přesčas)'; }
       if(dd.holiday)cls+=' hol'; else if(dd.weekend)cls+=' we'; else if(dd.alt)cls+=' malt';
       if(dd.first)cls+=' mstart'; if(dd.mcur)cls+=' mcur';
       if(dd.today)cls+=' today';
@@ -1831,6 +1863,7 @@ function calendarView(){
         if(nx && !nx.first && nx.holiday && !pm[nx.ds] && !eff(nx.ds)) style+=`;border-right-color:${HOLIDAY_FILL}`;
         inner='<span class="lab lab-sv">SV</span>';
       }
+      if(halfOt && !inner.includes('otmark')) inner=otMark+inner;   // ½P i na dni bez směny / svátku
       const dn=(p.notes||{})[dd.ds];
       if(dn){ cls+=' hasnote'; tt+=` • 📝 ${dn}`; }
       if(selM.has(p.id) && selM.get(p.id).includes(dd.ds)) cls+=' sel';
@@ -2022,6 +2055,7 @@ function wireApp(){
   document.querySelectorAll('[data-abs]').forEach(b=>b.addEventListener('click',()=>
     applyAbsence(b.getAttribute('data-abs'), b.hasAttribute('data-half'))));
   document.querySelectorAll('[data-shift]').forEach(b=>b.addEventListener('click',()=>applyShift(b.getAttribute('data-shift'))));
+  document.querySelectorAll('[data-halfot]').forEach(b=>b.addEventListener('click',applyHalfOt));
   document.getElementById('sb-restore')?.addEventListener('click',restoreRhythm);
   document.getElementById('sb-clear')?.addEventListener('click',()=>{
     const rs=selRuns(), np=new Set(rs.map(r=>r.pid)).size;

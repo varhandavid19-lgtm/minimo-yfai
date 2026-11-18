@@ -155,6 +155,10 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   **Týmy H1–H4 dostávají bonus JEN za směnu NAD rytmus** (David, 10/2026): ručně zadanou
   směnu na den, kdy mají podle rytmu volno (12h +200, sobota/neděle +1000). Směny z rytmu
   (i víkendové) a ruční výměna směny v den, kdy tým stejně pracuje, bonus nemají.
+  **½ směny navíc** (Robert, 11/2026): tlačítko v řádku Směna (místo ruční Salaried), značka `people.halfOt`
+  {'RRRR-MM-DD':true} nezávislá na směně (`applyHalfOt`, opakovaný klik ruší, Vymazat ji smaže). VŽDY přesčas
+  i bez rytmu: polovina směny dne (`halfOtHours`, bez směny 4 h); v kalendáři „½P“. Ruční nabídka směn
+  je jednotná pro všechny sekce (`ALL_SHIFT_KEYS`).
   Záložka **⏱ Přesčasy** (`mainTab='ot'`, `overtimeRows`, David, 10/2026): za měsíc z RUČNĚ zadaných
   směn proti rytmu — ruční směna na den volna podle rytmu (`rotCodeOn` = nic, tedy i státní svátek
   kromě týmů H) = celá směna (`SHIFT_HOURS`: 8h směny 8, D12/O12/N12 12), ruční 12h místo 8h z rytmu
