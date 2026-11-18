@@ -979,6 +979,7 @@ async function applyShift(code){
 /* ½ směny navíc (Robert, 11/2026): značka ke dni v people.halfOt {'RRRR-MM-DD':true}, nezávislá
    na směně — VŽDY přesčas (i bez rytmu). Když ji mají všechny vybrané dny, kliknutí ji zruší. */
 async function applyHalfOt(){
+  if(section!=='engineering') return;   // ½ směny navíc jen v Engineering
   const m=selMap(); if(!m.size) return;
   const all=[...m].every(([pid,days])=>{ const p=personById(pid); return p && [...days].every(ds=>(p.halfOt||{})[ds]); });
   busySel=true; render();
@@ -1677,7 +1678,7 @@ function selBarView(){
       <button class="sb-btn" id="sb-savenote" ${busySel?'disabled':''} title="Uložit poznámku k označeným dnům (prázdná poznámku smaže)">💾 Uložit poznámku</button></div>
     ${sh.length?`<div class="sb-row"><span class="sb-lbl">Směna</span>
       ${sh.map(s=>btn(`data-shift="${s.k}"`, s.fill, s.noLabel?T(s.name):(s.k+' · '+T(s.name)), T(s.name)+(s.hours?' ('+T(s.hours)+')':''))).join('')}
-      ${btn('data-halfot="1"', '#fecaca', '½ směny navíc', '½ směny navíc — vždy se počítá jako přesčas (polovina směny daného dne, bez směny 4 h). Znovu kliknutím na stejné dny se zruší.')}</div>`:''}
+      ${section==='engineering'?btn('data-halfot="1"', '#fecaca', '½ směny navíc', '½ směny navíc — vždy se počítá jako přesčas (polovina směny daného dne, bez směny 4 h). Znovu kliknutím na stejné dny se zruší.'):''}</div>`:''}
     ${onePerson ? rotRowView(p, from) : ''}
     <div class="sb-row"><span class="sb-lbl"></span>
       <button class="sb-btn sb-clear" id="sb-clear" ${busySel?'disabled':''}>🗑 Vymazat vybrané dny</button>
