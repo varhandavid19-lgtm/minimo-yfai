@@ -225,6 +225,7 @@
   @media(max-width:680px){.cal td.d .lab{font-size:11.5px}.cal td.shift .lab.lab-sh{font-size:11px}}
   /* Školení se směnou: horní levá půlka = směna (barva + značka), spodní pravá = Školení (Š) */
   .cal td.d .lab-l,.cal td.d .lab-r{position:absolute;font-size:11px;font-weight:800;line-height:1;pointer-events:none;color:rgba(16,24,40,.85)}
+  .cal td.d.split{position:relative}
   .cal td.d .lab-l{left:3px;top:3px}.cal td.d .lab-r{right:3px;bottom:3px}
   /* směna naplánovaná pod nepřítomností: jemná modrá linka dole */
   .cal td.hasshift{box-shadow:inset 0 -3px 0 rgba(37,99,168,.4)}
@@ -1858,7 +1859,7 @@ function calendarView(){
         }
         if(dd.holiday)cls+=' holmark'; else if(dd.weekend)cls+=' wemark';
         inner=`${otMark}<span class="lab">${T.short}</span>`;   // slabé písmeno typu v každé buňce
-        if(isPresentAbs(a) && a.days!==0.5 && s){                      // Školení + směna: půlka směna / půlka Školení
+        if(isPresentAbs(a) && a.days!==0.5 && s){ cls+=' split';                      // Školení + směna: půlka směna / půlka Školení
           const S=SHIFT_BY[s.code]||{fill:'#dfe6ee'};
           style=`background:linear-gradient(135deg, ${S.fill} 0 50%, ${T.fill} 50% 100%)`;
           inner=`${otMark}<span class="lab-l">${esc(S.lab||s.code)}</span><span class="lab-r">${T.short}</span>`;
