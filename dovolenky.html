@@ -398,8 +398,12 @@ const TYPES = [
   {k:'Lékař',           fill:'#e879a6', short:'L'},
   {k:'Neplacené volno', fill:'#9aa7b8', short:'NP'},
   {k:'Služební cesta',  fill:'#5b9df5', short:'SC'},
+  // Školení (Robert, 11/2026): jen Toolsetters; člověk JE v práci (směna, příplatky i přesčasy se počítají dál), ale není k dispozici na lince
+  {k:'Školení',         fill:'#b57edc', short:'Š', present:true, only:'toolsetters'},
 ];
 const TYPE_BY = Object.fromEntries(TYPES.map(t=>[t.k,t]));
+const typesFor = sec => TYPES.filter(t=>!t.only || t.only===sec);          // druhy nepřítomnosti nabízené v dané sekci
+const isPresentAbs = a => !!a && !!(TYPE_BY[a.type]||{}).present;             // „nepřítomnost“, při které je člověk v práci (Školení)
 const HOLIDAY_FILL = '#7c4dd6';
 const DEFAULT_VACATION = 25;   // výchozí nárok na dovolenou (pracovních dní za rok)
 
@@ -663,7 +667,7 @@ if(window.registerI18N) window.registerI18N({
   /* nepřítomnost / dovolená */
   'Dovolená':'Vacation','Nepřítomnost':'Absence','Nepřítomnost:':'Absence:','½ dne dovolené':'½ day of vacation',
   /* typy nepřítomnosti (legenda) */
-  'Náhradní volno':'Time off in lieu','Nemoc':'Sick leave','Lékař':'Doctor','Neplacené volno':'Unpaid leave','Služební cesta':'Business trip',
+  'Náhradní volno':'Time off in lieu','Nemoc':'Sick leave','Lékař':'Doctor','Neplacené volno':'Unpaid leave','Služební cesta':'Business trip','Školení':'Training',
   /* názvy směn a časy (legenda / výběr) */
   'Ranní':'Morning','Odpolední':'Afternoon','Noční':'Night','Ranní 12h':'Morning 12h','Odpolední 12h':'Afternoon 12h',
   'Noční 12h':'Night 12h','Denní':'Day','Po–Pá':'Mon–Fri','cca 7:00–15:30':'approx. 7:00–15:30',
@@ -1423,7 +1427,7 @@ function bonusRows(y, m){
         shifts:0, n12:0, nWe:0, b12:0, bWe:0, total:0, days:[]};
       eachDay(from,to,ds=>{
         const a=(abs[p.id]||{})[ds];
-        if(a && a.days!==0.5) return;                  // celý den nepřítomen → žádná směna
+        if(a && a.days!==0.5 && !isPresentAbs(a)) return;                  // celý den nepřítomen → žádná směna
         const man=(sm[p.id]||{})[ds];
         const code = man ? (isOff(man) ? null : man.shift) : rotCodeOn(p.id, ds);
         if(!code) return;
@@ -1518,14 +1522,14 @@ function personOvertime(p, from, to, abs, sm){
   eachDay(from,to,ds=>{
     // ½ směny navíc = vždy přesčas (i bez rytmu); celodenní nepřítomnost ho ruší
     const ab=(abs[p.id]||{})[ds];
-    if((p.halfOt||{})[ds] && !(ab && ab.days!==0.5)){
+    if((p.halfOt||{})[ds] && !(ab && ab.days!==0.5 && !isPresentAbs(ab))){
       const h=halfOtHours(p.id, ds, (sm[p.id]||{})[ds]);
       r.half++; r.hours+=h; r.rhythm=true; r.days.push(`${dCz(ds)} ½ směny navíc (+${h} h)`);
     }
     const seg=activeSeg(p.id, ds);
     if(seg && seg.plan) r.rhythm=true; else return;          // bez rytmu ten den → nepočítá se
     const a=(abs[p.id]||{})[ds];
-    if(a && a.days!==0.5) return;                            // celý den nepřítomen
+    if(a && a.days!==0.5 && !isPresentAbs(a)) return;                            // celý den nepřítomen
     const man=(sm[p.id]||{})[ds]; if(!man || isOff(man)) return;   // jen ručně zadané směny (zrušená = nic)
     const rc=rotCodeOn(p.id, ds);
     if(!rc){ const h=shiftH(man.shift); r.extra++; r.hours+=h; r.days.push(`${dCz(ds)} ${man.shift} navíc (+${h} h)`); }
@@ -1672,7 +1676,7 @@ function selBarView(){
       <span class="muted">(${dayLabel(n)})</span>
       <button class="sb-x" id="sb-cancel" title="Zrušit výběr (Esc)">✕</button></div>
     <div class="sb-row"><span class="sb-lbl">Nepřítomnost</span>
-      ${TYPES.map(t=>btn(`data-abs="${esc(t.k)}"`, t.fill, t.k)).join('')}
+      ${typesFor(section).map(t=>btn(`data-abs="${esc(t.k)}"`, t.fill, t.k)).join('')}
       ${single?btn('data-abs="Dovolená" data-half="1"', TYPE_BY['Dovolená'].fill, '½ dne dovolené'):''}
     </div>
     <div class="sb-row"><span class="sb-lbl">Poznámka</span>
@@ -1690,7 +1694,7 @@ function selBarView(){
 }
 
 function legendView(){
-  const items = TYPES.map(t=>`<span class="item"><span class="sw" style="background:${t.fill}"></span>${esc(t.k)}</span>`).join('')
+  const items = typesFor(section).map(t=>`<span class="item"><span class="sw" style="background:${t.fill}"></span>${esc(t.k)}</span>`).join('')
     + `<span class="item"><span class="sw" style="background:${HOLIDAY_FILL}"></span>Svátek (státní)</span>`
     + `<span class="item"><span class="sw" style="background:#eef1f5"></span>Víkend</span>`;
   const shItems = SHIFTS.map(s=>`<span class="item"><span class="sw" style="background:${s.fill}"></span>${s.noLabel?esc(T(s.name)):(esc(s.k)+' · '+esc(T(s.name)))}${s.hours?(' ('+esc(T(s.hours))+')'):''}</span>`).join('');
@@ -1829,8 +1833,8 @@ function calendarView(){
       let cls='d', style='', tt=`${p.name} • ${dCz(dd.ds)}`, inner='';
       if(isOff(sp[dd.ds]) && !a){ cls+=' rotoff'; tt+=' • směna z rytmu zrušena'; }
       // ⏱ přesčas: červené P nad označením směny (vidí všichni, David 11/2026)
-      const otDay = !!sp[dd.ds] && (!a || a.days===0.5) && isOtDay(p.id, dd.ds, sp[dd.ds]);
-      const halfOt = !!(p.halfOt||{})[dd.ds] && (!a || a.days===0.5);   // ½ směny navíc = vždy přesčas
+      const otDay = !!sp[dd.ds] && (!a || a.days===0.5 || isPresentAbs(a)) && isOtDay(p.id, dd.ds, sp[dd.ds]);
+      const halfOt = !!(p.halfOt||{})[dd.ds] && (!a || a.days===0.5 || isPresentAbs(a));   // ½ směny navíc = vždy přesčas
       const otMark = (otDay||halfOt) ? `<span class="otmark">${otDay&&halfOt?'P+½':halfOt?'½P':'P'}</span>` : '';
       if(otDay){ cls+=' ot'; tt+=' • ⏱ počítá se jako přesčas'; }
       if(halfOt){ if(!otDay) cls+=' ot'; tt+=' • ⏱ ½ směny navíc (přesčas)'; }
