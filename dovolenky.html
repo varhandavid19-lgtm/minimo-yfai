@@ -225,6 +225,8 @@
   @media(max-width:680px){.cal td.d .lab{font-size:11.5px}.cal td.shift .lab.lab-sh{font-size:11px}}
   /* Školení se směnou: horní levá půlka = směna (barva + značka), spodní pravá = Školení (Š) */
   .cal td.d .lab-l,.cal td.d .lab-r{position:absolute;font-size:11px;font-weight:800;line-height:1;pointer-events:none;color:rgba(16,24,40,.85)}
+  .empq{display:inline-flex}.empq input{font:inherit;font-size:13px;padding:7px 10px;border:1px solid #d5dce8;border-radius:8px;width:170px;background:#fff}
+  .empq input:focus{outline:2px solid #2a5ea3;outline-offset:-1px}
   .cal td.d.split{position:relative}
   .cal td.d .lab-l{left:3px;top:3px}.cal td.d .lab-r{right:3px;bottom:3px}
   /* směna naplánovaná pod nepřítomností: jemná modrá linka dole */
@@ -1708,6 +1710,11 @@ function legendView(){
     <div class="legend"><span class="lg-h">Směny:</span>${shItems}</div>`;
 }
 
+/* Hledání zaměstnance v plánu (Robert, 11/2026): fulltext přes jméno, pozice a e-mail, bez diakritiky */
+let empQ='';
+const fold = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const empMatch = p => { const t=fold(empQ).split(/\s+/).filter(Boolean); if(!t.length) return true;
+  const h=fold([p.name,(p.positions||[]).join(' '),p.email].join(' ')); return t.every(w=>h.includes(w)); };
 function calBar(){
   return `<div class="calbar">
     <span class="viewsw"><button class="${calView==='year'?'on':''}" data-view="year">Rok</button><button class="${calView==='month'?'on':''}" data-view="month">Měsíc</button></span>
@@ -1716,6 +1723,7 @@ function calBar(){
     <button class="nav" id="yr-next" title="${calView==='month'?'Další měsíc':'Další rok'}">›</button>
     <button class="btn-ghost" id="go-today">Dnes</button>
     ${canEditAll()?'<button class="btn-ghost" id="add-name" title="Přidat člověka, který nemá účet v minimu">👤 + Přidat jméno</button>':''}
+    <span class="empq"><input type="search" id="emp-q" value="${esc(empQ)}" placeholder="🔍 Zaměstnanec…" title="Hledání v plánu podle jména, pozice nebo e-mailu (bez diakritiky, víc slov = všechna musí sedět)" autocomplete="off"></span>
     <span class="hint">${calView==='month'?'':T('Posouvejte kalendář do stran ↔ · ')}${canEditAll()
       ? T('1. klik označí řádek, pak v něm tažením označ dny (na mobilu ťukni na první a pak na poslední den)')
       : T('kliknutím na políčko zobrazíte detail')}</span>
@@ -1926,7 +1934,7 @@ function calendarView(){
     if(!(s && s.plan && ROT_PLANS[s.plan])) return '';
     return SHIFT3_PLANS.includes(s.plan) ? shift3Group(p.id) : s.plan; };
   const groupsByPlan={};
-  people.forEach(p=>{ const k=planOf(p); (groupsByPlan[k]||(groupsByPlan[k]=[])).push(p); });
+  people.filter(empMatch).forEach(p=>{ const k=planOf(p); (groupsByPlan[k]||(groupsByPlan[k]=[])).push(p); });
   // uvnitř skupiny po úsecích/pozicích (pořadí jako v SECTIONS), pak podle jména
   const secPos=(SECTIONS.find(s=>s.key===section)||{}).positions||[];
   const posRank = p => { const i=secPos.indexOf((p.positions||[]).find(x=>secPos.includes(x))); return i<0?999:i; };
@@ -1942,7 +1950,7 @@ function calendarView(){
     rowsHtml.push(`<tr class="grp"><td class="name grp-name"${XC?` colspan="${XC+1}"`:''} title="${esc(title)}">${esc(title)} <span class="grp-n">(${grp.length})</span></td><td class="grp-fill" colspan="${allDays.length}"></td></tr>`);
     grp.forEach(p=>rowsHtml.push(personRow(p)));
   });
-  const body=rowsHtml.join('');
+  const body=rowsHtml.length ? rowsHtml.join('') : `<tr><td class="name" colspan="${XC+1+allDays.length}" style="text-align:left;padding:14px 16px;color:var(--muted)">Hledání „${esc(empQ)}“ — nikdo neodpovídá.</td></tr>`;
   return `<div class="cal-wrap"><div class="cal-inner"${monthView?' style="width:100%"':''}><table class="cal"${tblStyle}>${colgroup}<thead>${monthsRow}${daysRow}</thead><tbody>${body}</tbody></table><div class="today-band" style="display:none"></div></div></div>`;
 }
 
@@ -2013,7 +2021,7 @@ function wireApp(){
   // přepínání sekcí (Engineering / Maintenance / Toolsetters)
   document.querySelectorAll('[data-section]').forEach(b=>
     b.addEventListener('click',()=>{
-      section=b.getAttribute('data-section'); mainTab='plan'; sel=null; alignedYear=null; render();
+      section=b.getAttribute('data-section'); empQ=''; mainTab='plan'; sel=null; alignedYear=null; render();
     }));
   document.querySelector('[data-maintab="bonus"]')?.addEventListener('click',()=>{ mainTab='bonus'; sel=null; render(); });
   document.querySelector('[data-maintab="ot"]')?.addEventListener('click',()=>{ mainTab='ot'; sel=null; render(); });
@@ -2057,6 +2065,7 @@ function wireApp(){
 
   // jména: přidání (nad kalendářem i u úseku) a úprava kliknutím na jméno (vč. rotace)
   document.getElementById('add-name')?.addEventListener('click',()=>openPersonDlg(null));
+  { const q=document.getElementById('emp-q'); q?.addEventListener('input',()=>{ empQ=q.value; const pos=q.selectionStart; render(); const q2=document.getElementById('emp-q'); if(q2){ q2.focus(); try{ q2.setSelectionRange(pos,pos); }catch(e){} } }); }
   if(pdlg){
     const pn=document.getElementById('pd-name');
     pn?.addEventListener('input',()=>{pdlg.name=pn.value; pdlg.dupOk=false;});

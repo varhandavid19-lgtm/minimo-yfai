@@ -157,6 +157,7 @@ nim build proces. Bezpečnost řeší pravidla Firestore, ne skrývání klíč�
   (i víkendové) a ruční výměna směny v den, kdy tým stejně pracuje, bonus nemají.
   **½ směny navíc** (Robert, 11/2026): tlačítko v řádku Směna (místo ruční Salaried), **jen v sekci Engineering**, značka `people.halfOt`
   **Homeoffice (HO)** (Robert, 11/2026): stejný mechanismus jako Školení (`present:true`), jen Engineering a Maintenance (`only:[…]`); pole rozdělené na směnu a „HO“, nic se nemění v příplatcích/přesčasech.
+  **Hledání zaměstnance** (Robert, 11/2026): pole „🔍 Zaměstnanec…“ v liště kalendáře (`empQ`, `empMatch`) — fulltext přes jméno/pozici/e-mail bez diakritiky; filtruje řádky v plánu, při přepnutí sekce se maže.
   **Školení** (Robert, 11/2026): druh nepřítomnosti jen v sekci Toolsetters (`TYPES` položka s `only`, `present:true`; `typesFor(section)`, `isPresentAbs`). Člověk je v práci — směna, příplatky (`bonusRows`) i přesčasy se počítají dál; kalendář: pole rozdělené úhlopříčně — horní levá půlka = směna člověka (barva + značka), spodní pravá = fialové „Š“ (bez směny jen fialové Š).
   **🌴 sloupec vybrané dovolené** (Robert, 11/2026): v kalendáři za ⏱ sloupci (všechny sekce, na mobilu ne) — součet dnů typu „Dovolená“ v zobrazeném roce z `absenceMap` (½ dne = 0,5); `showVac`, `VACL`, `XC` (počet sloupců za jménem).
   {'RRRR-MM-DD':true} nezávislá na směně (`applyHalfOt`, opakovaný klik ruší, Vymazat ji smaže). VŽDY přesčas
