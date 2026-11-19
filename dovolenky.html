@@ -403,10 +403,12 @@ const TYPES = [
   {k:'Neplacené volno', fill:'#9aa7b8', short:'NP'},
   {k:'Služební cesta',  fill:'#5b9df5', short:'SC'},
   // Školení (Robert, 11/2026): jen Toolsetters; člověk JE v práci (směna, příplatky i přesčasy se počítají dál), ale není k dispozici na lince
-  {k:'Školení',         fill:'#b57edc', short:'Š', present:true, only:'toolsetters'},
+  {k:'Školení',         fill:'#b57edc', short:'Š', present:true, only:['toolsetters']},
+  // Homeoffice (Robert, 11/2026): jen Engineering a Maintenance; jen označí směnu, kterou člověk pracuje z domova (nic se nemění v příplatcích ani přesčasech)
+  {k:'Homeoffice',      fill:'#c8a97e', short:'HO', present:true, only:['engineering','maintenance']},
 ];
 const TYPE_BY = Object.fromEntries(TYPES.map(t=>[t.k,t]));
-const typesFor = sec => TYPES.filter(t=>!t.only || t.only===sec);          // druhy nepřítomnosti nabízené v dané sekci
+const typesFor = sec => TYPES.filter(t=>!t.only || t.only.includes(sec));          // druhy nepřítomnosti nabízené v dané sekci
 const isPresentAbs = a => !!a && !!(TYPE_BY[a.type]||{}).present;             // „nepřítomnost“, při které je člověk v práci (Školení)
 const HOLIDAY_FILL = '#7c4dd6';
 const DEFAULT_VACATION = 25;   // výchozí nárok na dovolenou (pracovních dní za rok)
@@ -671,7 +673,7 @@ if(window.registerI18N) window.registerI18N({
   /* nepřítomnost / dovolená */
   'Dovolená':'Vacation','Nepřítomnost':'Absence','Nepřítomnost:':'Absence:','½ dne dovolené':'½ day of vacation',
   /* typy nepřítomnosti (legenda) */
-  'Náhradní volno':'Time off in lieu','Nemoc':'Sick leave','Lékař':'Doctor','Neplacené volno':'Unpaid leave','Služební cesta':'Business trip','Školení':'Training',
+  'Náhradní volno':'Time off in lieu','Nemoc':'Sick leave','Lékař':'Doctor','Neplacené volno':'Unpaid leave','Služební cesta':'Business trip','Školení':'Training','Homeoffice':'Home office',
   /* názvy směn a časy (legenda / výběr) */
   'Ranní':'Morning','Odpolední':'Afternoon','Noční':'Night','Ranní 12h':'Morning 12h','Odpolední 12h':'Afternoon 12h',
   'Noční 12h':'Night 12h','Denní':'Day','Po–Pá':'Mon–Fri','cca 7:00–15:30':'approx. 7:00–15:30',
