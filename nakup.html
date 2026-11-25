@@ -154,6 +154,7 @@
   .mgrhint{padding:9px 14px;font-size:12px;color:#41506b;background:#f8fafd;border-bottom:1px solid var(--line)}
   .mgrgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px;padding:14px}
   .mgrgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#41506b}
+  .mgrgrid label.half>input,.mgrgrid label.half>select{width:50%;min-width:140px}   /* levý sloupec panelu: poloviční šířka (Req no., DSSI, Komentář, QAD, Stav) */
   .mgrgrid .inline{display:flex;gap:6px}
   .mgrgrid .mgrf{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#41506b}
   .mgrgrid .mgrf .inline input{flex:1 1 45%;min-width:0}
@@ -374,6 +375,7 @@
     .newbar .btn-imp{width:100%;font-size:17px;padding:15px 20px}
     .newbar .btn-manage{width:100%}
     .mgrgrid{grid-template-columns:1fr}
+    .mgrgrid label.half>input,.mgrgrid label.half>select{width:auto}
 
     /* filtry pod sebe */
     .filters{flex-direction:column;align-items:stretch;gap:9px}
@@ -1341,21 +1343,21 @@ function mgrPanel(){
     <h2>⚙ Správa požadavků <span class="right">vybráno: ${n}</span></h2>
     <div class="mgrhint">Vyplň jen políčka, která chceš změnit — <b>prázdná se ignorují</b> a u vybraných řádků zůstanou beze změny. Zaškrtni řádky v tabulce a dej <b>Použít na vybrané</b>.</div>${mixNote}
     <div class="mgrgrid">
-      <label>Req no.<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="číslo requestu"></label>
+      <label class="half">Req no.<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="číslo requestu"></label>
       <label>RFQ no.<input id="m-rfqno" data-mg="rfqNo" value="${esc(mgr.rfqNo)}" placeholder="číslo poptávky"></label>
       <div class="mgrf">Order no.<div class="inline"><input id="m-orderno" data-mg="orderNo" value="${esc(mgr.orderNo)}" placeholder="číslo objednávky">${mgrFileBtn('po')}</div>${mgrFileChip('po')}</div>
-      <label>DSSI item<input id="m-dssi" ${oldDis} data-mg="dssiItem" value="${esc(mgr.dssiItem)}" placeholder="DSSI item"></label>
+      <label class="half">DSSI item<input id="m-dssi" ${oldDis} data-mg="dssiItem" value="${esc(mgr.dssiItem)}" placeholder="DSSI item"></label>
       <label>Doklad<div class="inline">
         <select id="m-doctype" ${oldDis} data-mg="docType"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${mgr.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
         <input id="m-docno" ${oldDis} data-mg="docNo" value="${esc(mgr.docNo)}" placeholder="číslo dokladu"></div></label>
       <label>Přijaté množství<input id="m-qty" type="number" min="0" step="1" data-mg="recvQty" value="${esc(mgr.recvQty)}" placeholder="ks"></label>
-      <label>Komentář<input id="m-comment" data-mg="comment" value="${esc(mgr.comment)}" placeholder="komentář skladu (nepřepíše Poznámku)"></label>
+      <label class="half">Komentář<input id="m-comment" data-mg="comment" value="${esc(mgr.comment)}" placeholder="komentář skladu (nepřepíše Poznámku)"></label>
       <label>Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label>
       <div class="mgrf">Nabídka<div class="inline"><input id="m-offer" ${newDis} data-mg="offerNo" value="${esc(mgr.offerNo)}" placeholder="číslo nabídky">${mgrFileBtn('nabidka')}</div>${mgrFileChip('nabidka')}</div>
-      <label>Objednávka QAD<input id="m-qad" ${newDis} data-mg="qadOrder" value="${esc(mgr.qadOrder)}" placeholder="číslo objednávky v QAD"></label>
+      <label class="half">Objednávka QAD<input id="m-qad" ${newDis} data-mg="qadOrder" value="${esc(mgr.qadOrder)}" placeholder="číslo objednávky v QAD"></label>
       <label>Dodací list/servisní výkaz<input id="m-dl" ${newDis} data-mg="dlNo" value="${esc(mgr.dlNo)}" placeholder="číslo DL / výkazu"></label>
       <label>Termín dodání<input id="m-datum" type="date" data-mg="datum" value="${esc(mgr.datum)}" title="Zapíše se do sloupce Dodání u všech vybraných požadavků"></label>
-      <label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${mgr.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></label>
+      <label class="half">Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${mgr.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></label>
     </div>
     <div class="mgrbtns">
       <button class="btn-ok" data-a="mgr-apply">Použít na vybrané</button>
