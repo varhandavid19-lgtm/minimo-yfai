@@ -1346,19 +1346,19 @@ function mgrPanel(){
     <div class="mgrhint">Vyplň jen políčka, která chceš změnit — <b>prázdná se ignorují</b> a u vybraných řádků zůstanou beze změny. Zaškrtni řádky v tabulce a dej <b>Použít na vybrané</b>.</div>${mixNote}
     <div class="mgrgrid">
       <div class="mgrpair"><label>Req no.<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="číslo requestu"></label><label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${mgr.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></label></div>
-      <div></div>
       <div class="mgrf half">Order no.<div class="inline"><input id="m-orderno" data-mg="orderNo" value="${esc(mgr.orderNo)}" placeholder="číslo objednávky">${mgrFileBtn('po')}</div>${mgrFileChip('po')}</div>
+      <label class="half">Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label>
       <div class="mgrpair"><label>DSSI item<input id="m-dssi" ${oldDis} data-mg="dssiItem" value="${esc(mgr.dssiItem)}" placeholder="DSSI item"></label><label>RFQ no.<input id="m-rfqno" data-mg="rfqNo" value="${esc(mgr.rfqNo)}" placeholder="číslo poptávky"></label></div>
-      <div></div>
       <label class="half">Přijaté množství<input id="m-qty" type="number" min="0" step="1" data-mg="recvQty" value="${esc(mgr.recvQty)}" placeholder="ks"></label>
+      <div></div>
       <div class="mgrpair"><label>Komentář<input id="m-comment" data-mg="comment" value="${esc(mgr.comment)}" placeholder="komentář skladu (nepřepíše Poznámku)"></label><label>Doklad<div class="inline">
         <select id="m-doctype" ${oldDis} data-mg="docType"><option value="">— typ —</option>${DOCTYPES.map(t=>`<option ${mgr.docType===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
         <input id="m-docno" ${oldDis} data-mg="docNo" value="${esc(mgr.docNo)}" placeholder="číslo dokladu"></div></label></div>
-      <label class="half">Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label>
       <div class="mgrf half">Nabídka<div class="inline"><input id="m-offer" ${newDis} data-mg="offerNo" value="${esc(mgr.offerNo)}" placeholder="číslo nabídky">${mgrFileBtn('nabidka')}</div>${mgrFileChip('nabidka')}</div>
-      <div class="mgrpair"><label>Objednávka QAD<input id="m-qad" ${newDis} data-mg="qadOrder" value="${esc(mgr.qadOrder)}" placeholder="číslo objednávky v QAD"></label><label>Dodací list/servisní výkaz<input id="m-dl" ${newDis} data-mg="dlNo" value="${esc(mgr.dlNo)}" placeholder="číslo DL / výkazu"></label></div>
       <div></div>
+      <div class="mgrpair"><label>Objednávka QAD<input id="m-qad" ${newDis} data-mg="qadOrder" value="${esc(mgr.qadOrder)}" placeholder="číslo objednávky v QAD"></label><label>Dodací list/servisní výkaz<input id="m-dl" ${newDis} data-mg="dlNo" value="${esc(mgr.dlNo)}" placeholder="číslo DL / výkazu"></label></div>
       <label class="half">Termín dodání<input id="m-datum" type="date" data-mg="datum" value="${esc(mgr.datum)}" title="Zapíše se do sloupce Dodání u všech vybraných požadavků"></label>
+      <div></div>
     </div>
     <div class="mgrbtns">
       <button class="btn-ok" data-a="mgr-apply">Použít na vybrané</button>
