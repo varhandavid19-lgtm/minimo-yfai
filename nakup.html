@@ -1346,8 +1346,8 @@ function mgrPanel(){
     <div class="mgrhint">Vyplň jen políčka, která chceš změnit — <b>prázdná se ignorují</b> a u vybraných řádků zůstanou beze změny. Zaškrtni řádky v tabulce a dej <b>Použít na vybrané</b>.</div>${mixNote}
     <div class="mgrgrid">
       <div class="mgrpair"><label>Req no.<input id="m-reqno" data-mg="reqNo" value="${esc(mgr.reqNo)}" placeholder="číslo requestu"></label><label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${mgr.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></label></div>
-      <div class="mgrf half">Order no.<div class="inline"><input id="m-orderno" data-mg="orderNo" value="${esc(mgr.orderNo)}" placeholder="číslo objednávky">${mgrFileBtn('po')}</div>${mgrFileChip('po')}</div>
-      <label class="half">Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label>
+      <div class="mgrpair"><div class="mgrf">Order no.<div class="inline"><input id="m-orderno" data-mg="orderNo" value="${esc(mgr.orderNo)}" placeholder="číslo objednávky">${mgrFileBtn('po')}</div>${mgrFileChip('po')}</div><label>Datum přijetí<input id="m-date" type="date" data-mg="recvDate" value="${esc(mgr.recvDate)}"></label></div>
+      <div></div>
       <div class="mgrpair"><label>DSSI item<input id="m-dssi" ${oldDis} data-mg="dssiItem" value="${esc(mgr.dssiItem)}" placeholder="DSSI item"></label><label>RFQ no.<input id="m-rfqno" data-mg="rfqNo" value="${esc(mgr.rfqNo)}" placeholder="číslo poptávky"></label></div>
       <label class="half">Přijaté množství<input id="m-qty" type="number" min="0" step="1" data-mg="recvQty" value="${esc(mgr.recvQty)}" placeholder="ks"></label>
       <div></div>
