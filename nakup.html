@@ -638,7 +638,7 @@ let pickedReq=null;                                          // označený řád
 let mgrSel=new Set();                                          // vybrané řádky (_id)
 let aprSel=new Set();                                          // řádky zaškrtnuté k hromadnému schválení (_id)
 const canApproveRow = r => !r.approvedBy && r.status!=='zamítnuto';
-let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''};  // políčka panelu správy
+let mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:'',datum:''};  // políčka panelu správy
 let supEdit=false;                                            // editace boxu Dodavatel v detailu požadavku
 let recvEdit=false;                                           // editace sekce Příjem/sklad v detailu požadavku
 let uploadBusy=false;                                         // právě se nahrává příloha
@@ -1354,6 +1354,7 @@ function mgrPanel(){
       <div class="mgrf">Nabídka<div class="inline"><input id="m-offer" ${newDis} data-mg="offerNo" value="${esc(mgr.offerNo)}" placeholder="číslo nabídky">${mgrFileBtn('nabidka')}</div>${mgrFileChip('nabidka')}</div>
       <label>Objednávka QAD<input id="m-qad" ${newDis} data-mg="qadOrder" value="${esc(mgr.qadOrder)}" placeholder="číslo objednávky v QAD"></label>
       <label>Dodací list/servisní výkaz<input id="m-dl" ${newDis} data-mg="dlNo" value="${esc(mgr.dlNo)}" placeholder="číslo DL / výkazu"></label>
+      <label>Termín dodání<input id="m-datum" type="date" data-mg="datum" value="${esc(mgr.datum)}" title="Zapíše se do sloupce Dodání u všech vybraných požadavků"></label>
       <label>Stav<select id="m-status" data-mg="status"><option value="">— neměnit —</option>${STATUSES.map(s=>`<option value="${esc(s.k)}" ${mgr.status===s.k?'selected':''}>${esc(s.label||s.k)}</option>`).join('')}</select></label>
     </div>
     <div class="mgrbtns">
@@ -1370,7 +1371,7 @@ async function mgrApply(receiveComplete){
   const sel=rows.filter(r=>mgrSel.has(r._id));
   if(!sel.length){ toast('Nejdřív zaškrtni aspoň jeden požadavek.','err'); return; }
   if(!receiveComplete){
-    const anyField = mgr.reqNo!==''||mgr.rfqNo!==''||mgr.orderNo!==''||mgr.dssiItem!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!==''||mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!==''||!!mgrFiles.po||!!mgrFiles.nabidka;
+    const anyField = mgr.reqNo!==''||mgr.rfqNo!==''||mgr.orderNo!==''||mgr.dssiItem!==''||mgr.recvQty!==''||mgr.recvDate!==''||mgr.docType!==''||mgr.docNo!==''||mgr.comment!==''||mgr.status!==''||mgr.offerNo!==''||mgr.qadOrder!==''||mgr.dlNo!==''||mgr.datum!==''||!!mgrFiles.po||!!mgrFiles.nabidka;
     if(!anyField){ toast('Vyplň aspoň jedno políčko, které se má změnit.','err'); return; }
   }
   // Req no. hromadně → kontrola účtů u vybraných; NE = přepsat účty v okně (Zrušit = nic se neuloží)
@@ -1448,6 +1449,7 @@ async function mgrApply(receiveComplete){
       if(v2 && mgr.offerNo!==''){ patch.offerNo=mgr.offerNo.trim(); ch.push('nabídka '+patch.offerNo); }
       if(v2 && mgr.qadOrder!==''){ patch.qadOrder=mgr.qadOrder.trim(); ch.push('objednávka QAD '+patch.qadOrder); }
       if(v2 && mgr.dlNo!==''){ patch.dlNo=mgr.dlNo.trim(); ch.push('dodací list/servisní výkaz '+patch.dlNo); }
+      if(mgr.datum!=='' && mgr.datum!==r.datum){ patch.datum=mgr.datum; ch.push('termín dodání '+dateCz(mgr.datum)); }   // hromadný termín dodání
       if(mgr.status!==''){ patch.status=mgr.status; ch.push('stav → '+mgr.status); if(mgr.status==='odesláno' && r.status!=='odesláno') patch.poSentAt=today(); }
       if(sharedMetas.length){
         const have=new Set((r.files||[]).map(f=>f.path));
@@ -1480,7 +1482,7 @@ async function mgrApply(receiveComplete){
   // jedno PO ke všem vybraným → jeden e-mail
   const mailNote=(ok && sharedMetas.some(m=>m.cat==='po') && mgrFiles.po)?await poMailDraft([mgrFiles.po],poMailTos.join(',')):'';
   mgrSel.clear(); mgrFiles={po:null,nabidka:null};
-  mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''};  // po použití vyprázdnit políčka, ať se nepřenesou na další dávku
+  mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:'',datum:''};  // po použití vyprázdnit políčka, ať se nepřenesou na další dávku
   toast(`Upraveno ${czCount(ok)}.`+(skip?` Pole, která daný požadavek nemá, se přeskočila (${skip}×).`:'')+(fail?` (${fail} se nepovedlo — zkus to znovu)`:'')+mailNote, fail?'err':'ok');
   render();
 }
@@ -3164,7 +3166,7 @@ async function act(a,v,el,ev){
       if(f.size>MAX_FILE){ toast(`„${f.name}" je větší než 5 MB.`,'err'); return; }
       mgrSetFile(v,f); return; }
     case 'mgr-file-clear': mgrFiles[v]=null; break;
-    case 'mgr-clear': mgrFiles={po:null,nabidka:null}; mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:''}; break;
+    case 'mgr-clear': mgrFiles={po:null,nabidka:null}; mgr={reqNo:'',rfqNo:'',orderNo:'',dssiItem:'',recvQty:'',recvDate:'',docType:'',docNo:'',comment:'',status:'',offerNo:'',qadOrder:'',dlNo:'',datum:''}; break;
     case 'mgr-apply': await mgrApply(false); return;
     case 'mgr-receive': await mgrApply(true); return;
     case 'dlg-yes':{
