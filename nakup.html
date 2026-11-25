@@ -843,6 +843,8 @@ function addWorkdays(from,n){
 /* Hlídání potvrzení dodavatele: do 3 pracovních dnů od „PO odesláno" musí být vyplněné Dodání.
    null = nic se nehlídá (jiný stav, Dodání vyplněné, nebo PO odesláno před zavedením — bez poSentAt). */
 const PO_CONFIRM_DAYS = 3;
+/* Po termínu dodání: otevřený požadavek, jehož termín dodání (sloupec Dodání) je před dneškem. */
+const isOverdue = r => !!r && !!r.datum && String(r.datum).slice(0,10) < today() && !['doručeno','zamítnuto'].includes(r.status);
 const poDateState = r => { if(r.status!=='odesláno' || !r.poSentAt || String(r.datum||'').trim()) return null;
   const due=addWorkdays(r.poSentAt,PO_CONFIRM_DAYS); return {due,late:today()>due}; };
 const fmtSize = b => { b=Number(b)||0; return b<1024?b+' B':(b<1048576?(b/1024).toFixed(0)+' kB':(b/1048576).toFixed(1)+' MB'); };
@@ -1075,6 +1077,7 @@ function visibleRows(){
   else if(filters.grp==='closed') r=r.filter(x=>['doručeno','zamítnuto'].includes(x.status));
   else if(filters.grp==='todate') r=r.filter(x=>poDateState(x));
   else if(filters.grp==='nodate') r=r.filter(x=>{ const s=poDateState(x); return s&&s.late; });
+  else if(filters.grp==='overdue') r=r.filter(isOverdue);
   if(filters.status) r=r.filter(x=>x.status===filters.status);
   if(filters.priorita) r=r.filter(x=>x.priorita===filters.priorita);
   if(filters.ucet) r=r.filter(x=>x.ucet===filters.ucet);
@@ -1200,6 +1203,7 @@ function listView(){
       <button class="stchip grp ${filters.grp==='closed'?'on':''}" data-a="flt-grp" data-v="closed"><i style="background:#eef1f5"></i>${T('Uzavřené požadavky')} (${closedCount})</button>
       <button class="stchip grp ${filters.grp==='todate'?'on':''}" data-a="flt-grp" data-v="todate" title="PO odesláno a sloupec Dodání je prázdný"><i style="background:#fff;border:1px solid #c0392b"></i>${T('Doplnit datum dodání')} (${rows.filter(r=>poDateState(r)).length})</button>
       ${(n=>n?`<button class="stchip grp ${filters.grp==='nodate'?'on':''}" data-a="flt-grp" data-v="nodate" style="border-color:#c0392b;color:#c0392b;font-weight:700" title="PO odesláno před více než ${PO_CONFIRM_DAYS} pracovními dny a sloupec Dodání je prázdný"><i style="background:#c0392b"></i>⚠ ${T('Chybí termín dodání')} (${n})</button>`:'')(rows.filter(r=>{ const s=poDateState(r); return s&&s.late; }).length)}
+      <button class="stchip grp ${filters.grp==='overdue'?'on':''}" data-a="flt-grp" data-v="overdue" style="border-color:#c0392b;color:#c0392b" title="Otevřené požadavky, jejichž termín dodání (sloupec Dodání) už uplynul"><i style="background:#f8d2ce;border:1px solid #c0392b"></i>⏰ ${T('Po termínu dodání')} (${rows.filter(isOverdue).length})</button>
       <span class="lg-sep"></span>
       ${STATUSES.map(x=>`<button class="stchip ${filters.status===x.k?'on':''}" data-a="flt-status" data-v="${x.k}" title="Filtrovat stav ${esc(x.label||x.k)}"><i style="background:${ROW_TINT[x.k]}"></i>${esc(x.label||x.k)} (${rows.filter(r=>r.status===x.k).length})</button>`).join('')}
     </div>
